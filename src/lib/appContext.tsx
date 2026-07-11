@@ -131,11 +131,100 @@ export function AppProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('dropflow_token', freshToken);
 
           const freshData = await pullAllUserData(user.uid);
+          let userProfile: Profile;
+
           if (freshData.profile) {
-            setProfile(freshData.profile as Profile);
-            localStorage.setItem('dropflow_profile', JSON.stringify(freshData.profile));
-            setIsAuthenticated(true);
+            userProfile = freshData.profile as Profile;
+            // Safe merge user's email if missing
+            if (user.email && !userProfile.email) {
+              userProfile.email = user.email.toLowerCase();
+              try {
+                const { doc, updateDoc } = await import('firebase/firestore');
+                const { db: firestoreDb } = await import('./firebase.ts');
+                await updateDoc(doc(firestoreDb, 'profiles', user.uid), { email: user.email.toLowerCase() });
+              } catch (emailErr) {
+                console.warn("Could not save user email to profile:", emailErr);
+              }
+            }
+          } else {
+            // Auto-create missing profile
+            const trialExpiry = new Date();
+            trialExpiry.setDate(trialExpiry.getDate() + 7);
+            userProfile = {
+              id: user.uid,
+              nome: user.displayName || user.email?.split('@')[0] || 'Utilizador DropFlow',
+              email: user.email || undefined,
+              pais: 'Moçambique',
+              moeda: 'MT',
+              plano: 'trial',
+              trial_expires_at: trialExpiry.toISOString(),
+              anuncios_percent: 50,
+              lucro_percent: 50,
+              criado_em: new Date().toISOString()
+            };
+
+            const defaultCaixinhas: Caixinha[] = [
+              {
+                id: crypto.randomUUID(),
+                user_id: user.uid,
+                nome: 'Lucro',
+                icone: 'TrendingUp',
+                cor: 'bg-emerald-500',
+                tipo: 'lucro',
+                saldo_atual: 0,
+                criado_em: new Date().toISOString()
+              },
+              {
+                id: crypto.randomUUID(),
+                user_id: user.uid,
+                nome: 'Anúncios',
+                icone: 'Megaphone',
+                cor: 'bg-sky-500',
+                tipo: 'anuncios',
+                saldo_atual: 0,
+                criado_em: new Date().toISOString()
+              },
+              {
+                id: crypto.randomUUID(),
+                user_id: user.uid,
+                nome: 'Produtos/Fornecedores',
+                icone: 'Package',
+                cor: 'bg-amber-500',
+                tipo: 'fornecedores',
+                saldo_atual: 0,
+                criado_em: new Date().toISOString()
+              },
+              {
+                id: crypto.randomUUID(),
+                user_id: user.uid,
+                nome: 'Delivery',
+                icone: 'Truck',
+                cor: 'bg-indigo-500',
+                tipo: 'delivery',
+                saldo_atual: 0,
+                criado_em: new Date().toISOString()
+              }
+            ];
+
+            try {
+              await pushQueueToFirestore([
+                { type: 'profile', action: 'create', data: userProfile },
+                ...defaultCaixinhas.map(cx => ({ type: 'caixinha', action: 'create', data: cx }))
+              ]);
+              // Save to local IndexedDB
+              await db.putItem('profiles', userProfile);
+              for (const cx of defaultCaixinhas) {
+                await db.putItem('caixinhas', cx);
+              }
+            } catch (createErr) {
+              console.warn("Could not push auto-created profile to Firestore:", createErr);
+            }
           }
+
+          setProfile(userProfile);
+          localStorage.setItem('dropflow_profile', JSON.stringify(userProfile));
+          await db.putItem('profiles', userProfile);
+          setIsAuthenticated(true);
         } catch (e) {
           console.error("Error pulling user data on auth state change:", e);
         }
@@ -318,15 +407,97 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const freshToken = await user.getIdToken();
       
       const data = await pullAllUserData(user.uid);
-      if (!data.profile) {
-        throw new Error('Perfil do utilizador não encontrado no Firebase.');
+      let userProfile: Profile;
+
+      if (data.profile) {
+        userProfile = data.profile as Profile;
+        // Merge user email if missing
+        if (user.email && !userProfile.email) {
+          userProfile.email = user.email.toLowerCase();
+          try {
+            const { doc, updateDoc } = await import('firebase/firestore');
+            const { db: firestoreDb } = await import('./firebase.ts');
+            await updateDoc(doc(firestoreDb, 'profiles', user.uid), { email: user.email.toLowerCase() });
+          } catch (emailErr) {
+            console.warn("Could not save user email to profile:", emailErr);
+          }
+        }
+      } else {
+        // Auto-create missing profile
+        const trialExpiry = new Date();
+        trialExpiry.setDate(trialExpiry.getDate() + 7);
+        userProfile = {
+          id: user.uid,
+          nome: user.displayName || user.email?.split('@')[0] || 'Utilizador DropFlow',
+          email: user.email || email.toLowerCase(),
+          pais: 'Moçambique',
+          moeda: 'MT',
+          plano: 'trial',
+          trial_expires_at: trialExpiry.toISOString(),
+          anuncios_percent: 50,
+          lucro_percent: 50,
+          criado_em: new Date().toISOString()
+        };
+
+        const defaultCaixinhas: Caixinha[] = [
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Lucro',
+            icone: 'TrendingUp',
+            cor: 'bg-emerald-500',
+            tipo: 'lucro',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Anúncios',
+            icone: 'Megaphone',
+            cor: 'bg-sky-500',
+            tipo: 'anuncios',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Produtos/Fornecedores',
+            icone: 'Package',
+            cor: 'bg-amber-500',
+            tipo: 'fornecedores',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Delivery',
+            icone: 'Truck',
+            cor: 'bg-indigo-500',
+            tipo: 'delivery',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          }
+        ];
+
+        try {
+          await pushQueueToFirestore([
+            { type: 'profile', action: 'create', data: userProfile },
+            ...defaultCaixinhas.map(cx => ({ type: 'caixinha', action: 'create', data: cx }))
+          ]);
+          data.caixinhas = defaultCaixinhas;
+        } catch (createErr) {
+          console.warn("Could not push auto-created profile to Firestore:", createErr);
+        }
       }
 
       localStorage.setItem('dropflow_token', freshToken);
-      localStorage.setItem('dropflow_profile', JSON.stringify(data.profile));
+      localStorage.setItem('dropflow_profile', JSON.stringify(userProfile));
 
       // Overwrite local tables in IndexedDB
-      await db.putItem('profiles', data.profile);
+      await db.putItem('profiles', userProfile);
       
       await db.clearStore('caixinhas');
       for (const cx of data.caixinhas) {
@@ -359,7 +530,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       setToken(freshToken);
-      setProfile(data.profile as Profile);
+      setProfile(userProfile);
       setIsAuthenticated(true);
       
       // Perform instant full sync to pull everything
@@ -384,6 +555,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newProfile: Profile = {
         id: user.uid,
         nome,
+        email: email.toLowerCase(),
         pais: pais || 'Moçambique',
         moeda: moeda || 'MT',
         plano: 'trial',
@@ -472,7 +644,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let userProfile = data.profile as Profile | null;
       let userCaixinhas = data.caixinhas as Caixinha[];
 
-      if (!userProfile) {
+      if (userProfile) {
+        // Safe merge user's email if missing
+        if (user.email && !userProfile.email) {
+          userProfile.email = user.email.toLowerCase();
+          try {
+            const { doc, updateDoc } = await import('firebase/firestore');
+            const { db: firestoreDb } = await import('./firebase.ts');
+            await updateDoc(doc(firestoreDb, 'profiles', user.uid), { email: user.email.toLowerCase() });
+          } catch (emailErr) {
+            console.warn("Could not save user email to profile:", emailErr);
+          }
+        }
+      } else {
         // If not, register a new profile with Google's details
         const trialExpiry = new Date();
         trialExpiry.setDate(trialExpiry.getDate() + 7);
@@ -480,6 +664,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         userProfile = {
           id: user.uid,
           nome: user.displayName || 'Empreendedor Google',
+          email: user.email?.toLowerCase() || undefined,
           pais: 'Moçambique',
           moeda: 'MT',
           plano: 'trial',

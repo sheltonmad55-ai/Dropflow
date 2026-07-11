@@ -11,6 +11,8 @@ import CaixinhasView from './components/CaixinhasView.tsx';
 import VendasView from './components/VendasView.tsx';
 import RelatoriosView from './components/RelatoriosView.tsx';
 import DefinicoesView from './components/DefinicoesView.tsx';
+import PainelAdminView from './components/PainelAdminView.tsx';
+import { auth } from './lib/firebase.ts';
 import VendaModal from './components/VendaModal.tsx';
 import DespesaModal from './components/DespesaModal.tsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -29,7 +31,8 @@ import {
   Bell,
   X,
   Award,
-  CheckCircle
+  CheckCircle,
+  ShieldCheck
 } from 'lucide-react';
 
 function AppContent() {
@@ -89,12 +92,23 @@ function AppContent() {
         </div>
 
         <div className="flex items-center space-x-2" id="header_actions">
+          {(profile?.email === 'sheltonmad55@gmail.com' || auth.currentUser?.email === 'sheltonmad55@gmail.com') && (
+            <button
+              id="btn_header_admin"
+              onClick={() => setActiveTab('admin')}
+              className={`px-2 py-1 rounded-full text-[9px] font-bold transition-all flex items-center gap-1 cursor-pointer border ${activeTab === 'admin' ? 'bg-slate-900 border-slate-900 text-white' : 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100'}`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Admin</span>
+            </button>
+          )}
           {/* Active indicator */}
           <span className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
             {activeTab === 'dashboard' ? 'Início' :
              activeTab === 'caixinhas' ? 'Pockets' :
              activeTab === 'vendas' ? 'Operações' :
-             activeTab === 'relatorios' ? 'Relatórios' : 'Opções'}
+             activeTab === 'relatorios' ? 'Relatórios' : 
+             activeTab === 'admin' ? 'Admin' : 'Opções'}
           </span>
         </div>
       </header>
@@ -120,7 +134,8 @@ function AppContent() {
             {activeTab === 'caixinhas' && <CaixinhasView />}
             {activeTab === 'vendas' && <VendasView />}
             {activeTab === 'relatorios' && <RelatoriosView />}
-            {activeTab === 'definicoes' && <DefinicoesView />}
+            {activeTab === 'definicoes' && <DefinicoesView setActiveTab={setActiveTab} />}
+            {activeTab === 'admin' && <PainelAdminView />}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -32,7 +32,7 @@ import {
   Copy
 } from 'lucide-react';
 
-export default function DefinicoesView() {
+export default function DefinicoesView({ setActiveTab }: { setActiveTab?: (tab: string) => void }) {
   const { 
     profile, 
     updateProfile, 
@@ -995,6 +995,31 @@ export default function DefinicoesView() {
           </div>
         )}
       </div>
+
+      {/* 3.5 Admin Section (Only for sheltonmad55@gmail.com) */}
+      {(profile?.email === 'sheltonmad55@gmail.com' || auth.currentUser?.email === 'sheltonmad55@gmail.com') && setActiveTab && (
+        <div className="bg-slate-900 text-white rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_admin_panel">
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold text-xs text-slate-100 flex items-center font-display">
+              <Shield className="w-4 h-4 mr-1.5 text-emerald-400" /> Painel de Administração
+            </h3>
+            <span className="text-[9px] bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 px-2 py-0.5 rounded-full font-bold">
+              Consola Shelton
+            </span>
+          </div>
+          <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+            Entra na Consola Administrativa para monitorizar utilizadores, aprovar subscrições, alterar limites de trial e aceder a todos os dados guardados.
+          </p>
+          <button
+            id="btn_settings_goto_admin"
+            type="button"
+            onClick={() => setActiveTab('admin')}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3 rounded-xl text-xs transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm shadow-emerald-600/10"
+          >
+            <span>Aceder à Consola de Gestão</span>
+          </button>
+        </div>
+      )}
 
       {/* 4. Logout / Reset */}
       <div className="pt-2" id="definicoes_system_panel">

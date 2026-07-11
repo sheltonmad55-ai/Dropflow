@@ -6,6 +6,7 @@
 export interface Profile {
   id: string; // matches user auth id
   nome: string;
+  email?: string; // user email for administrative visibility
   pais: string;
   moeda: string;
   plano: 'trial' | 'pro';

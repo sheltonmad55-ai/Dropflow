@@ -135,13 +135,13 @@ export async function loginWithGoogle() {
 }
 
 export async function pullAllUserData(userId: string) {
-  let profileDoc;
+  let profileDoc = null;
   try {
     profileDoc = await getDoc(doc(db, 'profiles', userId));
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `profiles/${userId}`);
+    console.warn(`Firestore GET profiles/${userId} failed (could be offline or initial setup):`, error);
   }
-  const profile = profileDoc.exists() ? profileDoc.data() : null;
+  const profile = (profileDoc && profileDoc.exists()) ? profileDoc.data() : null;
 
   // Helper to fetch collection
   const fetchCol = async (colName: string) => {
@@ -150,7 +150,8 @@ export async function pullAllUserData(userId: string) {
       const snapshot = await getDocs(q);
       return snapshot.docs.map(d => d.data());
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, colName);
+      console.warn(`Firestore LIST ${colName} failed (could be offline or initial setup):`, error);
+      return [];
     }
   };
 
