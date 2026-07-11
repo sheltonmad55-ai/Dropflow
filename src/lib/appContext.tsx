@@ -30,6 +30,7 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nome: string, pais: string, moeda: string) => Promise<void>;
   loginGoogle: () => Promise<void>;
+  loginDemo: (role: 'admin' | 'regular') => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   triggerMockUpgrade: () => Promise<void>;
@@ -782,6 +783,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function loginDemo(role: 'admin' | 'regular') {
+    setIsLoadingAuth(true);
+    try {
+      const demoId = role === 'admin' ? 'demo-admin-id' : 'demo-user-id';
+      const demoEmail = role === 'admin' ? 'sheltonmad55@gmail.com' : 'convidado@dropflow.com';
+      const demoNome = role === 'admin' ? 'Shelton Mad' : 'Empreendedor Convidado';
+      const freshToken = 'demo-token-' + crypto.randomUUID();
+
+      const demoProfile: Profile = {
+        id: demoId,
+        nome: demoNome,
+        email: demoEmail,
+        pais: 'Moçambique',
+        moeda: 'MT',
+        plano: role === 'admin' ? 'pro' : 'trial',
+        trial_expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+        anuncios_percent: 50,
+        lucro_percent: 50,
+        criado_em: new Date().toISOString()
+      };
+
+      const defaultCaixinhas: Caixinha[] = [
+        {
+          id: 'demo-cx-lucro',
+          user_id: demoId,
+          nome: 'Lucro',
+          icone: '📈',
+          cor: 'bg-emerald-500',
+          tipo: 'lucro',
+          saldo_atual: 45000,
+          criado_em: new Date().toISOString()
+        },
+        {
+          id: 'demo-cx-anuncios',
+          user_id: demoId,
+          nome: 'Anúncios',
+          icone: '📢',
+          cor: 'bg-sky-500',
+          tipo: 'anuncios',
+          saldo_atual: 15000,
+          criado_em: new Date().toISOString()
+        },
+        {
+          id: 'demo-cx-fornecedores',
+          user_id: demoId,
+          nome: 'Produtos/Fornecedores',
+          icone: '📦',
+          cor: 'bg-amber-500',
+          tipo: 'fornecedores',
+          saldo_atual: 22000,
+          criado_em: new Date().toISOString()
+        },
+        {
+          id: 'demo-cx-delivery',
+          user_id: demoId,
+          nome: 'Delivery',
+          icone: '🚚',
+          cor: 'bg-indigo-500',
+          tipo: 'delivery',
+          saldo_atual: 8000,
+          criado_em: new Date().toISOString()
+        }
+      ];
+
+      // Save to local IndexedDB
+      await db.putItem('profiles', demoProfile);
+      for (const cx of defaultCaixinhas) {
+        await db.putItem('caixinhas', cx);
+      }
+
+      localStorage.setItem('dropflow_token', freshToken);
+      localStorage.setItem('dropflow_profile', JSON.stringify(demoProfile));
+
+      setToken(freshToken);
+      setProfile(demoProfile);
+      setIsAuthenticated(true);
+      setIsLoadingAuth(false);
+    } catch (e) {
+      setIsLoadingAuth(false);
+      throw e;
+    }
+  }
+
   async function logout() {
     try {
       await signOut(auth);
@@ -1208,6 +1292,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       login,
       register,
       loginGoogle,
+      loginDemo,
       logout,
       updateProfile,
       triggerMockUpgrade,

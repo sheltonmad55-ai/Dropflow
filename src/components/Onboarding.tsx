@@ -9,7 +9,7 @@ import { TrendingUp, Megaphone, ShieldCheck, ArrowRight, Sparkles, Wallet } from
 import dropflowLogo from '../assets/images/dropflow_logo_1783728024322.jpg';
 
 export default function Onboarding() {
-  const { login, register, loginGoogle } = useApp();
+  const { login, register, loginGoogle, loginDemo } = useApp();
   // By default, start on slide 2 (auth screen) so it matches the screenshot immediately
   const [slide, setSlide] = useState(2); // 0: intro, 1: concept, 2: auth, 3: percentage setup (only on signup)
   const [isLogin, setIsLogin] = useState(true);
@@ -308,6 +308,54 @@ export default function Onboarding() {
                   {isLogin ? 'Criar conta' : 'Fazer login'}
                 </button>
               </div>
+
+              {/* Quick test/demo accounts */}
+              <div className="bg-slate-50 border border-slate-200/50 p-4.5 rounded-2xl text-center space-y-3" id="demo_accounts_panel">
+                <span className="text-[10px] font-black tracking-wider text-slate-500 uppercase block">Início de Sessão Rápida para Avaliação</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" id="demo_btns_grid">
+                  <button
+                    id="btn_demo_admin"
+                    type="button"
+                    onClick={async () => {
+                      setError('');
+                      setLoading(true);
+                      try {
+                        await loginDemo('admin');
+                      } catch (err: any) {
+                        setError('Erro no login demo admin.');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="bg-[#006638] hover:bg-[#00522c] text-white font-extrabold py-2 px-3 rounded-xl text-[11px] shadow-sm flex flex-col items-center justify-center space-y-0.5 cursor-pointer transition-colors"
+                  >
+                    <span className="font-black">Shelton (Admin Console)</span>
+                    <span className="text-[9px] text-emerald-100 font-medium">sheltonmad55@gmail.com</span>
+                  </button>
+                  <button
+                    id="btn_demo_user"
+                    type="button"
+                    onClick={async () => {
+                      setError('');
+                      setLoading(true);
+                      try {
+                        await loginDemo('regular');
+                      } catch (err: any) {
+                        setError('Erro no login demo convidado.');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold py-2 px-3 rounded-xl text-[11px] shadow-sm flex flex-col items-center justify-center space-y-0.5 cursor-pointer transition-colors"
+                  >
+                    <span className="font-bold text-slate-800">Convidado (Normal)</span>
+                    <span className="text-[9px] text-slate-400 font-medium font-mono">demo@dropflow.com</span>
+                  </button>
+                </div>
+                <p className="text-[9px] text-slate-400 leading-normal">
+                  Dica: Se estiver a aceder pelo iframe do AI Studio, use um destes botões acima para entrar instantaneamente! Evita bloqueios de cookies do navegador.
+                </p>
+              </div>
             </div>
           )}
 
@@ -319,6 +367,12 @@ export default function Onboarding() {
                   Defina como dividir o valor restante de cada venda (após descontar fornecedor e entrega).
                 </p>
               </div>
+
+              {error && (
+                <div className="bg-rose-50 border border-rose-100 text-rose-700 p-3.5 rounded-xl text-xs text-center font-medium" id="auth_error_slide_3">
+                  {error}
+                </div>
+              )}
 
               <div className="bg-slate-50 p-4 rounded-2xl space-y-5 border border-slate-100" id="percent_sliders">
                 {/* Marketing Pockets */}

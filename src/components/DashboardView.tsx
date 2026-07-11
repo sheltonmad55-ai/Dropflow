@@ -109,7 +109,12 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
       case 'Megaphone': return <Megaphone className="w-5 h-5 text-sky-600" />;
       case 'Package': return <Package className="w-5 h-5 text-amber-600" />;
       case 'Truck': return <Truck className="w-5 h-5 text-indigo-600" />;
-      default: return <Layers className="w-5 h-5 text-slate-500" />;
+      case 'Layers': return <Layers className="w-5 h-5 text-slate-500" />;
+      default: 
+        if (name && name.length <= 4) {
+          return <span className="text-xl flex items-center justify-center w-5 h-5 select-none">{name}</span>;
+        }
+        return <Layers className="w-5 h-5 text-slate-500" />;
     }
   };
 

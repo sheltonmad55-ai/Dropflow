@@ -41,6 +41,17 @@ function AppContent() {
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'definicoes'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
+  // Redirection check based on Firebase Auth email
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      if (auth.currentUser?.email === 'sheltonmad55@gmail.com') {
+        setActiveTab('admin');
+      } else {
+        setActiveTab('dashboard');
+      }
+    }
+  }, [isAuthenticated, auth.currentUser?.email]);
+
   // Modal Triggers
   const [isVendaOpen, setIsVendaOpen] = useState(false);
   const [isDespesaOpen, setIsDespesaOpen] = useState(false);
