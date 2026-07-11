@@ -11,8 +11,6 @@ import CaixinhasView from './components/CaixinhasView.tsx';
 import VendasView from './components/VendasView.tsx';
 import RelatoriosView from './components/RelatoriosView.tsx';
 import DefinicoesView from './components/DefinicoesView.tsx';
-import PainelAdminView from './components/PainelAdminView.tsx';
-import { auth } from './lib/firebase.ts';
 import VendaModal from './components/VendaModal.tsx';
 import DespesaModal from './components/DespesaModal.tsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,30 +25,14 @@ import {
   Plus, 
   ArrowDownRight, 
   Sparkles,
-  RefreshCw,
-  Bell,
-  X,
-  Award,
-  CheckCircle,
-  ShieldCheck
+  RefreshCw
 } from 'lucide-react';
 
 function AppContent() {
-  const { isAuthenticated, isLoadingAuth, activeAlert, clearActiveAlert, profile } = useApp();
+  const { isAuthenticated, isLoadingAuth } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'definicoes'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-
-  // Redirection check based on Firebase Auth email
-  React.useEffect(() => {
-    if (isAuthenticated) {
-      if (auth.currentUser?.email === 'sheltonmad55@gmail.com') {
-        setActiveTab('admin');
-      } else {
-        setActiveTab('dashboard');
-      }
-    }
-  }, [isAuthenticated, auth.currentUser?.email]);
 
   // Modal Triggers
   const [isVendaOpen, setIsVendaOpen] = useState(false);
@@ -103,23 +85,12 @@ function AppContent() {
         </div>
 
         <div className="flex items-center space-x-2" id="header_actions">
-          {(profile?.email === 'sheltonmad55@gmail.com' || auth.currentUser?.email === 'sheltonmad55@gmail.com') && (
-            <button
-              id="btn_header_admin"
-              onClick={() => setActiveTab('admin')}
-              className={`px-2 py-1 rounded-full text-[9px] font-bold transition-all flex items-center gap-1 cursor-pointer border ${activeTab === 'admin' ? 'bg-slate-900 border-slate-900 text-white' : 'bg-emerald-50 border-emerald-100 text-emerald-700 hover:bg-emerald-100'}`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Admin</span>
-            </button>
-          )}
           {/* Active indicator */}
           <span className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
             {activeTab === 'dashboard' ? 'Início' :
              activeTab === 'caixinhas' ? 'Pockets' :
              activeTab === 'vendas' ? 'Operações' :
-             activeTab === 'relatorios' ? 'Relatórios' : 
-             activeTab === 'admin' ? 'Admin' : 'Opções'}
+             activeTab === 'relatorios' ? 'Relatórios' : 'Opções'}
           </span>
         </div>
       </header>
@@ -145,8 +116,7 @@ function AppContent() {
             {activeTab === 'caixinhas' && <CaixinhasView />}
             {activeTab === 'vendas' && <VendasView />}
             {activeTab === 'relatorios' && <RelatoriosView />}
-            {activeTab === 'definicoes' && <DefinicoesView setActiveTab={setActiveTab} />}
-            {activeTab === 'admin' && <PainelAdminView />}
+            {activeTab === 'definicoes' && <DefinicoesView />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -238,87 +208,6 @@ function AppContent() {
       {/* Global Form Modals */}
       <VendaModal isOpen={isVendaOpen} onClose={() => setIsVendaOpen(false)} />
       <DespesaModal isOpen={isDespesaOpen} onClose={() => setIsDespesaOpen(false)} />
-
-      {/* FCM Push Notification Card Overlay */}
-      <AnimatePresence>
-        {activeAlert && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="absolute top-4 left-4 right-4 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-800 z-50 flex flex-col space-y-3 font-sans"
-            id="fcm_notification_popup"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-2.5">
-                <div className={`p-1.5 rounded-lg ${activeAlert.type === 'goal' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                  {activeAlert.type === 'goal' ? <Award className="w-5 h-5 animate-bounce" /> : <Bell className="w-5 h-5" />}
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-500 tracking-wider uppercase">Notificação Push (FCM)</h4>
-                  <h3 className="text-xs font-extrabold text-white">{activeAlert.title}</h3>
-                </div>
-              </div>
-              <button onClick={clearActiveAlert} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-200 leading-relaxed">{activeAlert.body}</p>
-
-            {/* Daily summary interactive report details inside Push Notification */}
-            {activeAlert.type === 'summary' && activeAlert.data && (
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5 text-[10px] font-mono">
-                <div className="flex justify-between border-b border-slate-800/40 pb-1">
-                  <span className="text-slate-500">Faturação Bruta:</span>
-                  <span className="text-emerald-400 font-semibold">+{activeAlert.data.vendasTotal} {profile?.moeda || 'MT'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-800/40 pb-1">
-                  <span className="text-slate-500">Custos Fornecedor:</span>
-                  <span className="text-amber-500 font-semibold">-{activeAlert.data.fornecedoresTotal} {profile?.moeda || 'MT'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-800/40 pb-1">
-                  <span className="text-slate-500">Taxas de Entrega:</span>
-                  <span className="text-indigo-400 font-semibold">-{activeAlert.data.deliveryTotal} {profile?.moeda || 'MT'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-800/40 pb-1">
-                  <span className="text-slate-500">Anúncios & Despesas:</span>
-                  <span className="text-rose-400 font-semibold">-{activeAlert.data.despesasTotal + activeAlert.data.adsTotal} {profile?.moeda || 'MT'}</span>
-                </div>
-                <div className="flex justify-between pt-1 font-bold text-white text-xs border-t border-slate-800">
-                  <span className="text-slate-300 font-sans">Lucro Líquido:</span>
-                  <span className="text-emerald-400">+{activeAlert.data.lucroLiquido} {profile?.moeda || 'MT'}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Goal batida alert celebratory statistics inside Push Notification */}
-            {activeAlert.type === 'goal' && activeAlert.data && (
-              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1 text-[10px] font-sans">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-400 font-mono">Meta Diária:</span>
-                  <span className="text-slate-200 font-bold font-mono">{activeAlert.data.meta} {profile?.moeda || 'MT'}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-400 font-mono">Lucro Registado:</span>
-                  <span className="text-emerald-400 font-bold font-mono">+{activeAlert.data.lucroReal} {profile?.moeda || 'MT'}</span>
-                </div>
-                <div className="pt-2 text-center text-[10px] text-amber-400 font-semibold uppercase tracking-wider flex items-center justify-center space-x-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Meta superada em {activeAlert.data.percent}%!</span>
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={clearActiveAlert}
-              className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded-xl transition-colors shadow-lg shadow-emerald-900/10"
-            >
-              Entendido
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

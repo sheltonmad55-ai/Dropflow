@@ -10,9 +10,7 @@ import {
   auth, 
   loginWithGoogle, 
   pullAllUserData, 
-  pushQueueToFirestore,
-  getFcmToken,
-  registerForegroundFcm
+  pushQueueToFirestore 
 } from './firebase.ts';
 import { 
   signInWithEmailAndPassword, 
@@ -30,7 +28,6 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nome: string, pais: string, moeda: string) => Promise<void>;
   loginGoogle: () => Promise<void>;
-  loginDemo: (role: 'admin' | 'regular') => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   triggerMockUpgrade: () => Promise<void>;
@@ -62,14 +59,6 @@ interface AppContextType {
   addCaixinha: (nome: string, icone: string, cor: string, percentual?: number) => Promise<void>;
   editCaixinha: (id: string, updates: Partial<Caixinha>) => Promise<void>;
   deleteCaixinha: (id: string) => Promise<void>;
-
-  // FCM / Push Notifications
-  fcmSupported: boolean;
-  fcmToken: string | null;
-  activeAlert: { title: string; body: string; type: 'summary' | 'goal'; data?: any } | null;
-  triggerLocalNotification: (title: string, body: string, type: 'summary' | 'goal', data?: any) => void;
-  clearActiveAlert: () => void;
-  requestFcmPermission: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -94,11 +83,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'pending' | 'syncing' | 'offline'>(
     navigator.onLine ? 'synced' : 'offline'
   );
-
-  // FCM / Notifications state
-  const [fcmSupported, setFcmSupported] = useState<boolean>(false);
-  const [fcmToken, setFcmToken] = useState<string | null>(null);
-  const [activeAlert, setActiveAlert] = useState<{ title: string; body: string; type: 'summary' | 'goal'; data?: any } | null>(null);
 
   // Listen to network status
   useEffect(() => {
@@ -132,100 +116,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('dropflow_token', freshToken);
 
           const freshData = await pullAllUserData(user.uid);
-          let userProfile: Profile;
-
           if (freshData.profile) {
-            userProfile = freshData.profile as Profile;
-            // Safe merge user's email if missing
-            if (user.email && !userProfile.email) {
-              userProfile.email = user.email.toLowerCase();
-              try {
-                const { doc, updateDoc } = await import('firebase/firestore');
-                const { db: firestoreDb } = await import('./firebase.ts');
-                await updateDoc(doc(firestoreDb, 'profiles', user.uid), { email: user.email.toLowerCase() });
-              } catch (emailErr) {
-                console.warn("Could not save user email to profile:", emailErr);
-              }
-            }
-          } else {
-            // Auto-create missing profile
-            const trialExpiry = new Date();
-            trialExpiry.setDate(trialExpiry.getDate() + 7);
-            userProfile = {
-              id: user.uid,
-              nome: user.displayName || user.email?.split('@')[0] || 'Utilizador DropFlow',
-              email: user.email || undefined,
-              pais: 'Moçambique',
-              moeda: 'MT',
-              plano: 'trial',
-              trial_expires_at: trialExpiry.toISOString(),
-              anuncios_percent: 50,
-              lucro_percent: 50,
-              criado_em: new Date().toISOString()
-            };
-
-            const defaultCaixinhas: Caixinha[] = [
-              {
-                id: crypto.randomUUID(),
-                user_id: user.uid,
-                nome: 'Lucro',
-                icone: 'TrendingUp',
-                cor: 'bg-emerald-500',
-                tipo: 'lucro',
-                saldo_atual: 0,
-                criado_em: new Date().toISOString()
-              },
-              {
-                id: crypto.randomUUID(),
-                user_id: user.uid,
-                nome: 'Anúncios',
-                icone: 'Megaphone',
-                cor: 'bg-sky-500',
-                tipo: 'anuncios',
-                saldo_atual: 0,
-                criado_em: new Date().toISOString()
-              },
-              {
-                id: crypto.randomUUID(),
-                user_id: user.uid,
-                nome: 'Produtos/Fornecedores',
-                icone: 'Package',
-                cor: 'bg-amber-500',
-                tipo: 'fornecedores',
-                saldo_atual: 0,
-                criado_em: new Date().toISOString()
-              },
-              {
-                id: crypto.randomUUID(),
-                user_id: user.uid,
-                nome: 'Delivery',
-                icone: 'Truck',
-                cor: 'bg-indigo-500',
-                tipo: 'delivery',
-                saldo_atual: 0,
-                criado_em: new Date().toISOString()
-              }
-            ];
-
-            try {
-              await pushQueueToFirestore([
-                { type: 'profile', action: 'create', data: userProfile },
-                ...defaultCaixinhas.map(cx => ({ type: 'caixinha', action: 'create', data: cx }))
-              ]);
-              // Save to local IndexedDB
-              await db.putItem('profiles', userProfile);
-              for (const cx of defaultCaixinhas) {
-                await db.putItem('caixinhas', cx);
-              }
-            } catch (createErr) {
-              console.warn("Could not push auto-created profile to Firestore:", createErr);
-            }
+            setProfile(freshData.profile as Profile);
+            localStorage.setItem('dropflow_profile', JSON.stringify(freshData.profile));
+            setIsAuthenticated(true);
           }
-
-          setProfile(userProfile);
-          localStorage.setItem('dropflow_profile', JSON.stringify(userProfile));
-          await db.putItem('profiles', userProfile);
-          setIsAuthenticated(true);
         } catch (e) {
           console.error("Error pulling user data on auth state change:", e);
         }
@@ -241,114 +136,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, []);
-
-  // Check FCM Support and Load Token if available on startup
-  useEffect(() => {
-    async function initFcm() {
-      if (isAuthenticated && profile) {
-        try {
-          const tokenVal = await getFcmToken();
-          if (tokenVal) {
-            setFcmToken(tokenVal);
-            setFcmSupported(true);
-          }
-        } catch (e) {
-          console.warn('FCM initial check bypassed or unsupported');
-        }
-      }
-    }
-    initFcm();
-  }, [isAuthenticated]);
-
-  // Handle Foreground FCM listener
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    
-    if (isAuthenticated && profile) {
-      registerForegroundFcm((payload) => {
-        console.log('FCM Foreground payload received:', payload);
-        const title = payload.notification?.title || 'Notificação Dropflow';
-        const body = payload.notification?.body || 'Mensagem do sistema.';
-        triggerLocalNotification(title, body, 'summary', payload.data);
-      }).then(unsub => {
-        unsubscribe = unsub;
-      });
-    }
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, [isAuthenticated, profile]);
-
-  function triggerLocalNotification(title: string, body: string, type: 'summary' | 'goal', data?: any) {
-    setActiveAlert({ title, body, type, data });
-    
-    // Play double-chime synth sound
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-      
-      setTimeout(() => {
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
-        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-        setTimeout(() => osc.stop(), 350);
-      }, 150);
-    } catch (e) {
-      console.log('Audio preview bypassed');
-    }
-
-    // Standard HTML5 Notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, { body });
-      } catch (e) {
-        console.log('HTML5 notification blocked or failed in iframe');
-      }
-    }
-  }
-
-  function clearActiveAlert() {
-    setActiveAlert(null);
-  }
-
-  async function requestFcmPermission(): Promise<boolean> {
-    try {
-      if (!('Notification' in window)) {
-        console.warn('Browser does not support notifications.');
-        return false;
-      }
-      
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        const token = await getFcmToken();
-        if (token && profile) {
-          setFcmToken(token);
-          setFcmSupported(true);
-          await updateProfile({ fcm_token: token, fcm_enabled: true });
-          return true;
-        } else {
-          // If token registration fails but permission was granted, allow simulated notifications
-          setFcmSupported(true);
-          await updateProfile({ fcm_enabled: true });
-          return true;
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error('Error requesting notification permission:', error);
-      return false;
-    }
-  }
 
   // Whenever user becomes authenticated, load local storage & database
   useEffect(() => {
@@ -408,97 +195,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const freshToken = await user.getIdToken();
       
       const data = await pullAllUserData(user.uid);
-      let userProfile: Profile;
-
-      if (data.profile) {
-        userProfile = data.profile as Profile;
-        // Merge user email if missing
-        if (user.email && !userProfile.email) {
-          userProfile.email = user.email.toLowerCase();
-          try {
-            const { doc, updateDoc } = await import('firebase/firestore');
-            const { db: firestoreDb } = await import('./firebase.ts');
-            await updateDoc(doc(firestoreDb, 'profiles', user.uid), { email: user.email.toLowerCase() });
-          } catch (emailErr) {
-            console.warn("Could not save user email to profile:", emailErr);
-          }
-        }
-      } else {
-        // Auto-create missing profile
-        const trialExpiry = new Date();
-        trialExpiry.setDate(trialExpiry.getDate() + 7);
-        userProfile = {
-          id: user.uid,
-          nome: user.displayName || user.email?.split('@')[0] || 'Utilizador DropFlow',
-          email: user.email || email.toLowerCase(),
-          pais: 'Moçambique',
-          moeda: 'MT',
-          plano: 'trial',
-          trial_expires_at: trialExpiry.toISOString(),
-          anuncios_percent: 50,
-          lucro_percent: 50,
-          criado_em: new Date().toISOString()
-        };
-
-        const defaultCaixinhas: Caixinha[] = [
-          {
-            id: crypto.randomUUID(),
-            user_id: user.uid,
-            nome: 'Lucro',
-            icone: 'TrendingUp',
-            cor: 'bg-emerald-500',
-            tipo: 'lucro',
-            saldo_atual: 0,
-            criado_em: new Date().toISOString()
-          },
-          {
-            id: crypto.randomUUID(),
-            user_id: user.uid,
-            nome: 'Anúncios',
-            icone: 'Megaphone',
-            cor: 'bg-sky-500',
-            tipo: 'anuncios',
-            saldo_atual: 0,
-            criado_em: new Date().toISOString()
-          },
-          {
-            id: crypto.randomUUID(),
-            user_id: user.uid,
-            nome: 'Produtos/Fornecedores',
-            icone: 'Package',
-            cor: 'bg-amber-500',
-            tipo: 'fornecedores',
-            saldo_atual: 0,
-            criado_em: new Date().toISOString()
-          },
-          {
-            id: crypto.randomUUID(),
-            user_id: user.uid,
-            nome: 'Delivery',
-            icone: 'Truck',
-            cor: 'bg-indigo-500',
-            tipo: 'delivery',
-            saldo_atual: 0,
-            criado_em: new Date().toISOString()
-          }
-        ];
-
-        try {
-          await pushQueueToFirestore([
-            { type: 'profile', action: 'create', data: userProfile },
-            ...defaultCaixinhas.map(cx => ({ type: 'caixinha', action: 'create', data: cx }))
-          ]);
-          data.caixinhas = defaultCaixinhas;
-        } catch (createErr) {
-          console.warn("Could not push auto-created profile to Firestore:", createErr);
-        }
+      if (!data.profile) {
+        throw new Error('Perfil do utilizador não encontrado no Firebase.');
       }
 
       localStorage.setItem('dropflow_token', freshToken);
-      localStorage.setItem('dropflow_profile', JSON.stringify(userProfile));
+      localStorage.setItem('dropflow_profile', JSON.stringify(data.profile));
 
       // Overwrite local tables in IndexedDB
-      await db.putItem('profiles', userProfile);
+      await db.putItem('profiles', data.profile);
       
       await db.clearStore('caixinhas');
       for (const cx of data.caixinhas) {
@@ -531,7 +236,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       setToken(freshToken);
-      setProfile(userProfile);
+      setProfile(data.profile as Profile);
       setIsAuthenticated(true);
       
       // Perform instant full sync to pull everything
@@ -556,7 +261,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newProfile: Profile = {
         id: user.uid,
         nome,
-        email: email.toLowerCase(),
         pais: pais || 'Moçambique',
         moeda: moeda || 'MT',
         plano: 'trial',
@@ -645,19 +349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let userProfile = data.profile as Profile | null;
       let userCaixinhas = data.caixinhas as Caixinha[];
 
-      if (userProfile) {
-        // Safe merge user's email if missing
-        if (user.email && !userProfile.email) {
-          userProfile.email = user.email.toLowerCase();
-          try {
-            const { doc, updateDoc } = await import('firebase/firestore');
-            const { db: firestoreDb } = await import('./firebase.ts');
-            await updateDoc(doc(firestoreDb, 'profiles', user.uid), { email: user.email.toLowerCase() });
-          } catch (emailErr) {
-            console.warn("Could not save user email to profile:", emailErr);
-          }
-        }
-      } else {
+      if (!userProfile) {
         // If not, register a new profile with Google's details
         const trialExpiry = new Date();
         trialExpiry.setDate(trialExpiry.getDate() + 7);
@@ -665,7 +357,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         userProfile = {
           id: user.uid,
           nome: user.displayName || 'Empreendedor Google',
-          email: user.email?.toLowerCase() || undefined,
           pais: 'Moçambique',
           moeda: 'MT',
           plano: 'trial',
@@ -778,89 +469,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Perform instant full sync to pull everything
       setTimeout(() => syncWithServer(), 100);
     } catch (e: any) {
-      setIsLoadingAuth(false);
-      throw e;
-    }
-  }
-
-  async function loginDemo(role: 'admin' | 'regular') {
-    setIsLoadingAuth(true);
-    try {
-      const demoId = role === 'admin' ? 'demo-admin-id' : 'demo-user-id';
-      const demoEmail = role === 'admin' ? 'sheltonmad55@gmail.com' : 'convidado@dropflow.com';
-      const demoNome = role === 'admin' ? 'Shelton Mad' : 'Empreendedor Convidado';
-      const freshToken = 'demo-token-' + crypto.randomUUID();
-
-      const demoProfile: Profile = {
-        id: demoId,
-        nome: demoNome,
-        email: demoEmail,
-        pais: 'Moçambique',
-        moeda: 'MT',
-        plano: role === 'admin' ? 'pro' : 'trial',
-        trial_expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-        anuncios_percent: 50,
-        lucro_percent: 50,
-        criado_em: new Date().toISOString()
-      };
-
-      const defaultCaixinhas: Caixinha[] = [
-        {
-          id: 'demo-cx-lucro',
-          user_id: demoId,
-          nome: 'Lucro',
-          icone: '📈',
-          cor: 'bg-emerald-500',
-          tipo: 'lucro',
-          saldo_atual: 45000,
-          criado_em: new Date().toISOString()
-        },
-        {
-          id: 'demo-cx-anuncios',
-          user_id: demoId,
-          nome: 'Anúncios',
-          icone: '📢',
-          cor: 'bg-sky-500',
-          tipo: 'anuncios',
-          saldo_atual: 15000,
-          criado_em: new Date().toISOString()
-        },
-        {
-          id: 'demo-cx-fornecedores',
-          user_id: demoId,
-          nome: 'Produtos/Fornecedores',
-          icone: '📦',
-          cor: 'bg-amber-500',
-          tipo: 'fornecedores',
-          saldo_atual: 22000,
-          criado_em: new Date().toISOString()
-        },
-        {
-          id: 'demo-cx-delivery',
-          user_id: demoId,
-          nome: 'Delivery',
-          icone: '🚚',
-          cor: 'bg-indigo-500',
-          tipo: 'delivery',
-          saldo_atual: 8000,
-          criado_em: new Date().toISOString()
-        }
-      ];
-
-      // Save to local IndexedDB
-      await db.putItem('profiles', demoProfile);
-      for (const cx of defaultCaixinhas) {
-        await db.putItem('caixinhas', cx);
-      }
-
-      localStorage.setItem('dropflow_token', freshToken);
-      localStorage.setItem('dropflow_profile', JSON.stringify(demoProfile));
-
-      setToken(freshToken);
-      setProfile(demoProfile);
-      setIsAuthenticated(true);
-      setIsLoadingAuth(false);
-    } catch (e) {
       setIsLoadingAuth(false);
       throw e;
     }
@@ -1292,7 +900,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       login,
       register,
       loginGoogle,
-      loginDemo,
       logout,
       updateProfile,
       triggerMockUpgrade,
@@ -1319,14 +926,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       addCaixinha,
       editCaixinha,
-      deleteCaixinha,
-
-      fcmSupported,
-      fcmToken,
-      activeAlert,
-      triggerLocalNotification,
-      clearActiveAlert,
-      requestFcmPermission
+      deleteCaixinha
     }}>
       {children}
     </AppContext.Provider>

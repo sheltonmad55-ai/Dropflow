@@ -6,7 +6,6 @@
 export interface Profile {
   id: string; // matches user auth id
   nome: string;
-  email?: string; // user email for administrative visibility
   pais: string;
   moeda: string;
   plano: 'trial' | 'pro';
@@ -14,11 +13,6 @@ export interface Profile {
   criado_em: string;
   anuncios_percent: number; // e.g. 50% of remainder
   lucro_percent: number;    // e.g. 50% of remainder
-  fcm_token?: string;
-  fcm_enabled?: boolean;
-  daily_summary_time?: string;
-  alert_meta_batida?: boolean;
-  meta_lucro_diario?: number;
 }
 
 export type CaixinhaTipo = 'lucro' | 'anuncios' | 'fornecedores' | 'delivery' | 'personalizado';

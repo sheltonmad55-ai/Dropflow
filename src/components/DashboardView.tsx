@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp } from '../lib/appContext.tsx';
 import { 
   TrendingUp, 
@@ -15,9 +15,7 @@ import {
   ArrowDownRight, 
   Plus, 
   ChevronRight,
-  Info,
-  Lightbulb,
-  RefreshCw
+  Info
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -25,49 +23,6 @@ interface DashboardViewProps {
   onOpenDespesa: () => void;
   setActiveTab: (tab: string) => void;
 }
-
-const DICAS_FINANCEIRAS = [
-  {
-    titulo: "Separação de Finanças",
-    texto: "Nunca mistures as contas pessoais com as do negócio. Usa as caixinhas do DropFlow para gerir o dinheiro do dropshipping de forma profissional.",
-    categoria: "Organização"
-  },
-  {
-    titulo: "Margem de Segurança",
-    texto: "Guarda sempre entre 10% a 15% do lucro líquido na Caixinha de Contingência para lidar com potenciais reembolsos ou chargebacks sem sufocar o teu caixa.",
-    categoria: "Contingência"
-  },
-  {
-    titulo: "Monitorização de Anúncios",
-    texto: "Se o teu Custo de Aquisição de Cliente (CAC) for superior à margem bruta do produto, pausa a campanha e ajusta o criativo ou a oferta imediatamente.",
-    categoria: "Tráfego Pago"
-  },
-  {
-    titulo: "Fundo para Campanhas",
-    texto: "Mantém na tua caixinha de Anúncios o equivalente a pelo menos 3 a 5 dias de orçamento diário ativo para evitar que campanhas vencedoras parem por falta de saldo.",
-    categoria: "Planeamento"
-  },
-  {
-    titulo: "Parcerias e Escala",
-    texto: "Ao atingires mais de 10 a 15 pedidos diários, procura um agente de dropshipping privado. Isso reduz o custo do produto e acelera o tempo de entrega.",
-    categoria: "Negociação"
-  },
-  {
-    titulo: "Taxas Invisíveis",
-    texto: "As taxas do gateway de pagamento, Shopify e conversão de moeda estrangeira somam custos. Inclui sempre estes valores na tua fórmula de precificação.",
-    categoria: "Custos"
-  },
-  {
-    titulo: "Regra de Ouro de Precificação",
-    texto: "Tenta vender os produtos por pelo menos 2.5x a 3x o custo de compra. Margens saudáveis são o segredo para absorver os custos de publicidade paga.",
-    categoria: "Margem"
-  },
-  {
-    titulo: "Vendas Recorrentes (LTV)",
-    texto: "É mais barato vender de novo do que adquirir um cliente novo. Cria sequências de e-mail marketing ou ofertas de WhatsApp pós-compra com produtos complementares.",
-    categoria: "Faturação"
-  }
-];
 
 export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab }: DashboardViewProps) {
   const { 
@@ -78,14 +33,6 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   } = useApp();
 
   const currency = profile?.moeda || 'MT';
-
-  // State to rotate/shuffle tips. Default is based on the day of the month.
-  const initialTipIndex = new Date().getDate() % DICAS_FINANCEIRAS.length;
-  const [currentTipIndex, setCurrentTipIndex] = useState(initialTipIndex);
-
-  const handleNextTip = () => {
-    setCurrentTipIndex((prev) => (prev + 1) % DICAS_FINANCEIRAS.length);
-  };
 
   // Calculations
   const totalBalance = caixinhas.reduce((acc, curr) => acc + curr.saldo_atual, 0);
@@ -109,12 +56,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
       case 'Megaphone': return <Megaphone className="w-5 h-5 text-sky-600" />;
       case 'Package': return <Package className="w-5 h-5 text-amber-600" />;
       case 'Truck': return <Truck className="w-5 h-5 text-indigo-600" />;
-      case 'Layers': return <Layers className="w-5 h-5 text-slate-500" />;
-      default: 
-        if (name && name.length <= 4) {
-          return <span className="text-xl flex items-center justify-center w-5 h-5 select-none">{name}</span>;
-        }
-        return <Layers className="w-5 h-5 text-slate-500" />;
+      default: return <Layers className="w-5 h-5 text-slate-500" />;
     }
   };
 
@@ -199,35 +141,6 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           <span className="text-[9px] font-bold text-slate-400 block uppercase">Gastos Mês</span>
           <span className="text-xs font-bold text-rose-600 block">{totalExpensesMonth.toLocaleString()} {currency}</span>
           <span className="text-[9px] text-slate-400 block">Investido</span>
-        </div>
-      </div>
-
-      {/* Dica do Dia Card Section */}
-      <div className="bg-emerald-50/40 border border-emerald-100/70 rounded-3xl p-4.5 space-y-3 relative overflow-hidden shadow-sm" id="dash_tip_of_the_day">
-        <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/5 rounded-full blur-2xl -mr-4 -mt-4 pointer-events-none"></div>
-        <div className="flex items-center justify-between" id="tip_header">
-          <div className="flex items-center space-x-2">
-            <div className="p-1.5 bg-emerald-600/10 text-emerald-700 rounded-lg shrink-0">
-              <Lightbulb className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-[9px] font-black tracking-wider text-emerald-700 uppercase block">Dica do Dia</span>
-              <span className="text-[10px] text-slate-500 font-semibold block">{DICAS_FINANCEIRAS[currentTipIndex].categoria}</span>
-            </div>
-          </div>
-          <button
-            onClick={handleNextTip}
-            className="p-1.5 bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors shadow-sm flex items-center justify-center cursor-pointer group"
-            title="Próxima dica"
-            id="btn_next_tip"
-          >
-            <RefreshCw className="w-3.5 h-3.5 group-hover:rotate-45 transition-transform duration-300" />
-          </button>
-        </div>
-
-        <div className="space-y-1" id="tip_content">
-          <h4 className="text-xs font-black text-slate-900">{DICAS_FINANCEIRAS[currentTipIndex].titulo}</h4>
-          <p className="text-[11px] text-slate-600 leading-relaxed font-medium">{DICAS_FINANCEIRAS[currentTipIndex].texto}</p>
         </div>
       </div>
 

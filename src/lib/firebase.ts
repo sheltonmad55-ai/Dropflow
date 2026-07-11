@@ -25,7 +25,6 @@ import {
   writeBatch,
   getDocFromServer
 } from 'firebase/firestore';
-import { getMessaging, getToken, onMessage, isSupported } from 'firebase/messaging';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -33,41 +32,6 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
-
-// Safe FCM messaging provider
-export async function getFcmToken(): Promise<string | null> {
-  try {
-    const supported = await isSupported();
-    if (!supported) {
-      console.warn('FCM is not supported in this browser environment.');
-      return null;
-    }
-    const messaging = getMessaging(app);
-    // VAPID Public key allows registration with the Web Push protocol
-    const token = await getToken(messaging, {
-      vapidKey: 'BIsS7Icl0K4Iq_1fHshv6rUsc6rby00g4U3h1Nn5KkK3yP7X6Uv6D8U_P3vVjFq9D8h3s6B69_eF2qC-vXp9o7E'
-    });
-    return token;
-  } catch (error) {
-    console.error('Error during FCM token retrieval:', error);
-    return null;
-  }
-}
-
-export async function registerForegroundFcm(onMessageReceived: (payload: any) => void): Promise<() => void> {
-  try {
-    const supported = await isSupported();
-    if (!supported) return () => {};
-    const messaging = getMessaging(app);
-    return onMessage(messaging, (payload) => {
-      console.log('Foreground FCM Message received:', payload);
-      onMessageReceived(payload);
-    });
-  } catch (error) {
-    console.error('Error registering foreground FCM listener:', error);
-    return () => {};
-  }
-}
 
 // Validate Connection to Firestore on boot as per guidelines
 async function testConnection() {
@@ -135,13 +99,13 @@ export async function loginWithGoogle() {
 }
 
 export async function pullAllUserData(userId: string) {
-  let profileDoc = null;
+  let profileDoc;
   try {
     profileDoc = await getDoc(doc(db, 'profiles', userId));
   } catch (error) {
-    console.warn(`Firestore GET profiles/${userId} failed (could be offline or initial setup):`, error);
+    handleFirestoreError(error, OperationType.GET, `profiles/${userId}`);
   }
-  const profile = (profileDoc && profileDoc.exists()) ? profileDoc.data() : null;
+  const profile = profileDoc.exists() ? profileDoc.data() : null;
 
   // Helper to fetch collection
   const fetchCol = async (colName: string) => {
@@ -150,8 +114,7 @@ export async function pullAllUserData(userId: string) {
       const snapshot = await getDocs(q);
       return snapshot.docs.map(d => d.data());
     } catch (error) {
-      console.warn(`Firestore LIST ${colName} failed (could be offline or initial setup):`, error);
-      return [];
+      handleFirestoreError(error, OperationType.LIST, colName);
     }
   };
 

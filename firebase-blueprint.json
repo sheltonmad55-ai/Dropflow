@@ -7,7 +7,6 @@
       "properties": {
         "id": { "type": "string" },
         "nome": { "type": "string" },
-        "email": { "type": "string" },
         "pais": { "type": "string" },
         "moeda": { "type": "string" },
         "plano": { "type": "string" },
