@@ -13,10 +13,6 @@ import {
   Layers, 
   ArrowUpRight, 
   ArrowDownRight, 
-  Wifi, 
-  WifiOff, 
-  RefreshCw, 
-  Clock, 
   Plus, 
   ChevronRight,
   Info
@@ -33,10 +29,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     profile, 
     caixinhas, 
     vendas, 
-    despesas, 
-    isOnline, 
-    syncStatus, 
-    syncWithServer 
+    despesas 
   } = useApp();
 
   const currency = profile?.moeda || 'MT';
@@ -75,36 +68,6 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 3);
 
-  // Render sync banner
-  const renderSyncBanner = () => {
-    switch (syncStatus) {
-      case 'syncing':
-        return (
-          <div className="bg-emerald-50 border border-emerald-100 px-3.5 py-2 rounded-2xl flex items-center justify-between text-xs text-emerald-700 animate-pulse" id="sync_banner">
-            <span className="flex items-center">
-              <RefreshCw className="w-3.5 h-3.5 mr-2 animate-spin" />
-              A sincronizar dados com a nuvem...
-            </span>
-          </div>
-        );
-      case 'pending':
-        return (
-          <div className="bg-amber-50 border border-amber-100 px-3.5 py-2 rounded-2xl flex items-center justify-between text-xs text-amber-700 cursor-pointer" onClick={syncWithServer} id="sync_banner">
-            <span className="flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-2 animate-bounce" />
-              Alterações locais guardadas offline. Toca para sincronizar.
-            </span>
-            <RefreshCw className="w-3 h-3 hover:rotate-180 transition-transform duration-300" />
-          </div>
-        );
-      case 'offline':
-      case 'synced':
-      default:
-        // Hide these statuses to keep the UI clean as requested by the user
-        return null;
-    }
-  };
-
   return (
     <div className="space-y-6" id="dashboard_view">
       
@@ -123,8 +86,6 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             </div>
           )}
         </div>
-
-        {renderSyncBanner()}
       </div>
 
       {/* Hero: Balance Display */}

@@ -145,7 +145,12 @@ export async function pushQueueToFirestore(queue: any[]) {
     const { type, action, data } = item;
     if (!data) continue;
 
-    const colName = type === 'zona' ? 'zonas_entrega' : `${type}s`;
+    let colName = `${type}s`;
+    if (type === 'zona') {
+      colName = 'zonas_entrega';
+    } else if (type === 'fornecedor') {
+      colName = 'fornecedores';
+    }
     const docId = data.id;
     if (!docId) continue;
 
