@@ -25,7 +25,11 @@ import {
   Mail,
   Shield,
   Calendar,
-  Key
+  Key,
+  Bell,
+  Award,
+  Clock,
+  Copy
 } from 'lucide-react';
 
 export default function DefinicoesView() {
@@ -39,13 +43,26 @@ export default function DefinicoesView() {
     despesas,
     produtos,
     fornecedores,
-    zonasEntrega
+    zonasEntrega,
+    fcmSupported,
+    fcmToken,
+    triggerLocalNotification,
+    requestFcmPermission
   } = useApp();
 
   // Profile forms
   const [nome, setNome] = useState(profile?.nome || '');
   const [pais, setPais] = useState(profile?.pais || 'Moçambique');
   const [moeda, setMoeda] = useState(profile?.moeda || 'MT');
+
+  // FCM and alerts form states
+  const [fcmEnabled, setFcmEnabled] = useState<boolean>(profile?.fcm_enabled || false);
+  const [summaryTime, setSummaryTime] = useState<string>(profile?.daily_summary_time || '20:00');
+  const [alertMeta, setAlertMeta] = useState<boolean>(profile?.alert_meta_batida || false);
+  const [metaLucro, setMetaLucro] = useState<string>((profile?.meta_lucro_diario || 1000).toString());
+  const [copySuccess, setCopySuccess] = useState(false);
+  const [savingFcm, setSavingFcm] = useState(false);
+  const [saveFcmSuccess, setSaveFcmSuccess] = useState(false);
 
   // Distribution sliders and inputs
   const [anunciosPercent, setAnunciosPercent] = useState<number>(profile?.anuncios_percent || 50);
@@ -63,6 +80,11 @@ export default function DefinicoesView() {
       setNome(profile.nome || '');
       setPais(profile.pais || 'Moçambique');
       setMoeda(profile.moeda || 'MT');
+
+      setFcmEnabled(profile.fcm_enabled || false);
+      setSummaryTime(profile.daily_summary_time || '20:00');
+      setAlertMeta(profile.alert_meta_batida || false);
+      setMetaLucro((profile.meta_lucro_diario || 1000).toString());
     }
   }, [profile]);
 
@@ -317,6 +339,123 @@ export default function DefinicoesView() {
     } catch (e) {
       alert('Erro no upgrade.');
     }
+  };
+
+  const handleToggleFcm = async () => {
+    if (!fcmEnabled) {
+      const granted = await requestFcmPermission();
+      if (granted) {
+        setFcmEnabled(true);
+      } else {
+        alert('As notificações foram recusadas ou não são suportadas neste navegador/iframe. Podes ativá-las manualmente nas definições do navegador.');
+      }
+    } else {
+      setFcmEnabled(false);
+      await updateProfile({ fcm_enabled: false });
+    }
+  };
+
+  const handleSaveFcmSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingFcm(true);
+    try {
+      await updateProfile({
+        fcm_enabled: fcmEnabled,
+        daily_summary_time: summaryTime,
+        alert_meta_batida: alertMeta,
+        meta_lucro_diario: parseFloat(metaLucro) || 1000
+      });
+      setSaveFcmSuccess(true);
+      setTimeout(() => setSaveFcmSuccess(false), 3000);
+    } catch (err) {
+      alert('Erro ao guardar as definições de notificações.');
+    } finally {
+      setSavingFcm(false);
+    }
+  };
+
+  const handleCopyToken = () => {
+    if (fcmToken) {
+      navigator.clipboard.writeText(fcmToken);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    }
+  };
+
+  const handleTestDailySummary = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todaySales = vendas.filter(v => v.data_venda === todayStr);
+    const todayExpenses = despesas.filter(d => d.data === todayStr);
+    
+    let totalSalesVal = todaySales.reduce((acc, v) => acc + v.valor_recebido, 0);
+    let totalExpensesVal = todayExpenses.reduce((acc, d) => acc + d.valor, 0);
+    
+    let totalSuppliersVal = 0;
+    let totalDeliveryVal = 0;
+    let totalAdsVal = 0;
+    let totalProfitVal = 0;
+    
+    todaySales.forEach(v => {
+      const LucroCx = caixinhas.find(c => c.tipo === 'lucro');
+      const AnunciosCx = caixinhas.find(c => c.tipo === 'anuncios');
+      const FornecedoresCx = caixinhas.find(c => c.tipo === 'fornecedores');
+      const DeliveryCx = caixinhas.find(c => c.tipo === 'delivery');
+      
+      if (FornecedoresCx && v.distribuicao[FornecedoresCx.id]) {
+        totalSuppliersVal += v.distribuicao[FornecedoresCx.id];
+      }
+      if (DeliveryCx && v.distribuicao[DeliveryCx.id]) {
+        totalDeliveryVal += v.distribuicao[DeliveryCx.id];
+      }
+      if (AnunciosCx && v.distribuicao[AnunciosCx.id]) {
+        totalAdsVal += v.distribuicao[AnunciosCx.id];
+      }
+      if (LucroCx && v.distribuicao[LucroCx.id]) {
+        totalProfitVal += v.distribuicao[LucroCx.id];
+      }
+    });
+
+    if (todaySales.length === 0) {
+      totalSalesVal = 24500;
+      totalSuppliersVal = 11000;
+      totalDeliveryVal = 3200;
+      totalAdsVal = 5150;
+      totalProfitVal = 5150;
+      totalExpensesVal = 1200;
+    }
+
+    const netProfit = Math.round((totalProfitVal - totalExpensesVal) * 100) / 100;
+
+    triggerLocalNotification(
+      'Resumo Financeiro Diário 📊',
+      `O teu resumo automático das ${summaryTime} está pronto! Faturação bruta hoje: ${totalSalesVal} ${profile?.moeda || 'MT'}. Clica para ver o relatório completo.`,
+      'summary',
+      {
+        vendasTotal: totalSalesVal,
+        fornecedoresTotal: totalSuppliersVal,
+        deliveryTotal: totalDeliveryVal,
+        adsTotal: totalAdsVal,
+        despesasTotal: totalExpensesVal,
+        lucroLiquido: netProfit
+      }
+    );
+  };
+
+  const handleTestGoalAlert = () => {
+    const target = parseFloat(metaLucro) || 1000;
+    const mockRealProfit = Math.round(target * 1.34 * 10) / 10;
+    const percentCrossed = Math.round(((mockRealProfit - target) / target) * 100);
+
+    triggerLocalNotification(
+      'Parabéns! Meta de Lucro Superada! 🏆',
+      `Incrível! A tua meta diária de ${target} ${profile?.moeda || 'MT'} foi superada hoje. Lucro líquido estimado hoje: ${mockRealProfit} ${profile?.moeda || 'MT'}!`,
+      'goal',
+      {
+        meta: target,
+        lucroReal: mockRealProfit,
+        percent: percentCrossed
+      }
+    );
   };
 
   // Formatting utility
@@ -655,6 +794,159 @@ export default function DefinicoesView() {
               <span className="text-[9px] text-slate-400 block">Todas as transações combinadas</span>
             </div>
           </button>
+        </div>
+      </div>
+
+      {/* 2.5 FCM Notifications & Alerting Management Card */}
+      <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_fcm_panel">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-xs text-slate-900 flex items-center font-display">
+            <Bell className="w-4 h-4 mr-1.5 text-rose-500 animate-pulse" /> Notificações FCM e Alertas
+          </h3>
+          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${fcmSupported ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
+            {fcmSupported ? 'FCM Ativo' : 'Simulador'}
+          </span>
+        </div>
+
+        <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+          Configura os alertas de push automatizados do Firebase para receberes relatórios de lucros diários e comemorações de metas de dropshipping ultrapassadas.
+        </p>
+
+        {/* Permission Request State Bar */}
+        <div className="p-3 bg-slate-50 rounded-2xl flex items-center justify-between border border-slate-100">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold text-slate-700 block">Autorizar Notificações Push</span>
+            <span className="text-[9px] text-slate-400 block">Permite receber alertas de fundo no dispositivo</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleFcm}
+            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all ${
+              fcmEnabled 
+                ? 'bg-rose-500 hover:bg-rose-600 text-white shadow-sm' 
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+            }`}
+          >
+            {fcmEnabled ? 'Desativar' : 'Ativar Alertas'}
+          </button>
+        </div>
+
+        {/* If FCM is enabled and a token is fetched, display it with a copy option */}
+        {fcmEnabled && fcmToken && (
+          <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1.5">
+            <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">ID do Token de Notificação (FCM)</span>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                readOnly
+                value={fcmToken}
+                className="w-full bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[9px] px-2 py-1 rounded-lg focus:outline-none focus:ring-0"
+              />
+              <button
+                type="button"
+                onClick={handleCopyToken}
+                className="p-1.5 bg-slate-900 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 border border-slate-800 transition-colors"
+                title="Copiar Token"
+              >
+                {copySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveFcmSettings} className="space-y-4 pt-1" id="fcm_preferences_form">
+          <div className="grid grid-cols-2 gap-3.5" id="fcm_inputs_grid">
+            {/* Daily summary hour */}
+            <div className="bg-slate-50/50 p-3 rounded-2xl border border-slate-200/50 space-y-1.5" id="fcm_summary_hour_box">
+              <div className="flex items-center space-x-1.5">
+                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-[10px] font-black text-slate-600">Horário Resumo</span>
+              </div>
+              <input
+                type="time"
+                required
+                value={summaryTime}
+                onChange={(e) => setSummaryTime(e.target.value)}
+                className="w-full bg-white border border-slate-200/60 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none"
+              />
+            </div>
+
+            {/* Daily profit target input */}
+            <div className="bg-slate-50/50 p-3 rounded-2xl border border-slate-200/50 space-y-1.5" id="fcm_profit_target_box">
+              <div className="flex items-center space-x-1.5">
+                <Coins className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-black text-slate-600">Meta Lucro ({profile?.moeda || 'MT'})</span>
+              </div>
+              <input
+                type="number"
+                min="1"
+                required
+                value={metaLucro}
+                onChange={(e) => setMetaLucro(e.target.value)}
+                className="w-full bg-white border border-slate-200/60 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Goal alert checkbox */}
+          <label className="flex items-center space-x-3 p-3 bg-slate-50/50 hover:bg-slate-50 rounded-2xl border border-slate-200/30 transition-colors cursor-pointer" id="label_alert_meta_batida">
+            <input
+              type="checkbox"
+              checked={alertMeta}
+              onChange={(e) => setAlertMeta(e.target.checked)}
+              className="rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 w-4 h-4"
+            />
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-bold text-slate-700 block">Notificar sobre Metas Batidas</span>
+              <span className="text-[9px] text-slate-400 block">Comemorar com animação se ultrapassar o lucro ideal</span>
+            </div>
+          </label>
+
+          {saveFcmSuccess && (
+            <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl text-[10px] text-emerald-700 font-semibold flex items-center space-x-1.5" id="fcm_save_success_alert">
+              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Preferências de Notificações guardadas com sucesso!</span>
+            </div>
+          )}
+
+          <button
+            id="btn_save_fcm_settings"
+            type="submit"
+            disabled={savingFcm}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl text-xs transition-colors border border-slate-900 cursor-pointer shadow-sm"
+          >
+            {savingFcm ? 'A guardar...' : 'Guardar Preferências'}
+          </button>
+        </form>
+
+        {/* Simulation / Triggering Block */}
+        <div className="border-t border-slate-100 pt-4 space-y-2.5" id="fcm_simulation_block">
+          <div className="flex items-center space-x-1.5 text-slate-700">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <h4 className="text-[10px] font-extrabold uppercase tracking-wide">Testar Simulação Push</h4>
+          </div>
+          <p className="text-[9px] text-slate-400">
+            Força o envio imediato das mensagens de push do dropshipping para testar o comportamento do aplicativo.
+          </p>
+
+          <div className="grid grid-cols-2 gap-2.5" id="fcm_sim_buttons_grid">
+            <button
+              type="button"
+              onClick={handleTestDailySummary}
+              className="py-2.5 px-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 rounded-xl text-[10px] font-bold transition-all border border-slate-200/50 hover:border-indigo-100 flex items-center justify-center space-x-1 cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Simular Relatório</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleTestGoalAlert}
+              className="py-2.5 px-3 bg-slate-50 hover:bg-amber-50 hover:text-amber-600 text-slate-700 rounded-xl text-[10px] font-bold transition-all border border-slate-200/50 hover:border-amber-100 flex items-center justify-center space-x-1 cursor-pointer"
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>Simular Meta</span>
+            </button>
+          </div>
         </div>
       </div>
 

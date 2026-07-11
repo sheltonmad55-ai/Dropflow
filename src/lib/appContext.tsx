@@ -10,7 +10,9 @@ import {
   auth, 
   loginWithGoogle, 
   pullAllUserData, 
-  pushQueueToFirestore 
+  pushQueueToFirestore,
+  getFcmToken,
+  registerForegroundFcm
 } from './firebase.ts';
 import { 
   signInWithEmailAndPassword, 
@@ -59,6 +61,14 @@ interface AppContextType {
   addCaixinha: (nome: string, icone: string, cor: string, percentual?: number) => Promise<void>;
   editCaixinha: (id: string, updates: Partial<Caixinha>) => Promise<void>;
   deleteCaixinha: (id: string) => Promise<void>;
+
+  // FCM / Push Notifications
+  fcmSupported: boolean;
+  fcmToken: string | null;
+  activeAlert: { title: string; body: string; type: 'summary' | 'goal'; data?: any } | null;
+  triggerLocalNotification: (title: string, body: string, type: 'summary' | 'goal', data?: any) => void;
+  clearActiveAlert: () => void;
+  requestFcmPermission: () => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -83,6 +93,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'pending' | 'syncing' | 'offline'>(
     navigator.onLine ? 'synced' : 'offline'
   );
+
+  // FCM / Notifications state
+  const [fcmSupported, setFcmSupported] = useState<boolean>(false);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [activeAlert, setActiveAlert] = useState<{ title: string; body: string; type: 'summary' | 'goal'; data?: any } | null>(null);
 
   // Listen to network status
   useEffect(() => {
@@ -136,6 +151,114 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return () => unsubscribe();
   }, []);
+
+  // Check FCM Support and Load Token if available on startup
+  useEffect(() => {
+    async function initFcm() {
+      if (isAuthenticated && profile) {
+        try {
+          const tokenVal = await getFcmToken();
+          if (tokenVal) {
+            setFcmToken(tokenVal);
+            setFcmSupported(true);
+          }
+        } catch (e) {
+          console.warn('FCM initial check bypassed or unsupported');
+        }
+      }
+    }
+    initFcm();
+  }, [isAuthenticated]);
+
+  // Handle Foreground FCM listener
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    
+    if (isAuthenticated && profile) {
+      registerForegroundFcm((payload) => {
+        console.log('FCM Foreground payload received:', payload);
+        const title = payload.notification?.title || 'Notificação Dropflow';
+        const body = payload.notification?.body || 'Mensagem do sistema.';
+        triggerLocalNotification(title, body, 'summary', payload.data);
+      }).then(unsub => {
+        unsubscribe = unsub;
+      });
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isAuthenticated, profile]);
+
+  function triggerLocalNotification(title: string, body: string, type: 'summary' | 'goal', data?: any) {
+    setActiveAlert({ title, body, type, data });
+    
+    // Play double-chime synth sound
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+      gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+      
+      setTimeout(() => {
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        setTimeout(() => osc.stop(), 350);
+      }, 150);
+    } catch (e) {
+      console.log('Audio preview bypassed');
+    }
+
+    // Standard HTML5 Notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, { body });
+      } catch (e) {
+        console.log('HTML5 notification blocked or failed in iframe');
+      }
+    }
+  }
+
+  function clearActiveAlert() {
+    setActiveAlert(null);
+  }
+
+  async function requestFcmPermission(): Promise<boolean> {
+    try {
+      if (!('Notification' in window)) {
+        console.warn('Browser does not support notifications.');
+        return false;
+      }
+      
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const token = await getFcmToken();
+        if (token && profile) {
+          setFcmToken(token);
+          setFcmSupported(true);
+          await updateProfile({ fcm_token: token, fcm_enabled: true });
+          return true;
+        } else {
+          // If token registration fails but permission was granted, allow simulated notifications
+          setFcmSupported(true);
+          await updateProfile({ fcm_enabled: true });
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      return false;
+    }
+  }
 
   // Whenever user becomes authenticated, load local storage & database
   useEffect(() => {
@@ -926,7 +1049,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       addCaixinha,
       editCaixinha,
-      deleteCaixinha
+      deleteCaixinha,
+
+      fcmSupported,
+      fcmToken,
+      activeAlert,
+      triggerLocalNotification,
+      clearActiveAlert,
+      requestFcmPermission
     }}>
       {children}
     </AppContext.Provider>

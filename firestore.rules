@@ -32,7 +32,12 @@ service cloud.firestore {
         && (!('trial_expires_at' in data) || data.trial_expires_at is string)
         && (!('criado_em' in data) || data.criado_em is string)
         && (!('anuncios_percent' in data) || data.anuncios_percent is number)
-        && (!('lucro_percent' in data) || data.lucro_percent is number);
+        && (!('lucro_percent' in data) || data.lucro_percent is number)
+        && (!('fcm_token' in data) || data.fcm_token is string)
+        && (!('fcm_enabled' in data) || data.fcm_enabled is bool)
+        && (!('daily_summary_time' in data) || data.daily_summary_time is string)
+        && (!('alert_meta_batida' in data) || data.alert_meta_batida is bool)
+        && (!('meta_lucro_diario' in data) || data.meta_lucro_diario is number);
     }
 
     // Caixinhas validation helper
