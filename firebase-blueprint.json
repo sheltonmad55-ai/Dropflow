@@ -1,0 +1,149 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile with configuration parameters.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "pais": { "type": "string" },
+        "moeda": { "type": "string" },
+        "plano": { "type": "string" },
+        "trial_expires_at": { "type": "string" },
+        "criado_em": { "type": "string" },
+        "anuncios_percent": { "type": "integer" },
+        "lucro_percent": { "type": "integer" }
+      },
+      "required": ["id", "nome", "pais", "moeda", "plano", "anuncios_percent", "lucro_percent"]
+    },
+    "Caixinha": {
+      "title": "Caixinha",
+      "description": "Financial category pocket.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome": { "type": "string" },
+        "icone": { "type": "string" },
+        "cor": { "type": "string" },
+        "tipo": { "type": "string" },
+        "saldo_atual": { "type": "number" },
+        "criado_em": { "type": "string" },
+        "percentual_padrao": { "type": "integer" }
+      },
+      "required": ["id", "user_id", "nome", "icone", "cor", "tipo", "saldo_atual", "criado_em"]
+    },
+    "Venda": {
+      "title": "Venda",
+      "description": "Sales record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "valor_recebido": { "type": "number" },
+        "produto_id": { "type": "string" },
+        "fornecedor_id": { "type": "string" },
+        "zona_entrega_id": { "type": "string" },
+        "forma_pagamento": { "type": "string" },
+        "observacao": { "type": "string" },
+        "data_venda": { "type": "string" },
+        "distribuicao": { "type": "object" },
+        "custom_anuncios_percent": { "type": "integer" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "valor_recebido", "produto_id", "fornecedor_id", "zona_entrega_id", "forma_pagamento", "data_venda", "distribuicao", "criado_em"]
+    },
+    "Despesa": {
+      "title": "Despesa",
+      "description": "Expense record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "valor": { "type": "number" },
+        "categoria": { "type": "string" },
+        "caixinha_id": { "type": "string" },
+        "descricao": { "type": "string" },
+        "data": { "type": "string" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "valor", "categoria", "caixinha_id", "descricao", "data", "criado_em"]
+    },
+    "Produto": {
+      "title": "Produto",
+      "description": "Product catalog item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome": { "type": "string" },
+        "categoria": { "type": "string" },
+        "fornecedor_id": { "type": "string" },
+        "preco_compra": { "type": "number" },
+        "preco_venda": { "type": "number" },
+        "margem": { "type": "number" },
+        "quantidade": { "type": "integer" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "nome", "categoria", "fornecedor_id", "preco_compra", "preco_venda", "margem", "quantidade", "criado_em"]
+    },
+    "Fornecedor": {
+      "title": "Fornecedor",
+      "description": "Supplier information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome": { "type": "string" },
+        "telefone": { "type": "string" },
+        "valor_pendente": { "type": "number" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "nome", "telefone", "valor_pendente", "criado_em"]
+    },
+    "ZonaEntrega": {
+      "title": "ZonaEntrega",
+      "description": "Delivery zone definition.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome_zona": { "type": "string" },
+        "custo": { "type": "number" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "nome_zona", "custo", "criado_em"]
+    }
+  },
+  "firestore": {
+    "/profiles/{profileId}": {
+      "schema": "Profile",
+      "description": "Users profiles"
+    },
+    "/caixinhas/{caixinhaId}": {
+      "schema": "Caixinha",
+      "description": "Pockets/Caixinhas for each user"
+    },
+    "/vendas/{vendaId}": {
+      "schema": "Venda",
+      "description": "Sales records"
+    },
+    "/despesas/{despesaId}": {
+      "schema": "Despesa",
+      "description": "Expenses records"
+    },
+    "/produtos/{produtoId}": {
+      "schema": "Produto",
+      "description": "Product definitions"
+    },
+    "/fornecedores/{fornecedorId}": {
+      "schema": "Fornecedor",
+      "description": "Suppliers database"
+    },
+    "/zonas_entrega/{zonaId}": {
+      "schema": "ZonaEntrega",
+      "description": "Delivery zones"
+    }
+  }
+}

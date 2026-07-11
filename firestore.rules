@@ -1,0 +1,225 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (Pillar 1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Check if ID is valid to prevent ID Poisoning (Pillar 3)
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Helper to check if user is authenticated (Pillar 4)
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper to check ownership
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    // Validation Helpers
+    function isValidProfile(data) {
+      return data.id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0 && data.nome.size() <= 200))
+        && (!('pais' in data) || (data.pais is string && data.pais.size() > 0))
+        && (!('moeda' in data) || (data.moeda is string && data.moeda.size() > 0))
+        && (!('plano' in data) || data.plano is string)
+        && (!('trial_expires_at' in data) || data.trial_expires_at is string)
+        && (!('criado_em' in data) || data.criado_em is string)
+        && (!('anuncios_percent' in data) || data.anuncios_percent is number)
+        && (!('lucro_percent' in data) || data.lucro_percent is number);
+    }
+
+    // Caixinhas validation helper
+    function isValidCaixinha(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
+        && (!('icone' in data) || data.icone is string)
+        && (!('cor' in data) || data.cor is string)
+        && (!('tipo' in data) || data.tipo is string)
+        && (!('saldo_atual' in data) || data.saldo_atual is number)
+        && (!('criado_em' in data) || data.criado_em is string)
+        && (!('percentual_padrao' in data) || data.percentual_padrao is number);
+    }
+
+    // Vendas validation helper
+    function isValidVenda(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('valor_recebido' in data) || data.valor_recebido is number)
+        && (!('produto_id' in data) || data.produto_id is string)
+        && (!('fornecedor_id' in data) || data.fornecedor_id is string)
+        && (!('zona_entrega_id' in data) || data.zona_entrega_id is string)
+        && (!('forma_pagamento' in data) || data.forma_pagamento is string)
+        && (!('data_venda' in data) || data.data_venda is string)
+        && (!('distribuicao' in data) || data.distribuicao is map)
+        && (!('criado_em' in data) || data.criado_em is string)
+        && (!('observacao' in data) || data.observacao is string)
+        && (!('custom_anuncios_percent' in data) || data.custom_anuncios_percent is number)
+        && (!('sync_status' in data) || data.sync_status is string);
+    }
+
+    // Despesas validation helper
+    function isValidDespesa(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('valor' in data) || data.valor is number)
+        && (!('categoria' in data) || data.categoria is string)
+        && (!('caixinha_id' in data) || data.caixinha_id is string)
+        && (!('descricao' in data) || data.descricao is string)
+        && (!('data' in data) || data.data is string)
+        && (!('criado_em' in data) || data.criado_em is string)
+        && (!('sync_status' in data) || data.sync_status is string);
+    }
+
+    // Produtos validation helper
+    function isValidProduto(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
+        && (!('categoria' in data) || data.categoria is string)
+        && (!('fornecedor_id' in data) || data.fornecedor_id is string)
+        && (!('preco_compra' in data) || data.preco_compra is number)
+        && (!('preco_venda' in data) || data.preco_venda is number)
+        && (!('margem' in data) || data.margem is number)
+        && (!('quantidade' in data) || data.quantidade is number)
+        && (!('criado_em' in data) || data.criado_em is string);
+    }
+
+    // Fornecedores validation helper
+    function isValidFornecedor(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
+        && (!('telefone' in data) || data.telefone is string)
+        && (!('valor_pendente' in data) || data.valor_pendente is number)
+        && (!('criado_em' in data) || data.criado_em is string);
+    }
+
+    // Zonas de entrega validation helper
+    function isValidZona(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome_zona' in data) || (data.nome_zona is string && data.nome_zona.size() > 0))
+        && (!('custo' in data) || data.custo is number)
+        && (!('criado_em' in data) || data.criado_em is string);
+    }
+
+    // Test collection for boot validation
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Profiles Rules
+    match /profiles/{profileId} {
+      allow get: if isOwner(profileId) && isValidId(profileId);
+      allow list: if isOwner(profileId);
+      allow create, update: if isOwner(profileId) 
+        && isValidId(profileId)
+        && isValidProfile(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Caixinhas Rules
+    match /caixinhas/{caixinhaId} {
+      allow get: if isAuth() && isValidId(caixinhaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(caixinhaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidCaixinha(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(caixinhaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidCaixinha(request.resource.data);
+      allow delete: if isAuth() && isValidId(caixinhaId) && isOwner(resource.data.user_id);
+    }
+
+    // Vendas Rules
+    match /vendas/{vendaId} {
+      allow get: if isAuth() && isValidId(vendaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(vendaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidVenda(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(vendaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidVenda(request.resource.data);
+      allow delete: if isAuth() && isValidId(vendaId) && isOwner(resource.data.user_id);
+    }
+
+    // Despesas Rules
+    match /despesas/{despesaId} {
+      allow get: if isAuth() && isValidId(despesaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(despesaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidDespesa(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(despesaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidDespesa(request.resource.data);
+      allow delete: if isAuth() && isValidId(despesaId) && isOwner(resource.data.user_id);
+    }
+
+    // Produtos Rules
+    match /produtos/{produtoId} {
+      allow get: if isAuth() && isValidId(produtoId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(produtoId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidProduto(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(produtoId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidProduto(request.resource.data);
+      allow delete: if isAuth() && isValidId(produtoId) && isOwner(resource.data.user_id);
+    }
+
+    // Fornecedores Rules
+    match /fornecedores/{fornecedorId} {
+      allow get: if isAuth() && isValidId(fornecedorId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(fornecedorId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidFornecedor(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(fornecedorId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidFornecedor(request.resource.data);
+      allow delete: if isAuth() && isValidId(fornecedorId) && isOwner(resource.data.user_id);
+    }
+
+    // Zonas de Entrega Rules
+    match /zonas_entrega/{zonaId} {
+      allow get: if isAuth() && isValidId(zonaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(zonaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidZona(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(zonaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidZona(request.resource.data);
+      allow delete: if isAuth() && isValidId(zonaId) && isOwner(resource.data.user_id);
+    }
+  }
+}
