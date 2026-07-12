@@ -25,7 +25,9 @@ import {
   Mail,
   Shield,
   Calendar,
-  Key
+  Key,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export default function DefinicoesView() {
@@ -46,6 +48,21 @@ export default function DefinicoesView() {
   const [nome, setNome] = useState(profile?.nome || '');
   const [pais, setPais] = useState(profile?.pais || 'Moçambique');
   const [moeda, setMoeda] = useState(profile?.moeda || 'MT');
+
+  // Appearance (Theme state)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('dropflow_theme') as 'light' | 'dark') || 'light';
+  });
+
+  const handleThemeChange = (newTheme: 'light' | 'dark') => {
+    setTheme(newTheme);
+    localStorage.setItem('dropflow_theme', newTheme);
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   // Distribution sliders and inputs
   const [anunciosPercent, setAnunciosPercent] = useState<number>(profile?.anuncios_percent || 50);
@@ -341,48 +358,48 @@ export default function DefinicoesView() {
       
       {/* Title */}
       <div>
-        <h2 className="text-xl font-extrabold text-slate-900 font-display">Configurações e Conta</h2>
-        <p className="text-[10px] text-slate-500">Gere as tuas preferências, exporta dados e vê a tua conta</p>
+        <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 font-display">Configurações e Conta</h2>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400">Gere as tuas preferências, exporta dados e vê a tua conta</p>
       </div>
 
       {/* 0. Ver Conta (Account Information Panel) */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_ver_conta_panel">
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_ver_conta_panel">
         <div className="flex items-center justify-between" id="account_header">
-          <h3 className="font-bold text-xs text-slate-900 flex items-center font-display">
-            <User className="w-4 h-4 mr-1.5 text-indigo-600" /> A Minha Conta
+          <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+            <User className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> A Minha Conta
           </h3>
           <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
             profile?.plano === 'pro' 
-              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
-              : 'bg-purple-50 text-purple-600 border border-purple-200'
+              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50' 
+              : 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-800/50'
           }`}>
             Plano: {profile?.plano === 'pro' ? 'DropFlow Pro' : 'Gratuito (Teste)'}
           </span>
         </div>
 
-        <div className="bg-slate-50 rounded-2xl p-4 space-y-3" id="account_details_box">
+        <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl p-4 space-y-3" id="account_details_box">
           <div className="flex items-center space-x-3" id="account_user_intro">
-            <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-extrabold text-sm" id="user_avatar">
+            <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-extrabold text-sm" id="user_avatar">
               {profile?.nome ? profile.nome.substring(0, 2).toUpperCase() : 'DF'}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-800">{profile?.nome || 'Usuário DropFlow'}</p>
-              <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                <Mail className="w-3 h-3 text-slate-400" /> {currentUser?.email || 'Acesso Local / Convidado'}
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{profile?.nome || 'Usuário DropFlow'}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Mail className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {currentUser?.email || 'Acesso Local / Convidado'}
               </p>
             </div>
           </div>
 
-          <div className="border-t border-slate-200/50 pt-3 grid grid-cols-2 gap-3 text-[10px]" id="account_meta_info">
+          <div className="border-t border-slate-200/50 dark:border-slate-800/50 pt-3 grid grid-cols-2 gap-3 text-[10px]" id="account_meta_info">
             <div className="space-y-1" id="account_meta_id">
-              <span className="text-slate-400 font-semibold uppercase tracking-wider block">ID de Conta</span>
-              <span className="text-slate-700 font-mono block truncate" title={currentUser?.uid}>
+              <span className="text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider block">ID de Conta</span>
+              <span className="text-slate-700 dark:text-slate-300 font-mono block truncate" title={currentUser?.uid}>
                 {currentUser?.uid || 'offline_dev'}
               </span>
             </div>
             <div className="space-y-1" id="account_meta_created">
-              <span className="text-slate-400 font-semibold uppercase tracking-wider block">Membro Desde</span>
-              <span className="text-slate-700 font-bold block">
+              <span className="text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider block">Membro Desde</span>
+              <span className="text-slate-700 dark:text-slate-300 font-bold block">
                 {formatIsoDate(profile?.criado_em)}
               </span>
             </div>
@@ -391,30 +408,30 @@ export default function DefinicoesView() {
       </div>
 
       {/* 1. Profile Panel */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_perfil_panel">
-        <h3 className="font-bold text-xs text-slate-900 flex items-center font-display">
-          <Settings className="w-4 h-4 mr-1.5 text-emerald-600" /> Perfil Comercial
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_perfil_panel">
+        <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+          <Settings className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" /> Perfil Comercial
         </h3>
 
         <form onSubmit={handleSaveProfile} className="space-y-3.5" id="profile_form">
           <div className="space-y-1" id="field_def_nome">
-            <label className="text-xs text-slate-500 font-medium">Nome Comercial / Loja</label>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Nome Comercial / Loja</label>
             <input
               type="text"
               required
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:focus:ring-emerald-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3" id="field_def_grid">
             <div className="space-y-1" id="field_def_pais">
-              <label className="text-xs text-slate-500 font-medium">País</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">País</label>
               <select
                 value={pais}
                 onChange={(e) => setPais(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-2.5 py-2 text-xs text-slate-900 focus:outline-none"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
               >
                 <option value="Moçambique">Moçambique</option>
                 <option value="África do Sul">África do Sul</option>
@@ -424,11 +441,11 @@ export default function DefinicoesView() {
               </select>
             </div>
             <div className="space-y-1" id="field_def_moeda">
-              <label className="text-xs text-slate-500 font-medium">Moeda Padrão</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Moeda Padrão</label>
               <select
                 value={moeda}
                 onChange={(e) => setMoeda(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-2.5 py-2 text-xs text-slate-900 focus:outline-none"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
               >
                 <option value="MT">MT (Meticais)</option>
                 <option value="ZAR">ZAR (Rands)</option>
@@ -442,11 +459,59 @@ export default function DefinicoesView() {
             id="btn_save_profile"
             type="submit"
             disabled={savingProfile}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2.5 rounded-xl text-xs transition-colors border border-slate-900 shadow-sm cursor-pointer"
+            className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 text-white font-semibold py-2.5 rounded-xl text-xs transition-colors border border-slate-900 dark:border-slate-100 shadow-sm cursor-pointer"
           >
             {savingProfile ? 'A guardar...' : 'Guardar Alterações do Perfil'}
           </button>
         </form>
+      </div>
+
+      {/* 1.5. Appearance/Aparência (Dark Mode) Panel */}
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_aparencia_panel">
+        <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+          <Moon className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> Tema e Aparência
+        </h3>
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+          Escolha a sua preferência visual. O modo escuro é ideal para utilizadores avançados que trabalham até tarde, reduzindo o cansaço visual e otimizando o consumo de bateria.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 pt-1" id="theme_selection_grid">
+          {/* Light Theme Option */}
+          <button
+            id="btn_theme_light"
+            type="button"
+            onClick={() => handleThemeChange('light')}
+            className={`flex items-center justify-between p-3.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+              theme === 'light'
+                ? 'bg-emerald-50/70 border-emerald-500 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-500/80 dark:text-emerald-400'
+                : 'bg-slate-50/50 border-slate-200/60 text-slate-600 hover:text-slate-900 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Sun className={`w-4 h-4 ${theme === 'light' ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Modo Claro</span>
+            </div>
+            {theme === 'light' && <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />}
+          </button>
+
+          {/* Dark Theme Option */}
+          <button
+            id="btn_theme_dark"
+            type="button"
+            onClick={() => handleThemeChange('dark')}
+            className={`flex items-center justify-between p-3.5 rounded-2xl border text-xs font-bold transition-all cursor-pointer ${
+              theme === 'dark'
+                ? 'bg-emerald-50/70 border-emerald-500 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-500/80 dark:text-emerald-400'
+                : 'bg-slate-50/50 border-slate-200/60 text-slate-600 hover:text-slate-900 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+            }`}
+          >
+            <div className="flex items-center space-x-2.5">
+              <Moon className={`w-4 h-4 ${theme === 'dark' ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span>Modo Escuro</span>
+            </div>
+            {theme === 'dark' && <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />}
+          </button>
+        </div>
       </div>
 
       {/* 2. Remainder Auto-Distribution Rules */}
