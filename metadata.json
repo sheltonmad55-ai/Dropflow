@@ -1,5 +1,5 @@
 {
-  "name": "DropFlow",
+  "name": "DroopFlow",
   "description": "Gestor financeiro inteligente e offline-first para empreendedores de dropshipping.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

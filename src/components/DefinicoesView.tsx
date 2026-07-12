@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../lib/appContext.tsx';
 import { auth } from '../lib/firebase.ts';
+import { playCashRegister, playNotificationPing } from '../lib/audio.ts';
 import { 
   Settings, 
   User, 
@@ -27,7 +28,10 @@ import {
   Calendar,
   Key,
   Sun,
-  Moon
+  Moon,
+  Volume2,
+  VolumeX,
+  Bell
 } from 'lucide-react';
 
 export default function DefinicoesView() {
@@ -85,6 +89,37 @@ export default function DefinicoesView() {
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [showUpgradeSuccess, setShowUpgradeSuccess] = useState(false);
+
+  // Permission status state
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPermissionStatus(Notification.permission);
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert('As notificações não são suportadas neste navegador.');
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setPermissionStatus(permission);
+      if (permission === 'granted') {
+        try {
+          new Notification('DroopFlow', {
+            body: 'Notificações ativadas com sucesso! 🎉',
+          });
+        } catch (nErr) {
+          console.warn("Could not fire confirmation notification inside iframe sandbox:", nErr);
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao solicitar permissões:", err);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,7 +185,7 @@ export default function DefinicoesView() {
         usuario: {
           uid: auth.currentUser?.uid || 'offline',
           email: auth.currentUser?.email || 'N/A',
-          nome_comercial: profile?.nome || 'DropFlow User',
+          nome_comercial: profile?.nome || 'DroopFlow User',
         },
         profile,
         caixinhas,
@@ -169,7 +204,7 @@ export default function DefinicoesView() {
       downloadAnchor.setAttribute("href", jsonString);
       downloadAnchor.setAttribute(
         "download", 
-        `dropflow_backup_${new Date().toISOString().split('T')[0]}.json`
+        `droopflow_backup_${new Date().toISOString().split('T')[0]}.json`
       );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
@@ -209,7 +244,7 @@ export default function DefinicoesView() {
       downloadAnchor.setAttribute("href", encodedUri);
       downloadAnchor.setAttribute(
         "download", 
-        `dropflow_vendas_${new Date().toISOString().split('T')[0]}.csv`
+        `droopflow_vendas_${new Date().toISOString().split('T')[0]}.csv`
       );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
@@ -243,7 +278,7 @@ export default function DefinicoesView() {
       downloadAnchor.setAttribute("href", encodedUri);
       downloadAnchor.setAttribute(
         "download", 
-        `dropflow_despesas_${new Date().toISOString().split('T')[0]}.csv`
+        `droopflow_despesas_${new Date().toISOString().split('T')[0]}.csv`
       );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
@@ -311,7 +346,7 @@ export default function DefinicoesView() {
       downloadAnchor.setAttribute("href", encodedUri);
       downloadAnchor.setAttribute(
         "download", 
-        `dropflow_todas_transacoes_${new Date().toISOString().split('T')[0]}.csv`
+        `droopflow_todas_transacoes_${new Date().toISOString().split('T')[0]}.csv`
       );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
@@ -353,6 +388,10 @@ export default function DefinicoesView() {
 
   const currentUser = auth.currentUser;
 
+  const sonsGlobais = profile?.ativarSons !== false;
+  const somMetasAtivo = profile?.somMetas !== false;
+  const somRelatoriosAtivo = profile?.somRelatorios !== false;
+
   return (
     <div className="space-y-6 animate-fade-in pb-12" id="definicoes_view">
       
@@ -373,7 +412,7 @@ export default function DefinicoesView() {
               ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50' 
               : 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-800/50'
           }`}>
-            Plano: {profile?.plano === 'pro' ? 'DropFlow Pro' : 'Gratuito (Teste)'}
+            Plano: {profile?.plano === 'pro' ? 'DroopFlow Pro' : 'Gratuito (Teste)'}
           </span>
         </div>
 
@@ -383,7 +422,7 @@ export default function DefinicoesView() {
               {profile?.nome ? profile.nome.substring(0, 2).toUpperCase() : 'DF'}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{profile?.nome || 'Usuário DropFlow'}</p>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{profile?.nome || 'Usuário DroopFlow'}</p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Mail className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {currentUser?.email || 'Acesso Local / Convidado'}
               </p>
@@ -514,27 +553,174 @@ export default function DefinicoesView() {
         </div>
       </div>
 
-      {/* 2. Remainder Auto-Distribution Rules */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_distribuicao_panel">
-        <div className="flex items-center justify-between">
-          <h3 className="font-bold text-xs text-slate-900 flex items-center font-display">
-            <Percent className="w-4 h-4 mr-1.5 text-sky-600" /> Distribuição de Margem Líquida
+      {/* Banner de Permissões (Permissions Banner) */}
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="banner_permissoes_alertas">
+        <div className="flex items-center justify-between" id="permissoes_header">
+          <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+            <Shield className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> Permissões de Notificação e Som
           </h3>
-          <span className="text-[10px] bg-slate-50 border border-slate-200/60 text-slate-500 px-2.5 py-0.5 rounded-full font-bold">
+          <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
+            permissionStatus === 'granted'
+              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50'
+              : permissionStatus === 'denied'
+                ? 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800/50'
+                : 'bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800/50'
+          }`}>
+            {permissionStatus === 'granted' ? 'Autorizado' : permissionStatus === 'denied' ? 'Bloqueado' : 'Pendente'}
+          </span>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4" id="permissoes_banner_content">
+          <div className="space-y-1.5 max-w-xl">
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              {permissionStatus === 'granted' 
+                ? 'Aplicação pronta para disparar alertas! 🎉' 
+                : 'Ative as notificações para receber avisos de metas batidas'}
+            </p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              O sistema de metas do DroopFlow emite alertas visuais no seu ambiente de trabalho e comemorações sonoras em tempo real quando atinge os seus objetivos. Para isso, precisamos que autorize as notificações no navegador.
+            </p>
+          </div>
+
+          {permissionStatus !== 'granted' ? (
+            <button
+              id="btn_request_permission"
+              type="button"
+              onClick={requestNotificationPermission}
+              className="shrink-0 bg-indigo-600 hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white font-extrabold text-[10px] py-2 px-4 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Autorizar Alertas</span>
+            </button>
+          ) : (
+            <div className="shrink-0 flex items-center gap-1.5 text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-3.5 py-2 rounded-xl">
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+              <span>Notificações Prontas</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Sistema Global de Gestão de Som */}
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_som_panel">
+        <div className="flex items-center justify-between" id="som_header">
+          <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+            <Volume2 className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> Sistema de Som e Efeitos
+          </h3>
+          <div className="flex items-center space-x-2">
+            <span className="text-[9px] text-slate-400 font-bold uppercase">Estado Geral</span>
+            <button
+              type="button"
+              onClick={() => updateProfile({ ativarSons: !sonsGlobais })}
+              className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                sonsGlobais ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-slate-200 dark:bg-slate-800'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  sonsGlobais ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+          Personalize as preferências de som para as suas conquistas e relatórios. Ative os efeitos sonoros para as suas metas batidas ou para as notificações de fecho de caixa.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1" id="sound_settings_grid">
+          {/* Card Meta Batida Sound */}
+          <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/50 dark:border-slate-850 p-4 rounded-2xl flex items-center justify-between" id="config_som_metas">
+            <div className="space-y-1 pr-4">
+              <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide block">Comemoração de Metas</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block leading-tight">Efeito sonoro festivo disparado ao atingir qualquer meta de faturamento.</span>
+            </div>
+            
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => playCashRegister(true)}
+                className="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-800 p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                title="Testar som de metas"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateProfile({ somMetas: !somMetasAtivo })}
+                disabled={!sonsGlobais}
+                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  !sonsGlobais ? 'opacity-40 cursor-not-allowed bg-slate-200 dark:bg-slate-800' : somMetasAtivo ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-slate-200 dark:bg-slate-800'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    somMetasAtivo && sonsGlobais ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Card Relatório Sound */}
+          <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/50 dark:border-slate-850 p-4 rounded-2xl flex items-center justify-between" id="config_som_relatorios">
+            <div className="space-y-1 pr-4">
+              <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wide block">Notificação de Relatórios</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block leading-tight">Sinal sonoro curto e discreto emitido na criação e fecho de novos relatórios.</span>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => playNotificationPing(true)}
+                className="bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-800 p-2 rounded-xl transition-all flex items-center justify-center cursor-pointer"
+                title="Testar som de relatórios"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => updateProfile({ somRelatorios: !somRelatoriosAtivo })}
+                disabled={!sonsGlobais}
+                className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  !sonsGlobais ? 'opacity-40 cursor-not-allowed bg-slate-200 dark:bg-slate-800' : somRelatoriosAtivo ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-slate-200 dark:bg-slate-800'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    somRelatoriosAtivo && sonsGlobais ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Remainder Auto-Distribution Rules */}
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_distribuicao_panel">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+            <Percent className="w-4 h-4 mr-1.5 text-sky-600 dark:text-sky-400" /> Distribuição de Margem Líquida
+          </h3>
+          <span className="text-[10px] bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 text-slate-500 dark:text-slate-400 px-2.5 py-0.5 rounded-full font-bold">
             Sobra das Vendas
           </span>
         </div>
 
-        <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
           Edite manualmente as percentagens de distribuição automática para cada caixinha ou use os botões rápidos. O valor de fornecedor e entrega sempre é resgatado antes da divisão.
         </p>
 
         <form onSubmit={handleSaveDistribution} className="space-y-4 pt-1" id="distribution_manual_form">
           <div className="grid grid-cols-2 gap-3.5" id="manual_percent_inputs_grid">
-            <div className="bg-slate-50/50 p-3 rounded-2xl border border-slate-200/50 space-y-1.5" id="input_box_anuncios">
+            <div className="bg-slate-50/50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200/50 dark:border-slate-800/60 space-y-1.5" id="input_box_anuncios">
               <div className="flex items-center space-x-1.5">
-                <Megaphone className="w-3.5 h-3.5 text-sky-500" />
-                <span className="text-[10px] font-black text-slate-600">📢 Anúncios</span>
+                <Megaphone className="w-3.5 h-3.5 text-sky-500 dark:text-sky-400" />
+                <span className="text-[10px] font-black text-slate-600 dark:text-slate-300">📢 Anúncios</span>
               </div>
               <div className="relative flex items-center">
                 <input
@@ -544,16 +730,16 @@ export default function DefinicoesView() {
                   value={anunciosInput}
                   onChange={(e) => setAnunciosInput(e.target.value)}
                   placeholder="0"
-                  className="w-full bg-white border border-slate-200 rounded-xl py-1.5 pl-3 pr-7 text-xs font-bold text-slate-800 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-1.5 pl-3 pr-7 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
                 />
                 <span className="absolute right-3 text-xs font-bold text-slate-400">%</span>
               </div>
             </div>
 
-            <div className="bg-slate-50/50 p-3 rounded-2xl border border-slate-200/50 space-y-1.5" id="input_box_lucro">
+            <div className="bg-slate-50/50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200/50 dark:border-slate-800/60 space-y-1.5" id="input_box_lucro">
               <div className="flex items-center space-x-1.5">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-[10px] font-black text-slate-600">💰 Lucro</span>
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                <span className="text-[10px] font-black text-slate-600 dark:text-slate-300">💰 Lucro</span>
               </div>
               <div className="relative flex items-center">
                 <input
@@ -563,7 +749,7 @@ export default function DefinicoesView() {
                   value={lucroInput}
                   onChange={(e) => setLucroInput(e.target.value)}
                   placeholder="0"
-                  className="w-full bg-white border border-slate-200 rounded-xl py-1.5 pl-3 pr-7 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl py-1.5 pl-3 pr-7 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
                 <span className="absolute right-3 text-xs font-bold text-slate-400">%</span>
               </div>
@@ -579,7 +765,7 @@ export default function DefinicoesView() {
               step="5"
               value={isSumValid ? adsNum : anunciosPercent}
               onChange={(e) => handleSliderChange(parseInt(e.target.value))}
-              className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+              className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-600 dark:accent-emerald-400"
             />
           </div>
 
@@ -588,7 +774,7 @@ export default function DefinicoesView() {
               id="btn_preset_50"
               type="button"
               onClick={() => handlePresetClick(50)}
-              className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${(isSumValid && adsNum === 50) ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-200/50 text-slate-600 hover:text-slate-900'}`}
+              className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${(isSumValid && adsNum === 50) ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100' : 'bg-slate-50 border-slate-200/50 text-slate-600 hover:text-slate-900 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
             >
               50/50
             </button>
@@ -596,7 +782,7 @@ export default function DefinicoesView() {
               id="btn_preset_40"
               type="button"
               onClick={() => handlePresetClick(40)}
-              className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${(isSumValid && adsNum === 40) ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-200/50 text-slate-600 hover:text-slate-900'}`}
+              className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${(isSumValid && adsNum === 40) ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100' : 'bg-slate-50 border-slate-200/50 text-slate-600 hover:text-slate-900 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
             >
               40% Ads / 60% Lucro
             </button>
@@ -604,7 +790,7 @@ export default function DefinicoesView() {
               id="btn_preset_70"
               type="button"
               onClick={() => handlePresetClick(70)}
-              className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${(isSumValid && adsNum === 70) ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 border-slate-200/50 text-slate-600 hover:text-slate-900'}`}
+              className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${(isSumValid && adsNum === 70) ? 'bg-slate-900 text-white border-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:border-slate-100' : 'bg-slate-50 border-slate-200/50 text-slate-600 hover:text-slate-900 dark:bg-slate-950 dark:border-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}
             >
               70% Ads / 30% Lucro
             </button>
@@ -612,8 +798,8 @@ export default function DefinicoesView() {
 
           <div className="pt-1.5 space-y-3" id="validation_section">
             {!isSumValid ? (
-              <div className="bg-rose-50 border border-rose-100 p-3 rounded-2xl flex items-start space-x-2 text-[11px] text-rose-700 font-medium" id="validation_alert_invalid">
-                <AlertCircle className="w-4 h-4 shrink-0 stroke-[2.5] text-rose-600" />
+              <div className="bg-rose-50 border border-rose-100 dark:bg-rose-950/30 dark:border-rose-900/50 p-3 rounded-2xl flex items-start space-x-2 text-[11px] text-rose-700 dark:text-rose-300 font-medium" id="validation_alert_invalid">
+                <AlertCircle className="w-4 h-4 shrink-0 stroke-[2.5] text-rose-600 dark:text-rose-400" />
                 <div className="space-y-1">
                   <p>A soma atual é <strong className="font-extrabold">{sum}%</strong>. Os valores devem totalizar exatamente 100%.</p>
                   <button
@@ -622,14 +808,14 @@ export default function DefinicoesView() {
                       const ads = Math.min(100, Math.max(0, parseInt(anunciosInput) || 0));
                       setLucroInput((100 - ads).toString());
                     }}
-                    className="text-[10px] text-rose-800 font-bold underline hover:no-underline flex items-center"
+                    className="text-[10px] text-rose-800 dark:text-rose-400 font-bold underline hover:no-underline flex items-center"
                   >
                     💡 Equilibrar automaticamente
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="bg-emerald-50/70 border border-emerald-100 p-2.5 rounded-2xl flex items-center space-x-2 text-[10px] text-emerald-700 font-bold" id="validation_alert_valid">
+              <div className="bg-emerald-50/70 border border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/50 p-2.5 rounded-2xl flex items-center space-x-2 text-[10px] text-emerald-700 dark:text-emerald-400 font-bold" id="validation_alert_valid">
                 <Check className="w-3.5 h-3.5 shrink-0 stroke-[2.5]" />
                 <span>Soma perfeita de 100%! Prontos para salvar.</span>
               </div>
@@ -646,7 +832,7 @@ export default function DefinicoesView() {
               id="btn_save_distribution"
               type="submit"
               disabled={!isSumValid || savePercentLoading}
-              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center space-x-2 ${isSumValid ? 'bg-slate-900 hover:bg-slate-800 text-white border-slate-900 shadow-sm cursor-pointer' : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'}`}
+              className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center space-x-2 ${isSumValid ? 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 dark:border-slate-100 text-white border-slate-900 shadow-sm cursor-pointer' : 'bg-slate-100 dark:bg-slate-950 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-850 cursor-not-allowed'}`}
             >
               <span>{savePercentLoading ? 'A guardar...' : 'Guardar Percentagens'}</span>
             </button>
@@ -655,13 +841,13 @@ export default function DefinicoesView() {
       </div>
 
       {/* NEW: Exportar Dados (Backups Section) */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_export_panel">
-        <h3 className="font-bold text-xs text-slate-900 flex items-center font-display">
-          <Database className="w-4 h-4 mr-1.5 text-emerald-600" /> Exportar Dados e Backups
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_export_panel">
+        <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+          <Database className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" /> Exportar Dados e Backups
         </h3>
         
-        <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
-          Garante que tens o controlo total sobre os teus dados. Descarrega relatórios de fluxos separados ou do total de transações compatíveis com o Excel, ou efetua um backup de segurança completo de toda a atividade do DropFlow.
+        <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+          Garante que tens o controlo total sobre os teus dados. Descarrega relatórios de fluxos separados ou do total de transações compatíveis com o Excel, ou efetua um backup de segurança completo de toda a atividade do DroopFlow.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2" id="export_actions_grid">
@@ -670,12 +856,12 @@ export default function DefinicoesView() {
             id="btn_export_json_backup"
             type="button"
             onClick={handleExportBackupJSON}
-            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-200/60 hover:border-indigo-200 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
+            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-indigo-50 dark:bg-slate-950 dark:hover:bg-indigo-950/20 border border-slate-200/60 dark:border-slate-800 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
           >
-            <Download className="w-6 h-6 text-indigo-600 group-hover:scale-110 transition-transform" />
+            <Download className="w-6 h-6 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-slate-800 block">Backup Completo (JSON)</span>
-              <span className="text-[9px] text-slate-400 block">Perfil, Produtos, Vendas e Caixinhas</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Backup Completo (JSON)</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block">Perfil, Produtos, Vendas e Caixinhas</span>
             </div>
           </button>
 
@@ -684,12 +870,12 @@ export default function DefinicoesView() {
             id="btn_export_vendas_csv"
             type="button"
             onClick={handleExportVendasCSV}
-            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-emerald-50 border border-slate-200/60 hover:border-emerald-200 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
+            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-emerald-50 dark:bg-slate-950 dark:hover:bg-emerald-950/20 border border-slate-200/60 dark:border-slate-800 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
           >
-            <FileSpreadsheet className="w-6 h-6 text-emerald-600 group-hover:scale-110 transition-transform" />
+            <FileSpreadsheet className="w-6 h-6 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-slate-800 block">Vendas (CSV)</span>
-              <span className="text-[9px] text-slate-400 block">Relatório completo para o Excel</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Vendas (CSV)</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block">Relatório completo para o Excel</span>
             </div>
           </button>
 
@@ -698,12 +884,12 @@ export default function DefinicoesView() {
             id="btn_export_despesas_csv"
             type="button"
             onClick={handleExportDespesasCSV}
-            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-rose-50 border border-slate-200/60 hover:border-rose-200 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
+            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-rose-50 dark:bg-slate-950 dark:hover:bg-rose-950/20 border border-slate-200/60 dark:border-slate-800 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
           >
-            <FileSpreadsheet className="w-6 h-6 text-rose-600 group-hover:scale-110 transition-transform" />
+            <FileSpreadsheet className="w-6 h-6 text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform" />
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-slate-800 block">Despesas (CSV)</span>
-              <span className="text-[9px] text-slate-400 block">Registo de saídas e despesas</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Despesas (CSV)</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block">Registo de saídas e despesas</span>
             </div>
           </button>
 
@@ -712,41 +898,41 @@ export default function DefinicoesView() {
             id="btn_export_todas_transacoes_csv"
             type="button"
             onClick={handleExportTodasTransacoesCSV}
-            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-sky-50 border border-slate-200/60 hover:border-sky-200 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
+            className="flex flex-col items-center justify-center p-4 bg-slate-50 hover:bg-sky-50 dark:bg-slate-950 dark:hover:bg-sky-950/20 border border-slate-200/60 dark:border-slate-800 rounded-2xl transition-all text-center space-y-2 group cursor-pointer"
           >
-            <Coins className="w-6 h-6 text-sky-600 group-hover:scale-110 transition-transform" />
+            <Coins className="w-6 h-6 text-sky-600 dark:text-sky-400 group-hover:scale-110 transition-transform" />
             <div className="space-y-0.5">
-              <span className="text-xs font-bold text-slate-800 block">Fluxo de Caixa (CSV)</span>
-              <span className="text-[9px] text-slate-400 block">Todas as transações combinadas</span>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Fluxo de Caixa (CSV)</span>
+              <span className="text-[9px] text-slate-400 dark:text-slate-500 block">Todas as transações combinadas</span>
             </div>
           </button>
         </div>
       </div>
 
-      {/* 3. Subscription Management (DropFlow Pro) */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-5 space-y-4 relative overflow-hidden shadow-sm" id="definicoes_billing_panel">
+      {/* 3. Subscription Management (DroopFlow Pro) */}
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 relative overflow-hidden shadow-sm" id="definicoes_billing_panel">
         <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none"></div>
 
         <div className="flex justify-between items-center" id="billing_header">
-          <h3 className="font-bold text-xs text-slate-900 flex items-center font-display">
-            <Crown className="w-4 h-4 mr-1.5 text-purple-600" /> Plano DropFlow Pro
+          <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+            <Crown className="w-4 h-4 mr-1.5 text-purple-600 dark:text-purple-400" /> Plano DroopFlow Pro
           </h3>
-          <span className="text-[9px] bg-slate-50 px-2 py-0.5 rounded-full text-slate-600 border border-slate-200/65 font-bold">
+          <span className="text-[9px] bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 border border-slate-200/65 dark:border-slate-800 font-bold">
             149 MT / mês
           </span>
         </div>
 
         {profile?.plano === 'trial' ? (
           <div className="space-y-3.5 pt-1" id="trial_status_info">
-            <div className="bg-purple-50 border border-purple-100 p-3.5 rounded-2xl space-y-1.5" id="trial_box">
-              <span className="text-[10px] font-extrabold text-purple-700 block uppercase tracking-wide">Período de Teste Ativo</span>
-              <p className="text-xs text-slate-600 font-medium">Ainda te restam <strong className="text-slate-900 font-extrabold">6 dias grátis</strong> para explorar todas as funcionalidades sem compromisso.</p>
+            <div className="bg-purple-50 border border-purple-100 dark:bg-purple-950/30 dark:border-purple-800 p-3.5 rounded-2xl space-y-1.5" id="trial_box">
+              <span className="text-[10px] font-extrabold text-purple-700 dark:text-purple-400 block uppercase tracking-wide">Período de Teste Ativo</span>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Ainda te restam <strong className="text-slate-900 dark:text-slate-50 font-extrabold">6 dias grátis</strong> para explorar todas as funcionalidades sem compromisso.</p>
             </div>
 
             {showUpgradeSuccess ? (
-              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl text-xs text-emerald-700 flex items-center space-x-2 animate-bounce" id="upgrade_success_msg">
+              <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-3 rounded-xl text-xs text-emerald-700 dark:text-emerald-400 flex items-center space-x-2 animate-bounce" id="upgrade_success_msg">
                 <Check className="w-4 h-4 shrink-0 stroke-[2.5]" />
-                <span>Excelente! Agora és um assinante DropFlow Pro.</span>
+                <span>Excelente! Agora és um assinante DroopFlow Pro.</span>
               </div>
             ) : (
               <button
@@ -760,11 +946,11 @@ export default function DefinicoesView() {
             )}
           </div>
         ) : (
-          <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl space-y-1.5" id="pro_status_info">
-            <span className="text-[10px] font-extrabold text-emerald-700 block uppercase tracking-wide flex items-center">
+          <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-1.5" id="pro_status_info">
+            <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 block uppercase tracking-wide flex items-center">
               <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
             </span>
-            <p className="text-xs text-slate-600 font-medium">Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.</p>
           </div>
         )}
       </div>
@@ -774,7 +960,12 @@ export default function DefinicoesView() {
         <button
           id="btn_system_logout"
           onClick={logout}
-          className="w-full bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100/60 transition-colors font-extrabold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 cursor-pointer"
+          className="w-full bg-rose-50 border border-rose-100 dark:bg-rose-950/30 dark:border-rose-900/50 text-rose-600 hover:bg-rose-100/60 dark:hover:bg-rose-900/40 transition-colors font-extrabold py-3 rounded-xl text-xs flex items-center justify-center space-x-2 cursor-pointer"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sair da Conta</span>
+        </button>
+      </div>"
         >
           <LogOut className="w-4 h-4" />
           <span>Sair da Conta</span>

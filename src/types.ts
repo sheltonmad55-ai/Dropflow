@@ -8,11 +8,44 @@ export interface Profile {
   nome: string;
   pais: string;
   moeda: string;
-  plano: 'trial' | 'pro';
+  plano: 'trial' | 'pro' | 'expired';
   trial_expires_at: string; // ISO date
   criado_em: string;
   anuncios_percent: number; // e.g. 50% of remainder
   lucro_percent: number;    // e.g. 50% of remainder
+  metaDiaria?: number;
+  metaSemanal?: number;
+  metaMensal?: number;
+  periodoDiaria?: number; // number of days, default: 1
+  periodoSemanal?: number; // number of weeks, default: 1
+  periodoMensal?: number; // number of months, default: 1
+  metaDiariaBatidaEm?: string;
+  metaSemanalBatidaEm?: string;
+  metaMensalBatidaEm?: string;
+  suspenso?: boolean;
+  ativarSons?: boolean;
+  somMetas?: boolean;
+  somRelatorios?: boolean;
+}
+
+export interface Broadcast {
+  id: string;
+  texto: string;
+  publico_alvo: 'todos' | 'trial_expira_2d';
+  criado_em: string;
+}
+
+export interface Relatorio {
+  id: string;
+  user_id: string;
+  tipo: 'diario' | 'semanal' | 'mensal';
+  data_geracao: string;
+  total_vendido: number;
+  total_gasto: number;
+  balanco: number;
+  progresso_metas: string;
+  metas_atingidas: string[];
+  lido?: boolean;
 }
 
 export type CaixinhaTipo = 'lucro' | 'anuncios' | 'fornecedores' | 'delivery' | 'personalizado';
@@ -43,6 +76,9 @@ export interface Venda {
     [caixinhaId: string]: number; // snapshot of distributed values
   };
   custom_anuncios_percent?: number;
+  quantidade?: number;
+  preco_unitario?: number;
+  desconto?: number;
   sync_status: 'synced' | 'pending';
   criado_em: string;
 }
@@ -69,6 +105,7 @@ export interface Produto {
   preco_venda: number;
   margem: number; // calculated field (preco_venda - preco_compra) / preco_venda * 100
   quantidade: number;
+  kits?: { qtd: number; preco: number }[];
   criado_em: string;
 }
 

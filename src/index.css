@@ -30,3 +30,102 @@
   background-color: rgb(248, 250, 252); /* bg-slate-50 */
 }
 
+/* Global Dark Mode Style Mapping overrides to ensure absolute interface consistency */
+.dark {
+  color-scheme: dark;
+}
+
+/* Override input fields globally in dark mode for a pristine experience */
+.dark input, 
+.dark select, 
+.dark textarea {
+  background-color: #020617 !important; /* bg-slate-950 */
+  color: #f8fafc !important; /* text-slate-50 */
+  border-color: #1e293b !important; /* border-slate-800 */
+}
+
+.dark input::placeholder, 
+.dark textarea::placeholder {
+  color: #64748b !important; /* placeholder-slate-500 */
+}
+
+/* Standard panel / modal container backgrounds */
+.dark .bg-white {
+  background-color: #0f172a !important; /* bg-slate-900 */
+  color: #f8fafc !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #020617 !important; /* bg-slate-950 */
+  color: #e2e8f0 !important;
+}
+
+.dark .bg-slate-50\/50 {
+  background-color: rgba(2, 6, 23, 0.5) !important;
+}
+
+.dark .bg-slate-850 {
+  background-color: #020617 !important;
+}
+
+/* Standard borders mapping */
+.dark .border-slate-100 {
+  border-color: #1e293b !important; /* border-slate-800 */
+}
+
+.dark .border-slate-200 {
+  border-color: #1e293b !important;
+}
+
+.dark .border-slate-200\/60 {
+  border-color: rgba(30, 41, 59, 0.6) !important;
+}
+
+/* Typography elements mapping */
+.dark .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-slate-700 {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+.dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Interactive hover elements */
+.dark .hover\:bg-slate-100:hover {
+  background-color: #1e293b !important;
+}
+
+.dark .hover\:bg-slate-50:hover {
+  background-color: #0f172a !important;
+}
+
+/* Modal backdrop and shadow enhancements */
+.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
+}
+
+.dark .bg-slate-900\/40 {
+  background-color: rgba(2, 6, 23, 0.7) !important;
+}
+
+

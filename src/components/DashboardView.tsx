@@ -203,7 +203,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           <div>
             <h2 className="text-xl font-extrabold text-slate-900">Olá, {profile?.nome || 'Empreendedor'}!</h2>
             <p className="text-[11px] text-slate-500">
-              {profile?.plano === 'trial' ? 'Período experimental grátis' : 'Plano DropFlow Pro Ativo'}
+              {profile?.plano === 'trial' ? 'Período experimental grátis' : 'Plano DroopFlow Pro Ativo'}
             </p>
           </div>
           {profile?.plano === 'trial' && (
@@ -585,10 +585,21 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                     </div>
                     <div className="min-w-0" id="activity_text">
                       <span className="text-xs font-semibold text-slate-900 block truncate">
-                        {displayName}
+                        {displayName} {act.type === 'venda' && act.quantidade > 1 && (
+                          <span className="text-[9px] bg-slate-100 text-slate-700 px-1 py-0.5 rounded-md font-bold ml-1">
+                            {act.quantidade}x
+                          </span>
+                        )}
                       </span>
                       <span className="text-[9px] text-slate-500 block">
-                        {act.type === 'venda' ? `ID venda: ${act.id.slice(0, 8)}` : act.categoria}
+                        {act.type === 'venda' ? (
+                          <span className="inline-flex items-center space-x-1.5">
+                            <span>ID: {act.id.slice(0, 8)}</span>
+                            {act.desconto > 0 && (
+                              <span className="text-rose-600 font-bold bg-rose-50 px-1 py-0.2 rounded text-[8px]">Desconto: -{act.desconto} {currency}</span>
+                            )}
+                          </span>
+                        ) : act.categoria}
                       </span>
                     </div>
                   </div>

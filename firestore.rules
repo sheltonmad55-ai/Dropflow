@@ -17,6 +17,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Helper to check if user is an administrator
+    function isAdmin() {
+      return isAuth() && (request.auth.token.admin == true || request.auth.token.email == 'sheltonmad55@gmail.com');
+    }
+
     // Helper to check ownership
     function isOwner(userId) {
       return isAuth() && request.auth.uid == userId;
@@ -24,7 +29,7 @@ service cloud.firestore {
 
     // Validation Helpers
     function isValidProfile(data) {
-      return data.id == request.auth.uid
+      return data.id is string
         && (!('nome' in data) || (data.nome is string && data.nome.size() > 0 && data.nome.size() <= 200))
         && (!('pais' in data) || (data.pais is string && data.pais.size() > 0))
         && (!('moeda' in data) || (data.moeda is string && data.moeda.size() > 0))
@@ -32,7 +37,15 @@ service cloud.firestore {
         && (!('trial_expires_at' in data) || data.trial_expires_at is string)
         && (!('criado_em' in data) || data.criado_em is string)
         && (!('anuncios_percent' in data) || data.anuncios_percent is number)
-        && (!('lucro_percent' in data) || data.lucro_percent is number);
+        && (!('lucro_percent' in data) || data.lucro_percent is number)
+        && (!('metaDiaria' in data) || data.metaDiaria is number)
+        && (!('metaSemanal' in data) || data.metaSemanal is number)
+        && (!('metaMensal' in data) || data.metaMensal is number)
+        && (!('metaDiariaBatidaEm' in data) || data.metaDiariaBatidaEm is string)
+        && (!('metaSemanalBatidaEm' in data) || data.metaSemanalBatidaEm is string)
+        && (!('metaMensalBatidaEm' in data) || data.metaMensalBatidaEm is string)
+        && (!('suspenso' in data) || data.suspenso is bool)
+        && (!('ativarSons' in data) || data.ativarSons is bool);
     }
 
     // Caixinhas validation helper
@@ -118,12 +131,12 @@ service cloud.firestore {
 
     // Profiles Rules
     match /profiles/{profileId} {
-      allow get: if isOwner(profileId) && isValidId(profileId);
-      allow list: if isOwner(profileId);
-      allow create, update: if isOwner(profileId) 
+      allow get: if (isOwner(profileId) || isAdmin()) && isValidId(profileId);
+      allow list: if isOwner(profileId) || isAdmin();
+      allow create, update: if (isOwner(profileId) || isAdmin()) 
         && isValidId(profileId)
         && isValidProfile(request.resource.data);
-      allow delete: if false;
+      allow delete: if isAdmin() && isValidId(profileId);
     }
 
     // Caixinhas Rules
@@ -220,6 +233,25 @@ service cloud.firestore {
         && isOwner(request.resource.data.user_id)
         && isValidZona(request.resource.data);
       allow delete: if isAuth() && isValidId(zonaId) && isOwner(resource.data.user_id);
+    }
+
+    // Admin Logs Rules
+    match /admin_logs/{logId} {
+      allow read, write: if isAdmin() && isValidId(logId);
+    }
+
+    // Broadcasts Rules
+    match /broadcasts/{broadcastId} {
+      allow read: if isAuth() && isValidId(broadcastId);
+      allow write: if isAdmin() && isValidId(broadcastId);
+    }
+
+    // Relatorios Rules
+    match /relatorios/{relatorioId} {
+      allow get: if isAuth() && isValidId(relatorioId) && (resource == null || isOwner(resource.data.user_id) || isAdmin());
+      allow list: if isAuth() && (isOwner(resource.data.user_id) || isAdmin());
+      allow create, update: if isAuth() && isValidId(relatorioId) && (request.resource.data.user_id == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() && isValidId(relatorioId);
     }
   }
 }

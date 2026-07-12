@@ -5,7 +5,7 @@
 
 import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem } from '../types.ts';
 
-const DB_NAME = 'DropFlowDB';
+const DB_NAME = 'DroopFlowDB';
 const DB_VERSION = 1;
 
 export function initDB(): Promise<IDBDatabase> {

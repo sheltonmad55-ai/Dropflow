@@ -26,11 +26,70 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [isCustomAds, setIsCustomAds] = useState<boolean>(false);
   const [customAdsPercent, setCustomAdsPercent] = useState<number>(40);
 
+  const [quantidade, setQuantidade] = useState<string>('1');
+  const [precoUnitario, setPrecoUnitario] = useState<string>('');
+  const [desconto, setDesconto] = useState<string>('0');
+
+  // Update unit price and total when product or quantity changes
+  useEffect(() => {
+    if (!produtoId) return;
+    const prod = produtos.find(p => p.id === produtoId);
+    if (!prod) return;
+
+    const qtyNum = parseInt(quantidade) || 1;
+    let unitPrice = prod.preco_venda;
+
+    if (prod.kits && prod.kits.length > 0) {
+      const sortedKits = [...prod.kits].sort((a, b) => b.qtd - a.qtd);
+      const matchingKit = sortedKits.find(k => qtyNum >= k.qtd);
+      if (matchingKit) {
+        unitPrice = matchingKit.preco;
+      }
+    }
+
+    setPrecoUnitario(unitPrice.toString());
+    
+    const descNum = parseFloat(desconto) || 0;
+    const totalRec = (unitPrice * qtyNum) - descNum;
+    setValorRecebido(totalRec > 0 ? totalRec.toString() : '0');
+  }, [produtoId, quantidade, produtos]);
+
+  const handlePrecoUnitarioChange = (val: string) => {
+    setPrecoUnitario(val);
+    const pNum = parseFloat(val) || 0;
+    const qtyNum = parseInt(quantidade) || 1;
+    const descNum = parseFloat(desconto) || 0;
+    const totalRec = (pNum * qtyNum) - descNum;
+    setValorRecebido(totalRec > 0 ? totalRec.toString() : '0');
+  };
+
+  const handleDescontoChange = (val: string) => {
+    setDesconto(val);
+    const descNum = parseFloat(val) || 0;
+    const pNum = parseFloat(precoUnitario) || 0;
+    const qtyNum = parseInt(quantidade) || 1;
+    const totalRec = (pNum * qtyNum) - descNum;
+    setValorRecebido(totalRec > 0 ? totalRec.toString() : '0');
+  };
+
+  const handleValorRecebidoChange = (val: string) => {
+    setValorRecebido(val);
+    const valNum = parseFloat(val) || 0;
+    const pNum = parseFloat(precoUnitario) || 0;
+    const qtyNum = parseInt(quantidade) || 1;
+    const expected = pNum * qtyNum;
+    const implicitDesc = expected - valNum;
+    setDesconto(implicitDesc > 0 ? implicitDesc.toString() : '0');
+  };
+
   // Sync default percentage when modal opens
   useEffect(() => {
     if (isOpen && profile) {
       setCustomAdsPercent(profile.anuncios_percent);
       setIsCustomAds(false);
+      setQuantidade('1');
+      setPrecoUnitario('');
+      setDesconto('0');
     }
   }, [isOpen, profile]);
 
@@ -59,10 +118,11 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   // Watch inputs and update live distribution preview
   useEffect(() => {
     const val = parseFloat(valorRecebido) || 0;
+    const qtyNum = parseInt(quantidade) || 1;
     
-    // Find active product costs
+    // Find active product costs scaled by quantity
     const prod = produtos.find(p => p.id === produtoId);
-    const sCost = prod ? prod.preco_compra : 0;
+    const sCost = (prod ? prod.preco_compra : 0) * qtyNum;
     
     // Find active zone shipping costs
     const zone = zonasEntrega.find(z => z.id === zonaEntregaId);
@@ -93,12 +153,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     if (prod && prod.fornecedor_id && !fornecedorId) {
       setFornecedorId(prod.fornecedor_id);
     }
-
-    // Auto set suggest price if user selected product and price is empty
-    if (prod && !valorRecebido) {
-      setValorRecebido(prod.preco_venda.toString());
-    }
-  }, [valorRecebido, produtoId, zonaEntregaId, produtos, zonasEntrega, profile, fornecedorId, isCustomAds, customAdsPercent]);
+  }, [valorRecebido, quantidade, produtoId, zonaEntregaId, produtos, zonasEntrega, profile, fornecedorId, isCustomAds, customAdsPercent]);
 
   if (!isOpen) return null;
 
@@ -116,7 +171,10 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
         forma_pagamento: formaPagamento,
         observacao: observacao,
         data_venda: dataVenda,
-        custom_anuncios_percent: isCustomAds ? customAdsPercent : undefined
+        custom_anuncios_percent: isCustomAds ? customAdsPercent : undefined,
+        quantidade: parseInt(quantidade) || 1,
+        preco_unitario: parseFloat(precoUnitario) || 0,
+        desconto: parseFloat(desconto) || 0
       });
       
       // Reset form and close
@@ -125,6 +183,9 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setFornecedorId('');
       setZonaEntregaId('');
       setObservacao('');
+      setQuantidade('1');
+      setPrecoUnitario('');
+      setDesconto('0');
       onClose();
     } catch (err) {
       alert('Erro ao registar venda.');
@@ -210,7 +271,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
           {/* Valor Recebido */}
           <div className="space-y-1" id="field_venda_valor">
             <label className="text-xs font-semibold text-slate-500 flex justify-between">
-              <span>Valor Recebido</span>
+              <span>Valor Recebido (Total Pago)</span>
               <span className="text-emerald-600 font-extrabold">{currency}</span>
             </label>
             <input
@@ -220,7 +281,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               required
               placeholder="0.00"
               value={valorRecebido}
-              onChange={(e) => setValorRecebido(e.target.value)}
+              onChange={(e) => handleValorRecebidoChange(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-4 py-3.5 text-lg font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
             />
           </div>
@@ -298,6 +359,65 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               </select>
             )}
           </div>
+
+          {/* Quantidade, Preço Unitário e Desconto */}
+          {produtoId && (
+            <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/60 animate-fade-in" id="field_venda_pricing_grid">
+              <div className="space-y-1" id="pricing_qty">
+                <label className="text-[10px] font-bold text-slate-600 block">Qtd.</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={quantidade}
+                  onChange={(e) => setQuantidade(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1" id="pricing_unit">
+                <label className="text-[10px] font-bold text-slate-600 block">Preço Unit.</label>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={precoUnitario}
+                  onChange={(e) => handlePrecoUnitarioChange(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="space-y-1" id="pricing_discount">
+                <label className="text-[10px] font-bold text-slate-600 block">Desconto ({currency})</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={desconto}
+                  onChange={(e) => handleDescontoChange(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Show Kit information feedback if a kit is active! */}
+              {(() => {
+                const prod = produtos.find(p => p.id === produtoId);
+                if (prod && prod.kits && prod.kits.length > 0) {
+                  const qtyNum = parseInt(quantidade) || 1;
+                  const sortedKits = [...prod.kits].sort((a, b) => b.qtd - a.qtd);
+                  const matchingKit = sortedKits.find(k => qtyNum >= k.qtd);
+                  if (matchingKit) {
+                    return (
+                      <div className="col-span-3 text-[10px] text-emerald-600 font-bold bg-white p-1.5 rounded border border-emerald-100 flex items-center mt-1" id="kit_applied_feedback">
+                        <Sparkles className="w-3.5 h-3.5 mr-1" />
+                        Desconto de Kit Atacado Aplicado! Preço de tabela reduzido para {matchingKit.preco} {currency} cada.
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
+            </div>
+          )}
 
           {/* Zona de Entrega */}
           <div className="space-y-1.5" id="field_venda_zona">

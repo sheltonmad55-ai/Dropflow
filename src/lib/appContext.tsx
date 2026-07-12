@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import * as db from './db.ts';
-import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem } from '../types.ts';
+import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio } from '../types.ts';
 import { 
   auth, 
+  db as fDb,
   loginWithGoogle, 
   pullAllUserData, 
   pushQueueToFirestore 
@@ -18,6 +19,14 @@ import {
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
+import {
+  onSnapshot,
+  doc,
+  collection,
+  query,
+  where,
+  setDoc
+} from 'firebase/firestore';
 
 interface AppContextType {
   // Auth
@@ -31,6 +40,15 @@ interface AppContextType {
   logout: () => void;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   triggerMockUpgrade: () => Promise<void>;
+
+  // Admin and Metas/Relatorios
+  isAdmin: boolean;
+  broadcasts: Broadcast[];
+  relatorios: Relatorio[];
+  allProfiles: Profile[];
+  addBroadcast: (texto: string, publicoAlvo: 'todos' | 'trial_expira_2d') => Promise<void>;
+  addRelatorio: (tipo: 'diario' | 'semanal' | 'mensal', totalVendido: number, totalGasto: number, balanco: number, progressoMetas: string, metasAtingidas: string[]) => Promise<void>;
+  updateUserProfileByAdmin: (targetUserId: string, updates: Partial<Profile>) => Promise<void>;
 
   // Data State
   caixinhas: Caixinha[];
@@ -70,6 +88,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
 
+  // Admin and Metas/Relatorios state
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [relatorios, setRelatorios] = useState<Relatorio[]>([]);
+  const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
+
   // App data state
   const [caixinhas, setCaixinhas] = useState<Caixinha[]>([]);
   const [vendas, setVendas] = useState<Venda[]>([]);
@@ -83,6 +107,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'pending' | 'syncing' | 'offline'>(
     navigator.onLine ? 'synced' : 'offline'
   );
+
+  // Ref to track active Firestore subscriptions for clean-up
+  const unsubscribesRef = useRef<(() => void)[]>([]);
 
   // Listen to network status
   useEffect(() => {
@@ -106,42 +133,228 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [token]);
 
-  // Load initial local data once authenticated and listen to Firebase Auth
+  // Load initial local data once authenticated and listen to Firebase Auth / Firestore real-time snapshots
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      // Clear any previous subscriptions first
+      unsubscribesRef.current.forEach(unsub => unsub());
+      unsubscribesRef.current = [];
+
       if (user) {
         try {
           const freshToken = await user.getIdToken();
           setToken(freshToken);
           localStorage.setItem('dropflow_token', freshToken);
 
-          const freshData = await pullAllUserData(user.uid);
-          if (freshData.profile) {
-            setProfile(freshData.profile as Profile);
-            localStorage.setItem('dropflow_profile', JSON.stringify(freshData.profile));
-            setIsAuthenticated(true);
+          // Try to load cached profile immediately for instant rendering
+          const cachedProfileStr = localStorage.getItem('dropflow_profile');
+          if (cachedProfileStr) {
+            try {
+              const cachedProfile = JSON.parse(cachedProfileStr);
+              setProfile(cachedProfile);
+              setIsAuthenticated(true);
+            } catch (err) {
+              console.error("Error parsing cached profile:", err);
+            }
           }
+
+          // Pre-populate state from IndexedDB instantly to guarantee zero-flicker offline rendering
+          await loadAllLocalData(user.uid);
+
+          // 1. Listen to user profile document
+          const unsubProfile = onSnapshot(doc(fDb, 'profiles', user.uid), (snapshot) => {
+            if (snapshot.exists()) {
+              const profileData = snapshot.data() as Profile;
+              setProfile(profileData);
+              localStorage.setItem('dropflow_profile', JSON.stringify(profileData));
+              db.putItem('profiles', profileData);
+              setIsAuthenticated(true);
+            } else {
+              setProfile(null);
+            }
+            setIsLoadingAuth(false);
+          }, (error) => {
+            console.error("Profile real-time listener error:", error);
+            setIsLoadingAuth(false);
+          });
+          unsubscribesRef.current.push(unsubProfile);
+
+          // 2. Listen to user caixinhas collection
+          const unsubCaixinhas = onSnapshot(
+            query(collection(fDb, 'caixinhas'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as Caixinha);
+              setCaixinhas(data);
+              db.clearStore('caixinhas').then(() => {
+                data.forEach(item => db.putItem('caixinhas', item));
+              });
+            },
+            (error) => console.error("Caixinhas real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubCaixinhas);
+
+          // 3. Listen to user vendas collection
+          const unsubVendas = onSnapshot(
+            query(collection(fDb, 'vendas'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as Venda);
+              setVendas(data.sort((a, b) => b.data_venda.localeCompare(a.data_venda)));
+              db.clearStore('vendas').then(() => {
+                data.forEach(item => db.putItem('vendas', item));
+              });
+            },
+            (error) => console.error("Vendas real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubVendas);
+
+          // 4. Listen to user despesas collection
+          const unsubDespesas = onSnapshot(
+            query(collection(fDb, 'despesas'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as Despesa);
+              setDespesas(data.sort((a, b) => b.data.localeCompare(a.data)));
+              db.clearStore('despesas').then(() => {
+                data.forEach(item => db.putItem('despesas', item));
+              });
+            },
+            (error) => console.error("Despesas real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubDespesas);
+
+          // 5. Listen to user produtos collection
+          const unsubProdutos = onSnapshot(
+            query(collection(fDb, 'produtos'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as Produto);
+              setProdutos(data);
+              db.clearStore('produtos').then(() => {
+                data.forEach(item => db.putItem('produtos', item));
+              });
+            },
+            (error) => console.error("Produtos real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubProdutos);
+
+          // 6. Listen to user fornecedores collection
+          const unsubFornecedores = onSnapshot(
+            query(collection(fDb, 'fornecedores'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as Fornecedor);
+              setFornecedores(data);
+              db.clearStore('fornecedores').then(() => {
+                data.forEach(item => db.putItem('fornecedores', item));
+              });
+            },
+            (error) => console.error("Fornecedores real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubFornecedores);
+
+          // 7. Listen to user zonas_entrega collection
+          const unsubZonas = onSnapshot(
+            query(collection(fDb, 'zonas_entrega'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as ZonaEntrega);
+              setZonasEntrega(data);
+              db.clearStore('zonas_entrega').then(() => {
+                data.forEach(item => db.putItem('zonas_entrega', item));
+              });
+            },
+            (error) => console.error("Zonas real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubZonas);
+
+          // 8. Listen to broadcasts collection
+          const unsubBroadcasts = onSnapshot(
+            collection(fDb, 'broadcasts'),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as any);
+              setBroadcasts(data.sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || '')));
+            },
+            (error) => console.error("Broadcasts real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubBroadcasts);
+
+          // 9. Listen to relatorios collection
+          const unsubRelatorios = onSnapshot(
+            query(collection(fDb, 'relatorios'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as any);
+              setRelatorios(data.sort((a, b) => (b.data_geracao || '').localeCompare(a.data_geracao || '')));
+            },
+            (error) => console.error("Relatorios real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubRelatorios);
+
+          // 10. Check if Admin and listen to all profiles
+          const idTokenResult = await user.getIdTokenResult();
+          const isAdminUser = user.email === 'sheltonmad55@gmail.com' || !!idTokenResult.claims.admin;
+          setIsAdmin(isAdminUser);
+
+          if (isAdminUser) {
+            const unsubAllProfiles = onSnapshot(
+              collection(fDb, 'profiles'),
+              (snapshot) => {
+                const data = snapshot.docs.map(doc => doc.data() as Profile);
+                setAllProfiles(data.sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || '')));
+              },
+              (error) => console.error("AllProfiles real-time listener error:", error)
+            );
+            unsubscribesRef.current.push(unsubAllProfiles);
+          }
+
         } catch (e) {
-          console.error("Error pulling user data on auth state change:", e);
+          console.error("Error setting up real-time sync:", e);
+          setIsLoadingAuth(false);
         }
       } else {
         setToken(null);
         setProfile(null);
+        setIsAdmin(false);
+        setBroadcasts([]);
+        setRelatorios([]);
+        setAllProfiles([]);
+        setCaixinhas([]);
+        setVendas([]);
+        setDespesas([]);
+        setProdutos([]);
+        setFornecedores([]);
+        setZonasEntrega([]);
         setIsAuthenticated(false);
         localStorage.removeItem('dropflow_token');
         localStorage.removeItem('dropflow_profile');
+
+        // Clear local IndexedDB safely to prevent profile/data leakage between account sign-ins
+        try {
+          await db.clearStore('profiles');
+          await db.clearStore('caixinhas');
+          await db.clearStore('vendas');
+          await db.clearStore('despesas');
+          await db.clearStore('produtos');
+          await db.clearStore('fornecedores');
+          await db.clearStore('zonas_entrega');
+          await db.clearStore('sync_queue');
+        } catch (err) {
+          console.error("Error clearing IndexedDB on logout:", err);
+        }
+
+        setIsLoadingAuth(false);
       }
-      setIsLoadingAuth(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribesRef.current.forEach(unsub => unsub());
+      unsubscribesRef.current = [];
+      unsubscribe();
+    };
   }, []);
 
-  // Whenever user becomes authenticated, load local storage & database
+  // Whenever user becomes authenticated, push offline edits
   useEffect(() => {
     if (isAuthenticated && profile) {
-      loadAllLocalData();
-      // Schedule periodic background synchronization
+      if (navigator.onLine) {
+        syncWithServer();
+      }
+      // Schedule periodic background synchronization for offline queue pushing
       const interval = setInterval(() => {
         if (navigator.onLine) {
           syncWithServer();
@@ -151,31 +364,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, profile?.id]);
 
-  async function loadAllLocalData() {
+  async function loadAllLocalData(userId: string) {
     try {
       const dbProfiles = await db.getAll<Profile>('profiles');
-      const currentUserProfile = dbProfiles.find(p => p.id === profile?.id);
+      const currentUserProfile = dbProfiles.find(p => p.id === userId);
       if (currentUserProfile) {
         setProfile(currentUserProfile);
       }
 
       const dbCaixinhas = await db.getAll<Caixinha>('caixinhas');
-      setCaixinhas(dbCaixinhas.filter(c => c.user_id === profile?.id));
+      setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
 
       const dbVendas = await db.getAll<Venda>('vendas');
-      setVendas(dbVendas.filter(v => v.user_id === profile?.id).sort((a,b) => b.data_venda.localeCompare(a.data_venda)));
+      setVendas(dbVendas.filter(v => v.user_id === userId).sort((a,b) => b.data_venda.localeCompare(a.data_venda)));
 
       const dbDespesas = await db.getAll<Despesa>('despesas');
-      setDespesas(dbDespesas.filter(d => d.user_id === profile?.id).sort((a,b) => b.data.localeCompare(a.data)));
+      setDespesas(dbDespesas.filter(d => d.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
 
       const dbProdutos = await db.getAll<Produto>('produtos');
-      setProdutos(dbProdutos.filter(p => p.user_id === profile?.id));
+      setProdutos(dbProdutos.filter(p => p.user_id === userId));
 
       const dbFornecedores = await db.getAll<Fornecedor>('fornecedores');
-      setFornecedores(dbFornecedores.filter(f => f.user_id === profile?.id));
+      setFornecedores(dbFornecedores.filter(f => f.user_id === userId));
 
       const dbZonas = await db.getAll<ZonaEntrega>('zonas_entrega');
-      setZonasEntrega(dbZonas.filter(z => z.user_id === profile?.id));
+      setZonasEntrega(dbZonas.filter(z => z.user_id === userId));
 
       const queue = await db.getAll<SyncQueueItem>('sync_queue');
       if (queue.length > 0) {
@@ -190,57 +403,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     setIsLoadingAuth(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      const freshToken = await user.getIdToken();
-      
-      const data = await pullAllUserData(user.uid);
-      if (!data.profile) {
-        throw new Error('Perfil do utilizador não encontrado no Firebase.');
-      }
-
-      localStorage.setItem('dropflow_token', freshToken);
-      localStorage.setItem('dropflow_profile', JSON.stringify(data.profile));
-
-      // Overwrite local tables in IndexedDB
-      await db.putItem('profiles', data.profile);
-      
-      await db.clearStore('caixinhas');
-      for (const cx of data.caixinhas) {
-        await db.putItem('caixinhas', cx);
-      }
-      
-      await db.clearStore('vendas');
-      for (const vd of data.vendas) {
-        await db.putItem('vendas', vd);
-      }
-
-      await db.clearStore('despesas');
-      for (const dp of data.despesas) {
-        await db.putItem('despesas', dp);
-      }
-
-      await db.clearStore('produtos');
-      for (const pr of data.produtos) {
-        await db.putItem('produtos', pr);
-      }
-
-      await db.clearStore('fornecedores');
-      for (const fn of data.fornecedores) {
-        await db.putItem('fornecedores', fn);
-      }
-
-      await db.clearStore('zonas_entrega');
-      for (const zn of data.zonas_entrega) {
-        await db.putItem('zonas_entrega', zn);
-      }
-
-      setToken(freshToken);
-      setProfile(data.profile as Profile);
-      setIsAuthenticated(true);
-      
-      // Perform instant full sync to pull everything
-      setTimeout(() => syncWithServer(), 100);
+      await signInWithEmailAndPassword(auth, email, password);
+      // Real-time onAuthStateChanged will handle profile retrieval and loading states
     } catch (e: any) {
       setIsLoadingAuth(false);
       throw e;
@@ -252,7 +416,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      const freshToken = await user.getIdToken();
 
       // Calculate trial expiry (7 days from now)
       const trialExpiry = new Date();
@@ -320,18 +483,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...defaultCaixinhas.map(cx => ({ type: 'caixinha', action: 'create', data: cx }))
       ]);
 
-      // Save to local IndexedDB
+      // Save to local IndexedDB to match immediately
       await db.putItem('profiles', newProfile);
       for (const cx of defaultCaixinhas) {
         await db.putItem('caixinhas', cx);
       }
 
-      localStorage.setItem('dropflow_token', freshToken);
-      localStorage.setItem('dropflow_profile', JSON.stringify(newProfile));
-
-      setToken(freshToken);
-      setProfile(newProfile);
-      setIsAuthenticated(true);
+      // Real-time onAuthStateChanged will handle setting isAuthenticated = true
     } catch (e: any) {
       setIsLoadingAuth(false);
       throw e;
@@ -418,56 +576,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Save user profile and tables locally in IndexedDB
       await db.putItem('profiles', userProfile);
-      
-      await db.clearStore('caixinhas');
       for (const cx of userCaixinhas) {
         await db.putItem('caixinhas', cx);
       }
 
-      await db.clearStore('vendas');
-      if (data.vendas) {
-        for (const vd of data.vendas) {
-          await db.putItem('vendas', vd);
-        }
-      }
-
-      await db.clearStore('despesas');
-      if (data.despesas) {
-        for (const dp of data.despesas) {
-          await db.putItem('despesas', dp);
-        }
-      }
-
-      await db.clearStore('produtos');
-      if (data.produtos) {
-        for (const pr of data.produtos) {
-          await db.putItem('produtos', pr);
-        }
-      }
-
-      await db.clearStore('fornecedores');
-      if (data.fornecedores) {
-        for (const fn of data.fornecedores) {
-          await db.putItem('fornecedores', fn);
-        }
-      }
-
-      await db.clearStore('zonas_entrega');
-      if (data.zonas_entrega) {
-        for (const zn of data.zonas_entrega) {
-          await db.putItem('zonas_entrega', zn);
-        }
-      }
-
-      localStorage.setItem('dropflow_token', freshToken);
-      localStorage.setItem('dropflow_profile', JSON.stringify(userProfile));
-
-      setToken(freshToken);
-      setProfile(userProfile);
-      setIsAuthenticated(true);
-
-      // Perform instant full sync to pull everything
-      setTimeout(() => syncWithServer(), 100);
+      // Real-time onAuthStateChanged will handle loading data and setting isAuthenticated = true
     } catch (e: any) {
       setIsLoadingAuth(false);
       throw e;
@@ -514,7 +627,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await updateProfile({ plano: 'pro' });
   }
 
-  // Bi-directional Synchronization Engine using client-side Firestore
+  async function addBroadcast(texto: string, publicoAlvo: 'todos' | 'trial_expira_2d') {
+    if (!profile) return;
+    const newBroadcast = {
+      id: crypto.randomUUID(),
+      texto,
+      publico_alvo: publicoAlvo,
+      criado_em: new Date().toISOString()
+    };
+    try {
+      await setDoc(doc(fDb, 'broadcasts', newBroadcast.id), newBroadcast);
+      await setDoc(doc(collection(fDb, 'admin_logs')), {
+        adminEmail: auth.currentUser?.email || 'admin',
+        acao: `Criou aviso: "${texto}" para público: ${publicoAlvo}`,
+        utilizadorAfetado: 'Todos',
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error("Error creating broadcast:", e);
+      throw e;
+    }
+  }
+
+  async function addRelatorio(tipo: 'diario' | 'semanal' | 'mensal', totalVendido: number, totalGasto: number, balanco: number, progressoMetas: string, metasAtingidas: string[]) {
+    if (!profile) return;
+    const newRelatorio = {
+      id: crypto.randomUUID(),
+      user_id: profile.id,
+      tipo,
+      data_geracao: new Date().toISOString(),
+      total_vendido: totalVendido,
+      total_gasto: totalGasto,
+      balanco,
+      progresso_metas: progressoMetas,
+      metas_atingidas: metasAtingidas,
+      lido: false
+    };
+    try {
+      await setDoc(doc(fDb, 'relatorios', newRelatorio.id), newRelatorio);
+    } catch (e) {
+      console.error("Error creating report:", e);
+      throw e;
+    }
+  }
+
+  async function updateUserProfileByAdmin(targetUserId: string, updates: Partial<Profile>) {
+    if (!profile || !isAdmin) return;
+    try {
+      await setDoc(doc(fDb, 'profiles', targetUserId), updates, { merge: true });
+      await setDoc(doc(collection(fDb, 'admin_logs')), {
+        adminEmail: auth.currentUser?.email || 'admin',
+        acao: `Alterou perfil de ${targetUserId}: ${JSON.stringify(updates)}`,
+        utilizadorAfetado: targetUserId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error("Error updating user profile by admin:", e);
+      throw e;
+    }
+  }
+
+  // Real-time server pushing engine for offline writes
   async function syncWithServer() {
     if (!token || !profile || !navigator.onLine || !auth.currentUser) {
       return;
@@ -522,48 +695,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setSyncStatus('syncing');
     try {
-      // 1. Get the local queue
+      // 1. Get the local queue of modifications
       const queue = await db.getAll<SyncQueueItem>('sync_queue');
 
       // 2. Post queue to Firestore
       if (queue.length > 0) {
         await pushQueueToFirestore(queue);
-      }
-
-      // 3. Pull fresh data from Firestore
-      const serverData = await pullAllUserData(profile.id);
-
-      // 4. Update client database with the returned gold standard from server
-      if (serverData) {
-        // Clear all local tables before re-populating to prevent sync bloat or mismatches
-        const storesToUpdate = [
-          { store: 'profiles', data: serverData.profile ? [serverData.profile] : [] },
-          { store: 'caixinhas', data: serverData.caixinhas },
-          { store: 'vendas', data: serverData.vendas },
-          { store: 'despesas', data: serverData.despesas },
-          { store: 'produtos', data: serverData.produtos },
-          { store: 'fornecedores', data: serverData.fornecedores },
-          { store: 'zonas_entrega', data: serverData.zonas_entrega }
-        ];
-
-        for (const item of storesToUpdate) {
-          await db.clearStore(item.store);
-          for (const row of item.data) {
-            await db.putItem(item.store, row);
-          }
-        }
-
         // Clear successfully synced items from queue
         await db.clearStore('sync_queue');
-
-        // Reload local React state with fresh server data
-        if (serverData.profile) setProfile(serverData.profile as Profile);
-        setCaixinhas(serverData.caixinhas as Caixinha[]);
-        setVendas((serverData.vendas as Venda[]).sort((a: any, b: any) => b.data_venda.localeCompare(a.data_venda)));
-        setDespesas((serverData.despesas as Despesa[]).sort((a: any, b: any) => b.data.localeCompare(a.data)));
-        setProdutos(serverData.produtos as Produto[]);
-        setFornecedores(serverData.fornecedores as Fornecedor[]);
-        setZonasEntrega(serverData.zonas_entrega as ZonaEntrega[]);
       }
 
       setSyncStatus('synced');
@@ -580,10 +719,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const vendaId = crypto.randomUUID();
 
     const value = vendaData.valor_recebido;
+    const qty = vendaData.quantidade || 1;
     
     // Find selected product
     const product = produtos.find(p => p.id === vendaData.produto_id);
-    const purchaseCost = product ? product.preco_compra : 0;
+    const purchaseCost = (product ? product.preco_compra : 0) * qty;
 
     // Find selected delivery zone
     const zone = zonasEntrega.find(z => z.id === vendaData.zona_entrega_id);
@@ -662,9 +802,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Deduct stock quantity of product by 1
+    // Deduct stock quantity of product by quantity sold
     if (product) {
-      const newQty = Math.max(0, product.quantidade - 1);
+      const newQty = Math.max(0, product.quantidade - qty);
       const updatedProduct = { ...product, quantidade: newQty };
       await db.putItem('produtos', updatedProduct);
       await db.addToSyncQueue({ type: 'produto', action: 'update', data: updatedProduct });
@@ -674,6 +814,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Save Venda to Local DB & queue sync
     await db.putItem('vendas', newVenda);
     await db.addToSyncQueue({ type: 'venda', action: 'create', data: newVenda });
+
+    // Evaluate goals before and after this sale to trigger comemmorations/notifications
+    const goalDailyVal = profile.metaDiaria || 0;
+    const goalWeeklyVal = profile.metaSemanal || 0;
+    const goalMonthlyVal = profile.metaMensal || 0;
+
+    const pDiaria = profile.periodoDiaria || 1;
+    const startDaily = new Date();
+    startDaily.setHours(0,0,0,0);
+    startDaily.setDate(startDaily.getDate() - (pDiaria - 1));
+
+    const pSemanal = profile.periodoSemanal || 1;
+    const getStartOfWeek = () => {
+      const d = new Date();
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const m = new Date(d.setDate(diff));
+      m.setHours(0,0,0,0);
+      return m;
+    };
+    const mondayDate = getStartOfWeek();
+    const startWeekly = new Date(mondayDate);
+    startWeekly.setDate(mondayDate.getDate() - (pSemanal - 1) * 7);
+
+    const pMensal = profile.periodoMensal || 1;
+    const now = new Date();
+    const startMonthly = new Date(now.getFullYear(), now.getMonth() - (pMensal - 1), 1, 0, 0, 0, 0);
+
+    const salesDailyBefore = vendas
+      .filter(v => {
+        const vDate = new Date(v.data_venda + 'T00:00:00');
+        return vDate >= startDaily;
+      })
+      .reduce((acc, v) => acc + v.valor_recebido, 0);
+
+    const salesWeeklyBefore = vendas
+      .filter(v => {
+        const vDate = new Date(v.data_venda + 'T00:00:00');
+        return vDate >= startWeekly;
+      })
+      .reduce((acc, v) => acc + v.valor_recebido, 0);
+
+    const salesMonthlyBefore = vendas
+      .filter(v => {
+        const vDate = new Date(v.data_venda + 'T00:00:00');
+        return vDate >= startMonthly;
+      })
+      .reduce((acc, v) => acc + v.valor_recebido, 0);
+
+    const salesDailyAfter = salesDailyBefore + value;
+    const salesWeeklyAfter = salesWeeklyBefore + value;
+    const salesMonthlyAfter = salesMonthlyBefore + value;
+
+    const dailyGoalCrossed = goalDailyVal > 0 && salesDailyBefore < goalDailyVal && salesDailyAfter >= goalDailyVal;
+    const weeklyGoalCrossed = goalWeeklyVal > 0 && salesWeeklyBefore < goalWeeklyVal && salesWeeklyAfter >= goalWeeklyVal;
+    const monthlyGoalCrossed = goalMonthlyVal > 0 && salesMonthlyBefore < goalMonthlyVal && salesMonthlyAfter >= goalMonthlyVal;
+
+    if (dailyGoalCrossed || weeklyGoalCrossed || monthlyGoalCrossed) {
+      import('./audio.ts').then(({ playCashRegister }) => {
+        playCashRegister(profile.ativarSons !== false && profile.somMetas !== false);
+      });
+
+      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+        let msg = '';
+        if (dailyGoalCrossed) {
+          msg += `Meta Diária (${pDiaria === 1 ? 'Hoje' : `${pDiaria} dias`}) de ${goalDailyVal.toLocaleString()} ${profile.moeda || 'MT'} alcançada! 🎉 `;
+        }
+        if (weeklyGoalCrossed) {
+          msg += `Meta Semanal (${pSemanal === 1 ? 'Esta Semana' : `${pSemanal} semanas`}) de ${goalWeeklyVal.toLocaleString()} ${profile.moeda || 'MT'} alcançada! 🚀 `;
+        }
+        if (monthlyGoalCrossed) {
+          msg += `Meta Mensal (${pMensal === 1 ? 'Este Mês' : `${pMensal} meses`}) de ${goalMonthlyVal.toLocaleString()} ${profile.moeda || 'MT'} alcançada! 🏆 `;
+        }
+        try {
+          new Notification("DroopFlow - Meta Atingida!", { body: msg.trim() });
+        } catch (e) {
+          console.warn("Notification error:", e);
+        }
+      }
+    }
 
     // Update React states
     setCaixinhas(updatedCaixinhas);
@@ -903,6 +1123,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       logout,
       updateProfile,
       triggerMockUpgrade,
+
+      isAdmin,
+      broadcasts,
+      relatorios,
+      allProfiles,
+      addBroadcast,
+      addRelatorio,
+      updateUserProfileByAdmin,
 
       caixinhas,
       vendas,

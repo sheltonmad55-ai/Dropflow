@@ -29,7 +29,9 @@ export default function CaixinhasView() {
     addCaixinha, 
     deleteCaixinha, 
     addZonaEntrega, 
-    editZonaEntrega 
+    editZonaEntrega,
+    editCaixinha,
+    updateProfile
   } = useApp();
 
   const totalBalance = caixinhas.reduce((acc, curr) => acc + curr.saldo_atual, 0);
@@ -49,6 +51,17 @@ export default function CaixinhasView() {
   // New zone form
   const [zoneNome, setZoneNome] = useState('');
   const [zoneCusto, setZoneCusto] = useState('');
+
+  // Editing state
+  const [editingCx, setEditingCx] = useState<any>(null);
+  const [editCxNome, setEditCxNome] = useState('');
+  const [editCxIcon, setEditCxIcon] = useState('Layers');
+  const [editCxCor, setEditCxCor] = useState('bg-purple-500');
+  const [editCxPercent, setEditCxPercent] = useState<number>(50);
+
+  const [editingZone, setEditingZone] = useState<any>(null);
+  const [editZoneNome, setEditZoneNome] = useState('');
+  const [editZoneCusto, setEditZoneCusto] = useState('');
 
   const currency = profile?.moeda || 'MT';
 
@@ -79,6 +92,48 @@ export default function CaixinhasView() {
       setShowAddZone(false);
     } catch (e) {
       alert('Erro ao criar zona.');
+    }
+  };
+
+  const handleEditCaixinha = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCx || !editCxNome) return;
+    try {
+      await editCaixinha(editingCx.id, {
+        nome: editCxNome,
+        icone: editCxIcon,
+        cor: editCxCor
+      });
+
+      if (editingCx.tipo === 'lucro') {
+        await updateProfile({
+          lucro_percent: editCxPercent,
+          anuncios_percent: 100 - editCxPercent
+        });
+      } else if (editingCx.tipo === 'anuncios') {
+        await updateProfile({
+          anuncios_percent: editCxPercent,
+          lucro_percent: 100 - editCxPercent
+        });
+      }
+
+      setEditingCx(null);
+    } catch (e) {
+      alert('Erro ao editar caixinha.');
+    }
+  };
+
+  const handleEditZone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingZone || !editZoneNome || !editZoneCusto) return;
+    try {
+      await editZonaEntrega(editingZone.id, {
+        nome_zona: editZoneNome,
+        custo: parseFloat(editZoneCusto)
+      });
+      setEditingZone(null);
+    } catch (e) {
+      alert('Erro ao editar zona.');
     }
   };
 
@@ -189,17 +244,37 @@ export default function CaixinhasView() {
                     <div>
                       <span className="text-xs font-bold text-slate-900 block">{cx.nome}</span>
                       <span className="text-[9px] text-slate-500 uppercase block font-medium">
-                        {cx.tipo === 'personalizado' ? 'Pocket Adicional' : `Fórmula: auto-distribuição`}
+                        {cx.tipo === 'personalizado' ? 'Pocket Adicional' : cx.tipo === 'lucro' ? `Lucro: ${profile?.lucro_percent}%` : cx.tipo === 'anuncios' ? `Anúncios: ${profile?.anuncios_percent}%` : `Fórmula: auto-distribuição`}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-4" id="cx_view_right">
+                  <div className="flex items-center space-x-3" id="cx_view_right">
                     <div className="text-right" id="cx_view_balance">
                       <span className="text-sm font-black text-slate-900 block">
                         {cx.saldo_atual.toLocaleString()} {currency}
                       </span>
                     </div>
+                    <button
+                      id={`btn_edit_cx_${cx.id}`}
+                      onClick={() => {
+                        setEditingCx(cx);
+                        setEditCxNome(cx.nome);
+                        setEditCxIcon(cx.icone);
+                        setEditCxCor(cx.cor);
+                        if (cx.tipo === 'lucro') {
+                          setEditCxPercent(profile?.lucro_percent || 50);
+                        } else if (cx.tipo === 'anuncios') {
+                          setEditCxPercent(profile?.anuncios_percent || 50);
+                        } else {
+                          setEditCxPercent(0);
+                        }
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors"
+                      title="Editar caixinha"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                     {cx.tipo === 'personalizado' && (
                       <button
                         id={`btn_delete_cx_${cx.id}`}
@@ -256,11 +331,25 @@ export default function CaixinhasView() {
                     </div>
                   </div>
 
-                  <div className="text-right" id="zone_fee">
-                    <span className="text-[8px] text-indigo-600 uppercase tracking-wide block font-black">Custo Fixo</span>
-                    <span className="text-sm font-black text-slate-900">
-                      {z.custo} {currency}
-                    </span>
+                  <div className="flex items-center space-x-3" id="zone_fee_and_actions">
+                    <div className="text-right" id="zone_fee">
+                      <span className="text-[8px] text-indigo-600 uppercase tracking-wide block font-black">Custo Fixo</span>
+                      <span className="text-sm font-black text-slate-900">
+                        {z.custo} {currency}
+                      </span>
+                    </div>
+                    <button
+                      id={`btn_edit_zone_${z.id}`}
+                      onClick={() => {
+                        setEditingZone(z);
+                        setEditZoneNome(z.nome_zona);
+                        setEditZoneCusto(z.custo.toString());
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors"
+                      title="Editar zona"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))
@@ -382,6 +471,151 @@ export default function CaixinhasView() {
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs"
                 >
                   Gravar Zona
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT POCKET MODAL ================= */}
+      {editingCx && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="edit_cx_modal">
+          <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="edit_cx_content">
+            <h3 className="font-extrabold text-slate-900 text-base font-display">Editar Caixinha / Pocket</h3>
+            <form onSubmit={handleEditCaixinha} className="space-y-4" id="edit_cx_form">
+              <div className="space-y-1" id="edit_cx_nome_group">
+                <label className="text-xs text-slate-600 font-semibold">Nome da Caixinha</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nome do pocket"
+                  value={editCxNome}
+                  onChange={(e) => setEditCxNome(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              {/* Porcentagem slider if it is lucro or anuncios */}
+              {(editingCx.tipo === 'lucro' || editingCx.tipo === 'anuncios') && (
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2.5" id="edit_cx_percent_group">
+                  <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
+                    <span>Percentual de Auto-Distribuição</span>
+                    <span className="text-emerald-600 font-bold">{editCxPercent}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={editCxPercent}
+                    onChange={(e) => setEditCxPercent(parseInt(e.target.value))}
+                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                  />
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    {editingCx.tipo === 'lucro' 
+                      ? `Ao definir lucro em ${editCxPercent}%, a caixinha de Anúncios será automaticamente ajustada para ${100 - editCxPercent}%.`
+                      : `Ao definir anúncios em ${editCxPercent}%, a caixinha de Lucro será automaticamente ajustada para ${100 - editCxPercent}%.`
+                    }
+                  </p>
+                </div>
+              )}
+
+              {/* Color selectors */}
+              <div className="space-y-1.5" id="edit_cx_colors_group">
+                <label className="text-xs text-slate-600 font-semibold block">Cor Visual</label>
+                <div className="flex flex-wrap gap-2 pt-1" id="edit_cx_colors_palette">
+                  {availableColors.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditCxCor(c)}
+                      className={`w-6 h-6 rounded-full ${c} border-2 ${editCxCor === c ? 'border-slate-800 scale-110 shadow-lg' : 'border-white hover:scale-105'} transition-transform`}
+                    ></button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Icon selectors */}
+              <div className="space-y-1.5" id="edit_cx_icons_group">
+                <label className="text-xs text-slate-600 font-semibold block">Ícone</label>
+                <div className="flex gap-2 pt-1" id="edit_cx_icons_grid">
+                  {availableIcons.map(ic => (
+                    <button
+                      key={ic}
+                      type="button"
+                      onClick={() => setEditCxIcon(ic)}
+                      className={`p-2.5 rounded-xl border ${editCxIcon === ic ? 'bg-slate-100 text-emerald-600 border-emerald-500' : 'bg-slate-50 text-slate-400 border-slate-200'} transition-all`}
+                    >
+                      {getIcon(ic)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex space-x-2 pt-2" id="edit_cx_modal_actions">
+                <button
+                  type="button"
+                  onClick={() => setEditingCx(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT ZONE MODAL ================= */}
+      {editingZone && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="edit_zone_modal">
+          <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="edit_zone_content">
+            <h3 className="font-extrabold text-slate-900 text-base font-display">Editar Zona de Envio</h3>
+            <form onSubmit={handleEditZone} className="space-y-4" id="edit_zone_form">
+              <div className="space-y-1" id="edit_zone_nome_group">
+                <label className="text-xs text-slate-600 font-semibold">Nome da Zona / Província</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nome da zona"
+                  value={editZoneNome}
+                  onChange={(e) => setEditZoneNome(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="space-y-1" id="edit_zone_custo_group">
+                <label className="text-xs text-slate-600 font-semibold">Custo de Frete / Delivery</label>
+                <input
+                  type="number"
+                  required
+                  placeholder="0.00"
+                  value={editZoneCusto}
+                  onChange={(e) => setEditZoneCusto(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-2" id="edit_zone_modal_actions">
+                <button
+                  type="button"
+                  onClick={() => setEditingZone(null)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs"
+                >
+                  Salvar Zona
                 </button>
               </div>
             </form>

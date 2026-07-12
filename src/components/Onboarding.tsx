@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
 import { TrendingUp, Megaphone, ShieldCheck, ArrowRight, Sparkles, Wallet } from 'lucide-react';
-import dropflowLogo from '../assets/images/dropflow_logo_1783728024322.jpg';
+import dropflowLogo from '../assets/images/droopflow_logo_1783896707656.jpg';
 
 export default function Onboarding() {
   const { login, register, loginGoogle } = useApp();
@@ -81,13 +81,13 @@ export default function Onboarding() {
           <div className="w-12 h-12 rounded-2xl overflow-hidden border border-slate-200/50 shadow-md flex items-center justify-center bg-white" id="logo_icon">
             <img 
               src={dropflowLogo} 
-              alt="DropFlow Logo" 
+              alt="DroopFlow Logo" 
               className="w-full h-full object-cover" 
               referrerPolicy="no-referrer"
             />
           </div>
           <span className="text-2xl font-black tracking-tight text-slate-900 font-display" id="logo_text">
-            DropFlow
+            DroopFlow
           </span>
         </div>
 
@@ -120,7 +120,7 @@ export default function Onboarding() {
           {slide === 1 && (
             <div className="bg-white rounded-[32px] p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.03)] border border-slate-100 space-y-6 animate-fade-in" id="slide_1">
               <h2 className="text-xl font-bold text-slate-900 text-center leading-snug">
-                Como funciona o DropFlow?
+                Como funciona o DroopFlow?
               </h2>
               
               <div className="space-y-4" id="concept_cards">
