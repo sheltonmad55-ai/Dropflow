@@ -18,7 +18,8 @@ import {
   ChevronRight,
   ChevronLeft,
   Info,
-  Calendar
+  Calendar,
+  DollarSign
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -111,6 +112,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
 
   // Calculations
   const totalBalance = caixinhas.reduce((acc, curr) => acc + curr.saldo_atual, 0);
+  const totalFaturamento = (vendas || []).reduce((acc, curr) => acc + curr.valor_recebido, 0);
 
   // Month stats
   const todayStr = getLocalDateStr(new Date());
@@ -477,7 +479,28 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
         </div>
 
         <div className="grid grid-cols-2 gap-3" id="dash_caixinhas_cards">
-          {caixinhas.slice(0, 4).map(cx => {
+          {/* 1st Premium Card: Faturamento & Saldo Total */}
+          <div className="bg-gradient-to-br from-emerald-600 to-teal-500 text-white rounded-2xl p-4 flex flex-col justify-between space-y-4 shadow-md shadow-emerald-600/10" id="dash_caixinha_faturamento">
+            <div className="flex justify-between items-start" id="caixinha_badge_wrapper_faturamento">
+              <div className="bg-white/15 p-2 rounded-xl border border-white/10" id="caixinha_badge_icon_faturamento">
+                <DollarSign className="w-5 h-5 text-white" />
+              </div>
+              <span className="bg-white/20 text-[8px] font-black tracking-wider uppercase px-1.5 py-0.5 rounded text-white border border-white/5">
+                Geral
+              </span>
+            </div>
+            <div className="space-y-1" id="caixinha_values_faturamento">
+              <span className="text-[11px] font-semibold text-emerald-100 block truncate">Faturamento (Saldo)</span>
+              <span className="text-base font-extrabold text-white">
+                {totalBalance.toLocaleString()} <span className="text-emerald-100 text-xs font-normal">{currency}</span>
+              </span>
+              <span className="text-[9px] text-emerald-200/80 block truncate">
+                Vendas: {totalFaturamento.toLocaleString()} {currency}
+              </span>
+            </div>
+          </div>
+
+          {caixinhas.slice(0, 3).map(cx => {
             const lightColor = cx.cor.replace('bg-', 'bg-');
             return (
               <div key={cx.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition-shadow" id={`dash_caixinha_${cx.id}`}>

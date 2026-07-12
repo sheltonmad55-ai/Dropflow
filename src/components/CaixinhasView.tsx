@@ -16,12 +16,14 @@ import {
   Trash2, 
   Edit,
   X,
-  AlertTriangle
+  AlertTriangle,
+  DollarSign
 } from 'lucide-react';
 
 export default function CaixinhasView() {
   const { 
     caixinhas, 
+    vendas,
     zonasEntrega, 
     profile, 
     addCaixinha, 
@@ -29,6 +31,9 @@ export default function CaixinhasView() {
     addZonaEntrega, 
     editZonaEntrega 
   } = useApp();
+
+  const totalBalance = caixinhas.reduce((acc, curr) => acc + curr.saldo_atual, 0);
+  const totalFaturamento = (vendas || []).reduce((acc, curr) => acc + curr.valor_recebido, 0);
 
   const [subTab, setSubTab] = useState<'caixas' | 'delivery'>('caixas');
 
@@ -84,6 +89,7 @@ export default function CaixinhasView() {
       case 'Megaphone': return <Megaphone className="w-5 h-5 text-sky-600" />;
       case 'Package': return <Package className="w-5 h-5 text-amber-600" />;
       case 'Truck': return <Truck className="w-5 h-5 text-indigo-600" />;
+      case 'DollarSign': return <DollarSign className="w-5 h-5 text-emerald-600" />;
       default: return <Layers className="w-5 h-5 text-slate-500" />;
     }
   };
@@ -150,6 +156,28 @@ export default function CaixinhasView() {
           </div>
 
           <div className="grid grid-cols-1 gap-3" id="caixas_list_cards">
+            {/* 1st Premium Card: Faturamento & Saldo Total */}
+            <div className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-600 text-white rounded-2xl p-4 flex justify-between items-center shadow-lg shadow-emerald-700/15 border-none" id="cx_view_card_faturamento">
+              <div className="flex items-center space-x-3.5" id="cx_view_info_faturamento">
+                <div className="bg-white/15 p-3 rounded-xl border border-white/10" id="cx_view_badge_faturamento">
+                  <DollarSign className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-white block tracking-wide">Faturamento (Saldo Total)</span>
+                  <span className="text-[10px] text-emerald-200/90 block font-medium">
+                    Faturamento Acumulado: <span className="font-bold text-white">{totalFaturamento.toLocaleString()} {currency}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-right" id="cx_view_balance_faturamento">
+                <span className="text-[9px] text-emerald-200/90 uppercase tracking-wider block font-bold">Saldo Total</span>
+                <span className="text-lg font-black text-white block leading-tight">
+                  {totalBalance.toLocaleString()} {currency}
+                </span>
+              </div>
+            </div>
+
             {caixinhas.map(cx => {
               const lightColor = cx.cor.replace('bg-', 'bg-');
               return (
