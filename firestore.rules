@@ -242,7 +242,8 @@ service cloud.firestore {
 
     // Broadcasts Rules
     match /broadcasts/{broadcastId} {
-      allow read: if isAuth() && isValidId(broadcastId);
+      allow get: if isAuth() && isValidId(broadcastId);
+      allow list: if isAuth();
       allow write: if isAdmin() && isValidId(broadcastId);
     }
 

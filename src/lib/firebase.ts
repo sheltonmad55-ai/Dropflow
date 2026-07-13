@@ -136,6 +136,13 @@ export async function pullAllUserData(userId: string) {
   };
 }
 
+export function cleanUndefined(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return null;
+  }
+  return JSON.parse(JSON.stringify(obj));
+}
+
 export async function pushQueueToFirestore(queue: any[]) {
   if (queue.length === 0) return;
 
@@ -157,7 +164,7 @@ export async function pushQueueToFirestore(queue: any[]) {
     const docRef = doc(db, colName, docId);
 
     if (action === 'create' || action === 'update') {
-      batch.set(docRef, data, { merge: true });
+      batch.set(docRef, cleanUndefined(data), { merge: true });
     } else if (action === 'delete') {
       batch.delete(docRef);
     }

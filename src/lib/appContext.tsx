@@ -11,7 +11,8 @@ import {
   db as fDb,
   loginWithGoogle, 
   pullAllUserData, 
-  pushQueueToFirestore 
+  pushQueueToFirestore,
+  cleanUndefined
 } from './firebase.ts';
 import { 
   signInWithEmailAndPassword, 
@@ -674,7 +675,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function updateUserProfileByAdmin(targetUserId: string, updates: Partial<Profile>) {
     if (!profile || !isAdmin) return;
     try {
-      await setDoc(doc(fDb, 'profiles', targetUserId), updates, { merge: true });
+      await setDoc(doc(fDb, 'profiles', targetUserId), cleanUndefined(updates), { merge: true });
       await setDoc(doc(collection(fDb, 'admin_logs')), {
         adminEmail: auth.currentUser?.email || 'admin',
         acao: `Alterou perfil de ${targetUserId}: ${JSON.stringify(updates)}`,
