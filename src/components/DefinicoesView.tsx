@@ -965,11 +965,6 @@ export default function DefinicoesView() {
           <LogOut className="w-4 h-4" />
           <span>Sair da Conta</span>
         </button>
-      </div>"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Sair da Conta</span>
-        </button>
       </div>
 
     </div>
