@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import * as db from './db.ts';
-import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio } from '../types.ts';
+import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente } from '../types.ts';
 import { 
   auth, 
   db as fDb,
@@ -47,7 +47,7 @@ interface AppContextType {
   broadcasts: Broadcast[];
   relatorios: Relatorio[];
   allProfiles: Profile[];
-  addBroadcast: (texto: string, publicoAlvo: 'todos' | 'trial_expira_2d') => Promise<void>;
+  addBroadcast: (texto: string, publicoAlvo: 'todos' | 'trial_expira_2d', titulo?: string, link?: string, imagemUrl?: string, tipo?: 'aviso' | 'novidade') => Promise<void>;
   addRelatorio: (tipo: 'diario' | 'semanal' | 'mensal', totalVendido: number, totalGasto: number, balanco: number, progressoMetas: string, metasAtingidas: string[]) => Promise<void>;
   updateUserProfileByAdmin: (targetUserId: string, updates: Partial<Profile>) => Promise<void>;
 
@@ -58,6 +58,8 @@ interface AppContextType {
   produtos: Produto[];
   fornecedores: Fornecedor[];
   zonasEntrega: ZonaEntrega[];
+  campanhas: Campanha[];
+  despesasRecorrentes: DespesaRecorrente[];
 
   // Sync / Online State
   isOnline: boolean;
@@ -75,9 +77,20 @@ interface AppContextType {
   editZonaEntrega: (id: string, updates: Partial<ZonaEntrega>) => Promise<void>;
   
   // Caixinhas management
-  addCaixinha: (nome: string, icone: string, cor: string, percentual?: number) => Promise<void>;
+  addCaixinha: (nome: string, icone: string, cor: string, percentual?: number, auto_distribuir?: boolean) => Promise<void>;
   editCaixinha: (id: string, updates: Partial<Caixinha>) => Promise<void>;
   deleteCaixinha: (id: string) => Promise<void>;
+
+  // Campanhas management
+  addCampanha: (campanhaData: Omit<Campanha, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
+  editCampanha: (id: string, updates: Partial<Campanha>) => Promise<void>;
+  deleteCampanha: (id: string) => Promise<void>;
+
+  // Despesas Recorrentes management
+  addDespesaRecorrente: (despesaRecorrenteData: Omit<DespesaRecorrente, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
+  editDespesaRecorrente: (id: string, updates: Partial<DespesaRecorrente>) => Promise<void>;
+  deleteDespesaRecorrente: (id: string) => Promise<void>;
+  processarDespesaRecorrente: (id: string, dataEfetivacao: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -102,6 +115,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [zonasEntrega, setZonasEntrega] = useState<ZonaEntrega[]>([]);
+  const [campanhas, setCampanhas] = useState<Campanha[]>([]);
+  const [despesasRecorrentes, setDespesasRecorrentes] = useState<DespesaRecorrente[]>([]);
 
   // Sync / Online state
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -154,6 +169,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               const cachedProfile = JSON.parse(cachedProfileStr);
               setProfile(cachedProfile);
               setIsAuthenticated(true);
+              setIsLoadingAuth(false); // Speed optimization for immediate UI rendering
             } catch (err) {
               console.error("Error parsing cached profile:", err);
             }
@@ -264,6 +280,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
           );
           unsubscribesRef.current.push(unsubZonas);
 
+          // 7.5. Listen to user campanhas collection
+          const unsubCampanhas = onSnapshot(
+            query(collection(fDb, 'campanhas'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as Campanha);
+              setCampanhas(data.sort((a, b) => b.data.localeCompare(a.data)));
+              db.clearStore('campanhas').then(() => {
+                data.forEach(item => db.putItem('campanhas', item));
+              });
+            },
+            (error) => console.error("Campanhas real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubCampanhas);
+
+          // 7.6. Listen to user despesas_recorrentes collection
+          const unsubDespesasRecorrentes = onSnapshot(
+            query(collection(fDb, 'despesas_recorrentes'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as DespesaRecorrente);
+              setDespesasRecorrentes(data);
+              db.clearStore('despesas_recorrentes').then(() => {
+                data.forEach(item => db.putItem('despesas_recorrentes', item));
+              });
+            },
+            (error) => console.error("DespesasRecorrentes real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubDespesasRecorrentes);
+
           // 8. Listen to broadcasts collection
           const unsubBroadcasts = onSnapshot(
             collection(fDb, 'broadcasts'),
@@ -320,6 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setProdutos([]);
         setFornecedores([]);
         setZonasEntrega([]);
+        setCampanhas([]);
         setIsAuthenticated(false);
         localStorage.removeItem('dropflow_token');
         localStorage.removeItem('dropflow_profile');
@@ -333,6 +378,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           await db.clearStore('produtos');
           await db.clearStore('fornecedores');
           await db.clearStore('zonas_entrega');
+          await db.clearStore('campanhas');
+          await db.clearStore('despesas_recorrentes');
           await db.clearStore('sync_queue');
         } catch (err) {
           console.error("Error clearing IndexedDB on logout:", err);
@@ -367,31 +414,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function loadAllLocalData(userId: string) {
     try {
-      const dbProfiles = await db.getAll<Profile>('profiles');
+      const [
+        dbProfiles,
+        dbCaixinhas,
+        dbVendas,
+        dbDespesas,
+        dbProdutos,
+        dbFornecedores,
+        dbZonas,
+        dbCampanhas,
+        dbDespesasRecorrentes,
+        queue
+      ] = await Promise.all([
+        db.getAll<Profile>('profiles'),
+        db.getAll<Caixinha>('caixinhas'),
+        db.getAll<Venda>('vendas'),
+        db.getAll<Despesa>('despesas'),
+        db.getAll<Produto>('produtos'),
+        db.getAll<Fornecedor>('fornecedores'),
+        db.getAll<ZonaEntrega>('zonas_entrega'),
+        db.getAll<Campanha>('campanhas'),
+        db.getAll<DespesaRecorrente>('despesas_recorrentes'),
+        db.getAll<SyncQueueItem>('sync_queue')
+      ]);
+
       const currentUserProfile = dbProfiles.find(p => p.id === userId);
       if (currentUserProfile) {
         setProfile(currentUserProfile);
       }
 
-      const dbCaixinhas = await db.getAll<Caixinha>('caixinhas');
       setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
-
-      const dbVendas = await db.getAll<Venda>('vendas');
       setVendas(dbVendas.filter(v => v.user_id === userId).sort((a,b) => b.data_venda.localeCompare(a.data_venda)));
-
-      const dbDespesas = await db.getAll<Despesa>('despesas');
       setDespesas(dbDespesas.filter(d => d.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
-
-      const dbProdutos = await db.getAll<Produto>('produtos');
       setProdutos(dbProdutos.filter(p => p.user_id === userId));
-
-      const dbFornecedores = await db.getAll<Fornecedor>('fornecedores');
       setFornecedores(dbFornecedores.filter(f => f.user_id === userId));
-
-      const dbZonas = await db.getAll<ZonaEntrega>('zonas_entrega');
       setZonasEntrega(dbZonas.filter(z => z.user_id === userId));
+      setCampanhas(dbCampanhas.filter(c => c.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
+      setDespesasRecorrentes(dbDespesasRecorrentes.filter(dr => dr.user_id === userId));
 
-      const queue = await db.getAll<SyncQueueItem>('sync_queue');
       if (queue.length > 0) {
         setSyncStatus('pending');
       }
@@ -628,16 +688,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await updateProfile({ plano: 'pro' });
   }
 
-  async function addBroadcast(texto: string, publicoAlvo: 'todos' | 'trial_expira_2d') {
+  async function addBroadcast(texto: string, publicoAlvo: 'todos' | 'trial_expira_2d', titulo?: string, link?: string, imagemUrl?: string, tipo?: 'aviso' | 'novidade') {
     if (!profile) return;
     const newBroadcast = {
       id: crypto.randomUUID(),
       texto,
       publico_alvo: publicoAlvo,
-      criado_em: new Date().toISOString()
+      criado_em: new Date().toISOString(),
+      titulo,
+      link,
+      imagem_url: imagemUrl,
+      tipo: tipo || 'aviso'
     };
     try {
-      await setDoc(doc(fDb, 'broadcasts', newBroadcast.id), newBroadcast);
+      await setDoc(doc(fDb, 'broadcasts', newBroadcast.id), cleanUndefined(newBroadcast));
       await setDoc(doc(collection(fDb, 'admin_logs')), {
         adminEmail: auth.currentUser?.email || 'admin',
         acao: `Criou aviso: "${texto}" para público: ${publicoAlvo}`,
@@ -748,12 +812,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       distribution[deliveryCx.id] = shippingCost;
     }
 
-    // 3. Distribute remainder between Ads and Profit
+    // 3. Distribute remainder: first to personalized auto-distribute pockets, then between Ads and Profit
     const remainder = value - purchaseCost - shippingCost;
     if (remainder > 0) {
+      // Find personalized pockets with auto_distribuir: true and percentual_padrao > 0
+      const autoDists = caixinhas.filter(c => c.tipo === 'personalizado' && c.auto_distribuir && (c.percentual_padrao || 0) > 0);
+      
+      let allocatedToCustom = 0;
+      autoDists.forEach(cx => {
+        const pct = cx.percentual_padrao || 0;
+        const amt = Math.round(remainder * (pct / 100) * 100) / 100;
+        distribution[cx.id] = amt;
+        allocatedToCustom += amt;
+      });
+
+      const actualRemainder = Math.max(0, remainder - allocatedToCustom);
+
       const adsPercent = vendaData.custom_anuncios_percent !== undefined ? vendaData.custom_anuncios_percent : profile.anuncios_percent;
-      const adsAmount = Math.round(remainder * (adsPercent / 100) * 100) / 100;
-      const profitAmount = Math.round((remainder - adsAmount) * 100) / 100;
+      const adsAmount = Math.round(actualRemainder * (adsPercent / 100) * 100) / 100;
+      const profitAmount = Math.round((actualRemainder - adsAmount) * 100) / 100;
 
       if (anunciosCx) {
         distribution[anunciosCx.id] = adsAmount;
@@ -765,6 +842,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // In case of loss or negative margin, write 0 to Ads and Profit
       if (anunciosCx) distribution[anunciosCx.id] = 0;
       if (lucrosCx) distribution[lucrosCx.id] = 0;
+      
+      const autoDists = caixinhas.filter(c => c.tipo === 'personalizado' && c.auto_distribuir);
+      autoDists.forEach(cx => {
+        distribution[cx.id] = 0;
+      });
     }
 
     // Prepare full venda object
@@ -1064,7 +1146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   // Caixinhas management
-  async function addCaixinha(nome: string, icone: string, cor: string, percentual?: number) {
+  async function addCaixinha(nome: string, icone: string, cor: string, percentual?: number, auto_distribuir?: boolean) {
     if (!profile) return;
     const id = crypto.randomUUID();
     const newCx: Caixinha = {
@@ -1076,6 +1158,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       tipo: 'personalizado',
       percentual_padrao: percentual,
       saldo_atual: 0,
+      auto_distribuir: auto_distribuir || false,
       criado_em: new Date().toISOString()
     };
 
@@ -1112,6 +1195,113 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncWithServer();
   }
 
+  // Campanhas management
+  async function addCampanha(campanhaData: Omit<Campanha, 'id' | 'user_id' | 'criado_em'>) {
+    if (!profile) return;
+    const id = crypto.randomUUID();
+    const newCampanha: Campanha = {
+      ...campanhaData,
+      id,
+      user_id: profile.id,
+      criado_em: new Date().toISOString()
+    };
+
+    await db.putItem('campanhas', newCampanha);
+    await db.addToSyncQueue({ type: 'campanha', action: 'create', data: newCampanha });
+    setCampanhas(prev => [newCampanha, ...prev].sort((a,b) => b.data.localeCompare(a.data)));
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function editCampanha(id: string, updates: Partial<Campanha>) {
+    const original = campanhas.find(c => c.id === id);
+    if (!original) return;
+
+    const updated = { ...original, ...updates };
+    await db.putItem('campanhas', updated);
+    await db.addToSyncQueue({ type: 'campanha', action: 'update', data: updated });
+    setCampanhas(prev => prev.map(c => c.id === id ? updated : c).sort((a,b) => b.data.localeCompare(a.data)));
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function deleteCampanha(id: string) {
+    const original = campanhas.find(c => c.id === id);
+    if (!original) return;
+
+    await db.deleteItem('campanhas', id);
+    await db.addToSyncQueue({ type: 'campanha', action: 'delete', data: original });
+    setCampanhas(prev => prev.filter(c => c.id !== id));
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  // Despesas Recorrentes management
+  async function addDespesaRecorrente(despesaRecorrenteData: Omit<DespesaRecorrente, 'id' | 'user_id' | 'criado_em'>) {
+    if (!profile) return;
+    const id = crypto.randomUUID();
+    const newDR: DespesaRecorrente = {
+      ...despesaRecorrenteData,
+      id,
+      user_id: profile.id,
+      criado_em: new Date().toISOString()
+    };
+
+    await db.putItem('despesas_recorrentes', newDR);
+    await db.addToSyncQueue({ type: 'despesa_recorrente', action: 'create', data: newDR });
+    setDespesasRecorrentes(prev => [...prev, newDR]);
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function editDespesaRecorrente(id: string, updates: Partial<DespesaRecorrente>) {
+    const original = despesasRecorrentes.find(dr => dr.id === id);
+    if (!original) return;
+
+    const updated = { ...original, ...updates };
+    await db.putItem('despesas_recorrentes', updated);
+    await db.addToSyncQueue({ type: 'despesa_recorrente', action: 'update', data: updated });
+    setDespesasRecorrentes(prev => prev.map(dr => dr.id === id ? updated : dr));
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function deleteDespesaRecorrente(id: string) {
+    const original = despesasRecorrentes.find(dr => dr.id === id);
+    if (!original) return;
+
+    await db.deleteItem('despesas_recorrentes', id);
+    await db.addToSyncQueue({ type: 'despesa_recorrente', action: 'delete', data: original });
+    setDespesasRecorrentes(prev => prev.filter(dr => dr.id !== id));
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function processarDespesaRecorrente(id: string, dataEfetivacao: string) {
+    const dr = despesasRecorrentes.find(item => item.id === id);
+    if (!dr) return;
+
+    // 1. Registra a despesa real vinculada a caixinha selecionada
+    await addDespesa({
+      descricao: `${dr.descricao} (Recorrente)`,
+      valor: dr.valor,
+      caixinha_id: dr.caixinha_id,
+      categoria: dr.categoria,
+      data: dataEfetivacao // YYYY-MM-DD
+    });
+
+    // 2. Atualiza a data de último processamento da despesa recorrente
+    await editDespesaRecorrente(dr.id, {
+      ultimo_processado: dataEfetivacao
+    });
+  }
+
   return (
     <AppContext.Provider value={{
       profile,
@@ -1139,6 +1329,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       produtos,
       fornecedores,
       zonasEntrega,
+      campanhas,
+      despesasRecorrentes,
 
       isOnline,
       syncStatus,
@@ -1155,7 +1347,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       addCaixinha,
       editCaixinha,
-      deleteCaixinha
+      deleteCaixinha,
+
+      addCampanha,
+      editCampanha,
+      deleteCampanha,
+
+      addDespesaRecorrente,
+      editDespesaRecorrente,
+      deleteDespesaRecorrente,
+      processarDespesaRecorrente
     }}>
       {children}
     </AppContext.Provider>

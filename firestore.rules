@@ -124,6 +124,25 @@ service cloud.firestore {
         && (!('criado_em' in data) || data.criado_em is string);
     }
 
+    // Campanhas validation helper
+    function isValidCampanha(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
+        && (!('plataforma' in data) || data.plataforma is string)
+        && (!('orcamento' in data) || data.orcamento is number)
+        && (!('gasto' in data) || data.gasto is number)
+        && (!('cliques' in data) || data.cliques is number)
+        && (!('impressoes' in data) || data.impressoes is number)
+        && (!('conversoes' in data) || data.conversoes is number)
+        && (!('valor_vendas' in data) || data.valor_vendas is number)
+        && (!('data' in data) || data.data is string)
+        && (!('criado_em' in data) || data.criado_em is string)
+        && (!('orcamento_maximo' in data) || data.orcamento_maximo is number)
+        && (!('orcamento_usd' in data) || data.orcamento_usd is bool)
+        && (!('metricas_diarias' in data) || data.metricas_diarias is list);
+    }
+
     // Test collection for boot validation
     match /test/connection {
       allow read: if true;
@@ -233,6 +252,22 @@ service cloud.firestore {
         && isOwner(request.resource.data.user_id)
         && isValidZona(request.resource.data);
       allow delete: if isAuth() && isValidId(zonaId) && isOwner(resource.data.user_id);
+    }
+
+    // Campanhas Rules
+    match /campanhas/{campanhaId} {
+      allow get: if isAuth() && isValidId(campanhaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(campanhaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidCampanha(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(campanhaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidCampanha(request.resource.data);
+      allow delete: if isAuth() && isValidId(campanhaId) && isOwner(resource.data.user_id);
     }
 
     // Admin Logs Rules

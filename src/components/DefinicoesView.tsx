@@ -31,10 +31,15 @@ import {
   Moon,
   Volume2,
   VolumeX,
-  Bell
+  Bell,
+  Play
 } from 'lucide-react';
 
-export default function DefinicoesView() {
+interface DefinicoesViewProps {
+  onStartTour?: () => void;
+}
+
+export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const { 
     profile, 
     updateProfile, 
@@ -444,6 +449,27 @@ export default function DefinicoesView() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Tour Replay Card */}
+      <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-100/40 dark:border-emerald-950/20 rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm" id="definicoes_tour_replay_card">
+        <div className="space-y-1" id="tour_replay_text">
+          <h3 className="font-extrabold text-xs text-slate-900 dark:text-slate-50 flex items-center font-display gap-1.5">
+            <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse" /> Tour Guiado de Boas-Vindas
+          </h3>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
+            Aprenda a utilizar os principais recursos do DroopFlow, incluindo a gestão de Pockets (caixinhas), cálculo de ROAS e controlo de margens.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onStartTour}
+          className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-md shadow-emerald-600/10 transition-colors flex items-center justify-center space-x-1.5 cursor-pointer shrink-0"
+          id="btn_replay_tour"
+        >
+          <Play className="w-3.5 h-3.5 fill-current" />
+          <span>Iniciar Tour</span>
+        </button>
       </div>
 
       {/* 1. Profile Panel */}

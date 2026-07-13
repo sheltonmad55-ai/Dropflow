@@ -114,6 +114,29 @@
         "criado_em": { "type": "string" }
       },
       "required": ["id", "user_id", "nome_zona", "custo", "criado_em"]
+    },
+    "Campanha": {
+      "title": "Campanha",
+      "description": "Marketing campaign performance metrics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome": { "type": "string" },
+        "plataforma": { "type": "string" },
+        "orcamento": { "type": "number" },
+        "gasto": { "type": "number" },
+        "cliques": { "type": "integer" },
+        "impressoes": { "type": "integer" },
+        "conversoes": { "type": "integer" },
+        "valor_vendas": { "type": "number" },
+        "data": { "type": "string" },
+        "criado_em": { "type": "string" },
+        "orcamento_maximo": { "type": "number" },
+        "orcamento_usd": { "type": "boolean" },
+        "metricas_diarias": { "type": "array" }
+      },
+      "required": ["id", "user_id", "nome", "plataforma", "orcamento", "gasto", "cliques", "impressoes", "conversoes", "valor_vendas", "data", "criado_em"]
     }
   },
   "firestore": {
@@ -144,6 +167,10 @@
     "/zonas_entrega/{zonaId}": {
       "schema": "ZonaEntrega",
       "description": "Delivery zones"
+    },
+    "/campanhas/{campanhaId}": {
+      "schema": "Campanha",
+      "description": "Ad campaign performance metrics"
     }
   }
 }

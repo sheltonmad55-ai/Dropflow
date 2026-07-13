@@ -33,6 +33,10 @@ export interface Broadcast {
   texto: string;
   publico_alvo: 'todos' | 'trial_expira_2d';
   criado_em: string;
+  titulo?: string;
+  link?: string;
+  imagem_url?: string;
+  tipo?: 'aviso' | 'novidade';
 }
 
 export interface Relatorio {
@@ -59,6 +63,21 @@ export interface Caixinha {
   tipo: CaixinhaTipo;
   percentual_padrao?: number; // percent of remainder, if personalized and has distribution
   saldo_atual: number;
+  criado_em: string;
+  auto_distribuir?: boolean; // se vai receber de forma automatica quando houver vendas
+}
+
+export interface DespesaRecorrente {
+  id: string;
+  user_id: string;
+  descricao: string;
+  valor: number;
+  caixinha_id: string;
+  categoria: string;
+  frequencia: 'mensal' | 'semanal';
+  dia_vencimento: number; // dia 1-31 para mensal, ou 0-6 para semanal
+  ultimo_processado?: string; // YYYY-MM-DD
+  ativa: boolean;
   criado_em: string;
 }
 
@@ -126,9 +145,38 @@ export interface ZonaEntrega {
   criado_em: string;
 }
 
+export interface MetricaDiaria {
+  id: string;
+  data: string; // YYYY-MM-DD
+  gasto: number;
+  cliques: number;
+  impressoes: number;
+  conversoes: number;
+  valor_vendas: number;
+  observacao?: string;
+}
+
+export interface Campanha {
+  id: string;
+  user_id: string;
+  nome: string;
+  plataforma: string;
+  orcamento: number;
+  gasto: number;
+  cliques: number;
+  impressoes: number;
+  conversoes: number;
+  valor_vendas: number;
+  data: string; // YYYY-MM-DD
+  criado_em: string;
+  orcamento_maximo?: number;
+  orcamento_usd?: boolean;
+  metricas_diarias?: MetricaDiaria[];
+}
+
 export interface SyncQueueItem {
   id: string;
-  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona';
+  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente';
   action: 'create' | 'update' | 'delete';
   data: any;
   timestamp: number;

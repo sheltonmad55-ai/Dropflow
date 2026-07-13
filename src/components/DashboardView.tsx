@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   Info,
   Calendar,
-  DollarSign
+  DollarSign,
+  Sparkles
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -34,7 +35,8 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     caixinhas, 
     vendas, 
     despesas,
-    produtos
+    produtos,
+    broadcasts
   } = useApp();
 
   const currency = profile?.moeda || 'MT';
@@ -84,31 +86,59 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     return days[date.getDay()];
   };
 
-  const getDaysArray = (selectedStr: string) => {
+  // State for focused date selection
+  const [selectedDateStr, setSelectedDateStr] = React.useState(() => {
+    return getLocalDateStr(new Date());
+  });
+
+  // Pivot date to anchor the stable 7-day strip
+  const [pivotDateStr, setPivotDateStr] = React.useState(() => {
+    return getLocalDateStr(new Date());
+  });
+
+  // Stable days array centered on or ending at the pivotDateStr
+  const getDaysArray = (pivotStr: string) => {
     const days = [];
-    const parts = selectedStr.split('-');
-    const selectedDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    const today = new Date();
+    const parts = pivotStr.split('-');
+    const pivotDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
     
-    const diffTime = today.getTime() - selectedDate.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    // If selected is in the last 7 days, end at Today.
-    // Else end at selectedDate itself to show context leading up to it.
-    const end = (diffDays <= 6 && diffDays >= 0) ? today : selectedDate;
-    
+    // We display 7 days ending with pivotDate
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(end.getTime());
-      d.setDate(end.getDate() - i);
+      const d = new Date(pivotDate.getTime());
+      d.setDate(pivotDate.getDate() - i);
       days.push(d);
     }
     return days;
   };
 
-  // State for focused date selection
-  const [selectedDateStr, setSelectedDateStr] = React.useState(() => {
-    return getLocalDateStr(new Date());
-  });
+  const handleSelectDate = (dateStr: string) => {
+    setSelectedDateStr(dateStr);
+    
+    // Update pivot if the selected date is not in the currently displayed 7 days
+    const currentDays = getDaysArray(pivotDateStr).map(d => getLocalDateStr(d));
+    if (!currentDays.includes(dateStr)) {
+      setPivotDateStr(dateStr);
+    }
+  };
+
+  const shiftPivotDate = (daysCount: number) => {
+    const parts = pivotDateStr.split('-');
+    const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    date.setDate(date.getDate() + daysCount);
+    
+    const today = new Date();
+    if (date > today) {
+      setPivotDateStr(getLocalDateStr(today));
+    } else {
+      setPivotDateStr(getLocalDateStr(date));
+    }
+  };
+
+  const jumpToToday = () => {
+    const todayStr = getLocalDateStr(new Date());
+    setSelectedDateStr(todayStr);
+    setPivotDateStr(todayStr);
+  };
 
   // Calculations
   const totalBalance = caixinhas.reduce((acc, curr) => acc + curr.saldo_atual, 0);
@@ -194,6 +224,17 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 3);
 
+  const userBroadcasts = (broadcasts || []).filter(b => {
+    if (b.publico_alvo === 'todos') return true;
+    if (b.publico_alvo === 'trial_expira_2d') {
+      if (!profile || profile.plano !== 'trial' || !profile.trial_expires_at) return false;
+      const diff = new Date(profile.trial_expires_at).getTime() - Date.now();
+      const days = diff / (1000 * 60 * 60 * 24);
+      return days <= 2 && days >= 0;
+    }
+    return false;
+  }).sort((a,b) => b.criado_em.localeCompare(a.criado_em));
+
   return (
     <div className="space-y-6" id="dashboard_view">
       
@@ -213,6 +254,72 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           )}
         </div>
       </div>
+
+      {/* Broadcast Banners & News */}
+      {userBroadcasts.length > 0 && (
+        <div className="space-y-3 animate-fade-in" id="user_broadcasts_container">
+          {userBroadcasts.map(b => (
+            <div 
+              key={b.id} 
+              className={`p-5 rounded-3xl border shadow-sm relative overflow-hidden transition-all ${
+                b.tipo === 'novidade' 
+                  ? 'bg-gradient-to-r from-indigo-50 via-sky-50 to-white border-indigo-100/60 dark:from-slate-900 dark:via-indigo-950/20 dark:to-slate-900 dark:border-indigo-900/50' 
+                  : 'bg-amber-50/50 border-amber-100/60 dark:bg-amber-950/10 dark:border-amber-900/40 text-slate-700 dark:text-slate-300'
+              }`}
+              id={`broadcast_banner_${b.id}`}
+            >
+              <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center relative z-10">
+                <div className="flex gap-3 items-start flex-1">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                    b.tipo === 'novidade' ? 'bg-indigo-600 text-white' : 'bg-amber-500/20 text-amber-700'
+                  }`}>
+                    {b.tipo === 'novidade' ? <Sparkles className="w-4 h-4" /> : <Megaphone className="w-4 h-4" />}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                        b.tipo === 'novidade' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {b.tipo === 'novidade' ? 'Novidade' : 'Aviso'}
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-bold">
+                        {new Date(b.criado_em).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {b.titulo && (
+                      <h4 className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">{b.titulo}</h4>
+                    )}
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-semibold">{b.texto}</p>
+                  </div>
+                </div>
+
+                {b.link && (
+                  <a 
+                    href={b.link} 
+                    target="_blank" 
+                    referrerPolicy="no-referrer" 
+                    rel="noopener noreferrer"
+                    className="bg-indigo-600 text-white font-black text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl hover:bg-indigo-500 transition-colors shadow-md shadow-indigo-600/10 shrink-0 text-center"
+                  >
+                    Saber Mais
+                  </a>
+                )}
+              </div>
+
+              {b.imagem_url && (
+                <div className="mt-3.5 rounded-2xl overflow-hidden border border-slate-200/50 dark:border-slate-800 max-h-56">
+                  <img 
+                    src={b.imagem_url} 
+                    alt={b.titulo || 'Mídia da novidade'} 
+                    className="w-full h-full object-cover" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Hero: Metrics Grid at the top */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="top_metrics_grid">
@@ -316,72 +423,103 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             </p>
           </div>
           
-          {/* Custom Date Selector Trigger */}
-          <div className="relative shrink-0" id="custom_date_trigger_wrapper">
-            <button className="flex items-center space-x-1 bg-slate-50 border border-slate-200/60 hover:bg-slate-100 text-slate-700 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
-              <span>Outra Data</span>
+          {/* Custom Date Selector Trigger & Today buttons */}
+          <div className="flex items-center space-x-2 shrink-0" id="calendar_actions_wrapper">
+            <button
+              onClick={jumpToToday}
+              className="bg-emerald-50 border border-emerald-100/50 hover:bg-emerald-100 text-emerald-700 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              id="btn_jump_to_today"
+            >
+              Hoje
             </button>
-            <input
-              type="date"
-              value={selectedDateStr}
-              max={getLocalDateStr(new Date())} // restrict choosing future dates
-              onChange={(e) => {
-                if (e.target.value) {
-                  setSelectedDateStr(e.target.value);
-                }
-              }}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-            />
+
+            <div className="relative shrink-0" id="custom_date_trigger_wrapper">
+              <button className="flex items-center space-x-1 bg-slate-50 border border-slate-200/60 hover:bg-slate-100 text-slate-700 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>Outra Data</span>
+              </button>
+              <input
+                type="date"
+                value={selectedDateStr}
+                max={getLocalDateStr(new Date())} // restrict choosing future dates
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleSelectDate(e.target.value);
+                  }
+                }}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              />
+            </div>
           </div>
         </div>
 
-        {/* 7-Day Carousel Strip */}
-        <div className="grid grid-cols-7 gap-1.5" id="calendar_days_grid">
-          {getDaysArray(selectedDateStr).map((dayDate, idx) => {
-            const dayStr = getLocalDateStr(dayDate);
-            const isSelected = dayStr === selectedDateStr;
-            const isToday = dayStr === getLocalDateStr(new Date());
-            
-            // Check transactions for the heat-dot indicators
-            const hasSales = vendas.some(v => v.data_venda === dayStr);
-            const hasExp = despesas.some(d => d.data === dayStr);
+        {/* 7-Day Carousel Strip wrapped with stable Week Navigators */}
+        <div className="flex items-center space-x-1" id="calendar_strip_wrapper">
+          <button
+            type="button"
+            onClick={() => shiftPivotDate(-7)}
+            className="p-2 bg-slate-50 border border-slate-200/50 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            title="Semana Anterior"
+            id="btn_prev_week"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-500" />
+          </button>
 
-            return (
-              <button
-                key={idx}
-                onClick={() => setSelectedDateStr(dayStr)}
-                className={`flex flex-col items-center justify-between py-2 px-1 rounded-xl transition-all cursor-pointer select-none ${
-                  isSelected 
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                    : 'bg-slate-50/60 hover:bg-slate-50 text-slate-700 border border-slate-100/50'
-                }`}
-                style={{ minHeight: '60px' }}
-                id={`calendar_day_btn_${dayStr}`}
-              >
-                <span className={`text-[8px] font-extrabold uppercase ${isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
-                  {getDayName(dayDate)}
-                </span>
-                
-                <span className="text-xs font-black leading-none">
-                  {dayDate.getDate()}
-                </span>
+          <div className="flex-1 grid grid-cols-7 gap-1.5" id="calendar_days_grid">
+            {getDaysArray(pivotDateStr).map((dayDate, idx) => {
+              const dayStr = getLocalDateStr(dayDate);
+              const isSelected = dayStr === selectedDateStr;
+              
+              // Check transactions for the heat-dot indicators
+              const hasSales = vendas.some(v => v.data_venda === dayStr);
+              const hasExp = despesas.some(d => d.data === dayStr);
 
-                {/* Heat-dot indicators */}
-                <div className="flex space-x-0.5 items-center justify-center h-1 mt-1">
-                  {hasSales && (
-                    <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-400'}`} />
-                  )}
-                  {hasExp && (
-                    <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-amber-200' : 'bg-rose-500'}`} />
-                  )}
-                  {!hasSales && !hasExp && (
-                    <span className="w-1 h-1 rounded-full bg-transparent" />
-                  )}
-                </div>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedDateStr(dayStr)}
+                  className={`flex flex-col items-center justify-between py-2 px-1 rounded-xl transition-all cursor-pointer select-none ${
+                    isSelected 
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
+                      : 'bg-slate-50/60 hover:bg-slate-50 text-slate-700 border border-slate-100/50'
+                  }`}
+                  style={{ minHeight: '60px' }}
+                  id={`calendar_day_btn_${dayStr}`}
+                >
+                  <span className={`text-[8px] font-extrabold uppercase ${isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
+                    {getDayName(dayDate)}
+                  </span>
+                  
+                  <span className="text-xs font-black leading-none">
+                    {dayDate.getDate()}
+                  </span>
+
+                  {/* Heat-dot indicators */}
+                  <div className="flex space-x-0.5 items-center justify-center h-1 mt-1">
+                    {hasSales && (
+                      <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-400'}`} />
+                    )}
+                    {hasExp && (
+                      <span className={`w-1 h-1 rounded-full ${isSelected ? 'bg-amber-200' : 'bg-rose-500'}`} />
+                    )}
+                    {!hasSales && !hasExp && (
+                      <span className="w-1 h-1 rounded-full bg-transparent" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => shiftPivotDate(7)}
+            className="p-2 bg-slate-50 border border-slate-200/50 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+            title="Semana Seguinte"
+            id="btn_next_week"
+          >
+            <ChevronRight className="w-4 h-4 text-slate-500" />
+          </button>
         </div>
 
         {/* Selected Day Bento Stats Grid */}

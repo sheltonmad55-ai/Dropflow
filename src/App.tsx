@@ -9,6 +9,7 @@ import Onboarding from './components/Onboarding.tsx';
 import DashboardView from './components/DashboardView.tsx';
 import CaixinhasView from './components/CaixinhasView.tsx';
 import VendasView from './components/VendasView.tsx';
+import CampanhasView from './components/CampanhasView.tsx';
 import RelatoriosView from './components/RelatoriosView.tsx';
 import DefinicoesView from './components/DefinicoesView.tsx';
 import AdminView from './components/AdminView.tsx';
@@ -16,6 +17,7 @@ import MetasView from './components/MetasView.tsx';
 import VendaModal from './components/VendaModal.tsx';
 import DespesaModal from './components/DespesaModal.tsx';
 import { motion, AnimatePresence } from 'motion/react';
+import WelcomeTour from './components/WelcomeTour.tsx';
 import dropflowLogo from './assets/images/droopflow_logo_1783896707656.jpg';
 
 import { 
@@ -23,6 +25,7 @@ import {
   Layers, 
   DollarSign, 
   BarChart2, 
+  Megaphone,
   Settings, 
   Plus, 
   ArrowDownRight, 
@@ -54,6 +57,22 @@ function AppContent() {
 
   // Quick Action Menu Trigger (for adding sales or expenses)
   const [showQuickMenu, setShowQuickMenu] = useState(false);
+
+  // Tour Guide State
+  const [isTourOpen, setIsTourOpen] = useState(false);
+
+  // Auto-start tour for new users on mount
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const tourCompleted = localStorage.getItem('dropflow_tour_completed');
+      if (tourCompleted !== 'true') {
+        const timer = setTimeout(() => {
+          setIsTourOpen(true);
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isAuthenticated]);
 
   // 1. Loading Splash Screen
   if (isLoadingAuth) {
@@ -139,6 +158,18 @@ function AppContent() {
             </button>
 
             <button
+              onClick={() => setActiveTab('campanhas')}
+              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'campanhas' 
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
+              }`}
+            >
+              <Megaphone className="w-4 h-4 stroke-[2.5]" />
+              <span>Campanhas</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('relatorios')}
               className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'relatorios' 
@@ -175,6 +206,15 @@ function AppContent() {
                 <span>Admin</span>
               </button>
             )}
+
+            <button
+              id="sidebar_btn_tour"
+              onClick={() => setIsTourOpen(true)}
+              className="w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 border border-transparent hover:border-amber-100/30 dark:hover:border-amber-900/10"
+            >
+              <Sparkles className="w-4 h-4 stroke-[2.5] text-amber-500 animate-pulse animate-none" />
+              <span>Tour Guiado</span>
+            </button>
 
             <button
               onClick={() => setActiveTab('definicoes')}
@@ -228,6 +268,7 @@ function AppContent() {
               {activeTab === 'dashboard' ? 'Painel de Controlo' :
                activeTab === 'caixinhas' ? 'Gestão de Pockets' :
                activeTab === 'vendas' ? 'Lista de Vendas' :
+               activeTab === 'campanhas' ? 'Campanhas de Anúncios' :
                activeTab === 'relatorios' ? 'Relatórios Financeiros' :
                activeTab === 'metas' ? 'Metas de Vendas' :
                activeTab === 'admin' ? 'Painel de Admin' : 'Configurações'}
@@ -240,6 +281,7 @@ function AppContent() {
               {activeTab === 'dashboard' ? 'Início' :
                activeTab === 'caixinhas' ? 'Pockets' :
                activeTab === 'vendas' ? 'Operações' :
+               activeTab === 'campanhas' ? 'Campanhas' :
                activeTab === 'relatorios' ? 'Relatórios' :
                activeTab === 'metas' ? 'Metas' :
                activeTab === 'admin' ? 'Admin' : 'Opções'}
@@ -267,10 +309,13 @@ function AppContent() {
               )}
               {activeTab === 'caixinhas' && <CaixinhasView />}
               {activeTab === 'vendas' && <VendasView />}
+              {activeTab === 'campanhas' && <CampanhasView />}
               {activeTab === 'relatorios' && <RelatoriosView />}
               {activeTab === 'metas' && <MetasView />}
               {activeTab === 'admin' && <AdminView />}
-              {activeTab === 'definicoes' && <DefinicoesView />}
+              {activeTab === 'definicoes' && (
+                <DefinicoesView onStartTour={() => setIsTourOpen(true)} />
+              )}
             </motion.div>
           </AnimatePresence>
         </main>
@@ -347,6 +392,15 @@ function AppContent() {
           </button>
 
           <button
+            id="nav_campanhas"
+            onClick={() => { setActiveTab('campanhas'); setShowQuickMenu(false); }}
+            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'campanhas' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            <Megaphone className="w-5 h-5" />
+            <span className="text-[10px] font-semibold">Campanhas</span>
+          </button>
+
+          <button
             id="nav_relatorios"
             onClick={() => { setActiveTab('relatorios'); setShowQuickMenu(false); }}
             className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'relatorios' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
@@ -390,6 +444,14 @@ function AppContent() {
       {/* Global Form Modals */}
       <VendaModal isOpen={isVendaOpen} onClose={() => setIsVendaOpen(false)} />
       <DespesaModal isOpen={isDespesaOpen} onClose={() => setIsDespesaOpen(false)} />
+
+      {/* Welcome Guided Onboarding Tour */}
+      <WelcomeTour 
+        isOpen={isTourOpen} 
+        onClose={() => setIsTourOpen(false)} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+      />
     </div>
   );
 }

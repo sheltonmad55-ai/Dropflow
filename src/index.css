@@ -9,9 +9,87 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+:root {
+  /* Core Colors */
+  --bg-app: #f8fafc; /* bg-slate-50 */
+  --bg-card: #ffffff; /* bg-white */
+  --bg-panel: #f1f5f9; /* bg-slate-100 */
+  --bg-input: #ffffff; /* white input */
+  --placeholder-color: #94a3b8; /* slate-400 */
+  
+  /* Borders */
+  --border-primary: #f1f5f9; /* border-slate-100 */
+  --border-secondary: #e2e8f0; /* border-slate-200 */
+  --border-secondary-rgb: 226, 232, 240;
+  
+  /* Text */
+  --text-900: #0f172a; /* text-slate-900 */
+  --text-800: #1e293b; /* text-slate-800 */
+  --text-700: #334155; /* text-slate-700 */
+  --text-600: #475569; /* text-slate-600 */
+  --text-500: #64748b; /* text-slate-500 */
+  --text-400: #94a3b8; /* text-slate-400 */
+  
+  /* Interactive Backgrounds */
+  --hover-bg-100: #f1f5f9;
+  --hover-bg-50: #f8fafc;
+  
+  /* Shadows and Special Backgrounds */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  --bg-slate-900-40: rgba(15, 23, 42, 0.4);
+  
+  /* Semitransparent Colors */
+  --bg-slate-50-70: rgba(248, 250, 252, 0.7);
+  --bg-slate-50-60: rgba(248, 250, 252, 0.6);
+  --bg-slate-50-50: rgba(248, 250, 252, 0.5);
+  --bg-slate-50-20: rgba(248, 250, 252, 0.2);
+}
+
+.dark {
+  /* Core Colors */
+  --bg-app: #020617; /* bg-slate-950 */
+  --bg-card: #0f172a; /* bg-slate-900 */
+  --bg-panel: #0f172a; /* bg-slate-900 */
+  --bg-input: #020617; /* bg-slate-950 */
+  --placeholder-color: #64748b; /* slate-500 */
+  
+  /* Borders */
+  --border-primary: #1e293b; /* border-slate-800 */
+  --border-secondary: #1e293b; /* border-slate-800 */
+  --border-secondary-rgb: 30, 41, 59;
+  
+  /* Text */
+  --text-900: #f8fafc; /* text-slate-50 */
+  --text-800: #f1f5f9; /* text-slate-100 */
+  --text-700: #e2e8f0; /* text-slate-200 */
+  --text-600: #cbd5e1; /* text-slate-300 */
+  --text-500: #94a3b8; /* text-slate-400 */
+  --text-400: #64748b; /* text-slate-500 */
+  
+  /* Interactive Backgrounds */
+  --hover-bg-100: #1e293b;
+  --hover-bg-50: #0f172a;
+  
+  /* Shadows and Special Backgrounds */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+  --bg-slate-900-40: rgba(2, 6, 23, 0.7);
+  
+  /* Semitransparent Colors */
+  --bg-slate-50-70: rgba(15, 23, 42, 0.7);
+  --bg-slate-50-60: rgba(15, 23, 42, 0.6);
+  --bg-slate-50-50: rgba(2, 6, 23, 0.5);
+  --bg-slate-50-20: rgba(15, 23, 42, 0.2);
+  
+  color-scheme: dark;
+}
+
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800 font-sans antialiased dark:bg-slate-950 dark:text-slate-100;
+    background-color: var(--bg-app);
+    color: var(--text-800);
+    @apply font-sans antialiased;
   }
 }
 
@@ -27,105 +105,112 @@
 
 /* Custom background for general panels mapped to a gorgeous light slate */
 .bg-slate-850 {
-  background-color: rgb(248, 250, 252); /* bg-slate-50 */
+  background-color: var(--bg-app);
 }
 
 /* Global Dark Mode Style Mapping overrides to ensure absolute interface consistency */
-.dark {
-  color-scheme: dark;
-}
-
-/* Override input fields globally in dark mode for a pristine experience */
 .dark input, 
 .dark select, 
 .dark textarea {
-  background-color: #020617 !important; /* bg-slate-950 */
-  color: #f8fafc !important; /* text-slate-50 */
-  border-color: #1e293b !important; /* border-slate-800 */
+  background-color: var(--bg-input) !important;
+  color: var(--text-900) !important;
+  border-color: var(--border-secondary) !important;
 }
 
 .dark input::placeholder, 
 .dark textarea::placeholder {
-  color: #64748b !important; /* placeholder-slate-500 */
+  color: var(--placeholder-color) !important;
 }
 
 /* Standard panel / modal container backgrounds */
 .dark .bg-white {
-  background-color: #0f172a !important; /* bg-slate-900 */
-  color: #f8fafc !important;
+  background-color: var(--bg-card) !important;
+  color: var(--text-900) !important;
 }
 
 .dark .bg-slate-50 {
-  background-color: #020617 !important; /* bg-slate-950 */
-  color: #e2e8f0 !important;
+  background-color: var(--bg-app) !important;
+  color: var(--text-700) !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: var(--bg-panel) !important;
+}
+
+.dark .bg-slate-50\/70,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/50 {
+  background-color: var(--bg-slate-50-70) !important;
+}
+
+.dark .bg-slate-50\/20 {
+  background-color: var(--bg-slate-50-20) !important;
 }
 
 .dark .bg-slate-50\/50 {
-  background-color: rgba(2, 6, 23, 0.5) !important;
+  background-color: var(--bg-slate-50-50) !important;
 }
 
 .dark .bg-slate-850 {
-  background-color: #020617 !important;
+  background-color: var(--bg-app) !important;
 }
 
 /* Standard borders mapping */
 .dark .border-slate-100 {
-  border-color: #1e293b !important; /* border-slate-800 */
+  border-color: var(--border-primary) !important;
 }
 
 .dark .border-slate-200 {
-  border-color: #1e293b !important;
+  border-color: var(--border-secondary) !important;
 }
 
 .dark .border-slate-200\/60 {
-  border-color: rgba(30, 41, 59, 0.6) !important;
+  border-color: rgba(var(--border-secondary-rgb), 0.6) !important;
 }
 
 /* Typography elements mapping */
 .dark .text-slate-900 {
-  color: #f8fafc !important;
+  color: var(--text-900) !important;
 }
 
 .dark .text-slate-800 {
-  color: #f1f5f9 !important;
+  color: var(--text-800) !important;
 }
 
 .dark .text-slate-700 {
-  color: #e2e8f0 !important;
+  color: var(--text-700) !important;
 }
 
 .dark .text-slate-600 {
-  color: #cbd5e1 !important;
+  color: var(--text-600) !important;
 }
 
 .dark .text-slate-500 {
-  color: #94a3b8 !important;
+  color: var(--text-500) !important;
 }
 
 .dark .text-slate-400 {
-  color: #64748b !important;
+  color: var(--text-400) !important;
 }
 
 /* Interactive hover elements */
 .dark .hover\:bg-slate-100:hover {
-  background-color: #1e293b !important;
+  background-color: var(--hover-bg-100) !important;
 }
 
 .dark .hover\:bg-slate-50:hover {
-  background-color: #0f172a !important;
+  background-color: var(--hover-bg-50) !important;
 }
 
 /* Modal backdrop and shadow enhancements */
 .dark .shadow-sm {
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.5) !important;
+  box-shadow: var(--shadow-sm) !important;
 }
 
 .dark .shadow-2xl {
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
+  box-shadow: var(--shadow-2xl) !important;
 }
 
 .dark .bg-slate-900\/40 {
-  background-color: rgba(2, 6, 23, 0.7) !important;
+  background-color: var(--bg-slate-900-40) !important;
 }
-
-

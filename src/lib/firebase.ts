@@ -118,12 +118,25 @@ export async function pullAllUserData(userId: string) {
     }
   };
 
-  const caixinhas = await fetchCol('caixinhas') || [];
-  const vendas = await fetchCol('vendas') || [];
-  const despesas = await fetchCol('despesas') || [];
-  const produtos = await fetchCol('produtos') || [];
-  const fornecedores = await fetchCol('fornecedores') || [];
-  const zonas_entrega = await fetchCol('zonas_entrega') || [];
+  const [
+    caixinhas,
+    vendas,
+    despesas,
+    produtos,
+    fornecedores,
+    zonas_entrega,
+    campanhas,
+    despesas_recorrentes
+  ] = await Promise.all([
+    fetchCol('caixinhas').then(res => res || []),
+    fetchCol('vendas').then(res => res || []),
+    fetchCol('despesas').then(res => res || []),
+    fetchCol('produtos').then(res => res || []),
+    fetchCol('fornecedores').then(res => res || []),
+    fetchCol('zonas_entrega').then(res => res || []),
+    fetchCol('campanhas').then(res => res || []),
+    fetchCol('despesas_recorrentes').then(res => res || [])
+  ]);
 
   return {
     profile,
@@ -132,7 +145,9 @@ export async function pullAllUserData(userId: string) {
     despesas,
     produtos,
     fornecedores,
-    zonas_entrega
+    zonas_entrega,
+    campanhas,
+    despesas_recorrentes
   };
 }
 
@@ -157,6 +172,8 @@ export async function pushQueueToFirestore(queue: any[]) {
       colName = 'zonas_entrega';
     } else if (type === 'fornecedor') {
       colName = 'fornecedores';
+    } else if (type === 'despesa_recorrente') {
+      colName = 'despesas_recorrentes';
     }
     const docId = data.id;
     if (!docId) continue;

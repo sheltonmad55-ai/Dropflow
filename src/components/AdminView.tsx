@@ -15,6 +15,10 @@ export default function AdminView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementTarget, setAnnouncementTarget] = useState<'todos' | 'trial_expira_2d'>('todos');
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementLink, setAnnouncementLink] = useState('');
+  const [announcementImage, setAnnouncementImage] = useState('');
+  const [announcementType, setAnnouncementType] = useState<'aviso' | 'novidade'>('novidade');
   
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [newPlan, setNewPlan] = useState<'trial' | 'pro' | 'free'>('trial');
@@ -63,9 +67,20 @@ export default function AdminView() {
     setIsSendingAnnounce(true);
     setAnnounceSuccess('');
     try {
-      await addBroadcast(announcementText, announcementTarget);
+      await addBroadcast(
+        announcementText, 
+        announcementTarget,
+        announcementTitle.trim() || undefined,
+        announcementLink.trim() || undefined,
+        announcementImage.trim() || undefined,
+        announcementType
+      );
       setAnnouncementText('');
-      setAnnounceSuccess('Aviso transmitido com sucesso para toda a plataforma!');
+      setAnnouncementTitle('');
+      setAnnouncementLink('');
+      setAnnouncementImage('');
+      setAnnouncementType('novidade');
+      setAnnounceSuccess('Banner / Comunicado de novidade transmitido com sucesso!');
       setTimeout(() => setAnnounceSuccess(''), 4000);
     } catch (err) {
       console.error(err);
@@ -225,22 +240,67 @@ export default function AdminView() {
         <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4" id="warning_broadcast_panel">
           <h3 className="font-extrabold text-sm text-slate-900 font-display flex items-center gap-2 pb-2 border-b border-slate-100">
             <Megaphone className="w-4 h-4 text-indigo-600" />
-            <span>Transmitir Aviso Global</span>
+            <span>Transmitir Novidade ou Banner</span>
           </h3>
 
           <p className="text-[10px] text-slate-500 leading-relaxed">
-            Escreva um comunicado ou aviso importante. Ele aparecerá instantaneamente como um banner destacado no topo do ecrã de cada cliente online selecionado.
+            Adicione uma novidade, aviso ou promoção. É possível enviar em formato de banner completo contendo imagens, links de ação e títulos destacados para chamar a atenção dos utilizadores.
           </p>
 
-          <form onSubmit={handleBroadcastSubmit} className="space-y-4">
+          <form onSubmit={handleBroadcastSubmit} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">Texto do Comunicado</label>
+              <label className="text-[9px] font-black text-slate-400 uppercase block">Tipo de Banner</label>
+              <select
+                value={announcementType}
+                onChange={e => setAnnouncementType(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
+              >
+                <option value="novidade">🎉 Novidade (Destaque em Banner)</option>
+                <option value="aviso">⚠️ Aviso Importante (Simples)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase block">Título do Banner (Opcional)</label>
+              <input
+                type="text"
+                placeholder="Ex: Nova Funcionalidade Liberada!"
+                value={announcementTitle}
+                onChange={e => setAnnouncementTitle(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase block">Texto / Mensagem</label>
               <textarea
-                rows={3}
-                placeholder="Ex: Teremos uma breve manutenção técnica hoje às 22h."
+                rows={2}
+                placeholder="Escreva a mensagem do comunicado ou descrição da novidade..."
                 value={announcementText}
                 onChange={e => setAnnouncementText(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
+                className="w-full bg-slate-50 border border-slate-200/60 p-3 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase block">Link da Novidade / Ação (Opcional)</label>
+              <input
+                type="url"
+                placeholder="Ex: https://droopflow.com/novas-metas"
+                value={announcementLink}
+                onChange={e => setAnnouncementLink(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase block">URL da Imagem / Mídia (Opcional)</label>
+              <input
+                type="url"
+                placeholder="Ex: https://images.unsplash.com/... ou link de imagem"
+                value={announcementImage}
+                onChange={e => setAnnouncementImage(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
               />
             </div>
 
@@ -249,7 +309,7 @@ export default function AdminView() {
               <select
                 value={announcementTarget}
                 onChange={e => setAnnouncementTarget(e.target.value as any)}
-                className="w-full bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
+                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
               >
                 <option value="todos">Todos os Utilizadores</option>
                 <option value="trial_expira_2d">Trial Expira em 2 dias ou menos</option>
