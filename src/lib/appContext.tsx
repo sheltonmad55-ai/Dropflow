@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import * as db from './db.ts';
 import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente } from '../types.ts';
+import { checkCampaignBudget, startNotificationScheduler } from './notifications.ts';
 import { 
   auth, 
   db as fDb,
@@ -409,6 +410,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }, 20000); // sync every 20s
       return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, profile?.id]);
+
+  const vendasRef = useRef(vendas);
+  const profileRef = useRef(profile);
+
+  useEffect(() => {
+    vendasRef.current = vendas;
+  }, [vendas]);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
+
+  // Start local notification scheduler for daily sales goal reminders
+  useEffect(() => {
+    if (isAuthenticated && profile) {
+      const cleanup = startNotificationScheduler(
+        () => vendasRef.current,
+        () => profileRef.current
+      );
+      return cleanup;
     }
   }, [isAuthenticated, profile?.id]);
 
@@ -1210,6 +1233,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.addToSyncQueue({ type: 'campanha', action: 'create', data: newCampanha });
     setCampanhas(prev => [newCampanha, ...prev].sort((a,b) => b.data.localeCompare(a.data)));
 
+    const currencySymbol = newCampanha.orcamento_usd ? '$' : (profile.moeda || 'MT');
+    checkCampaignBudget(newCampanha, 0, currencySymbol);
+
     setSyncStatus('pending');
     syncWithServer();
   }
@@ -1222,6 +1248,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.putItem('campanhas', updated);
     await db.addToSyncQueue({ type: 'campanha', action: 'update', data: updated });
     setCampanhas(prev => prev.map(c => c.id === id ? updated : c).sort((a,b) => b.data.localeCompare(a.data)));
+
+    const currencySymbol = updated.orcamento_usd ? '$' : (profile.moeda || 'MT');
+    checkCampaignBudget(updated, original.gasto, currencySymbol);
 
     setSyncStatus('pending');
     syncWithServer();

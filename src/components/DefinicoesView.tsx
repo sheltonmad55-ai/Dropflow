@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../lib/appContext.tsx';
 import { auth } from '../lib/firebase.ts';
 import { playCashRegister, playNotificationPing } from '../lib/audio.ts';
+import { sendNotification } from '../lib/notifications.ts';
 import { 
   Settings, 
   User, 
@@ -625,6 +626,28 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             </div>
           )}
         </div>
+
+        {permissionStatus === 'granted' && (
+          <div className="pt-3.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 items-center" id="test_notifications_row">
+            <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase mr-1">Testar Alertas:</span>
+            <button
+              type="button"
+              onClick={() => sendNotification("DroopFlow - Meta Diária Alcançada! 🎉", `Meta Diária de ${profile?.metaDiaria?.toLocaleString() || '1.000'} ${profile?.moeda || 'MT'} batida com sucesso!`)}
+              className="bg-slate-50 hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[9px] py-1.5 px-3 rounded-lg transition-all cursor-pointer flex items-center gap-1 border border-slate-200/40 dark:border-slate-800/60"
+            >
+              <TrendingUp className="w-3 h-3 text-emerald-500" />
+              <span>Alerta de Meta</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => sendNotification("Orçamento Próximo do Limite! ⚠️", "A campanha de teste consumiu 90% do orçamento máximo definido.")}
+              className="bg-slate-50 hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[9px] py-1.5 px-3 rounded-lg transition-all cursor-pointer flex items-center gap-1 border border-slate-200/40 dark:border-slate-800/60"
+            >
+              <Megaphone className="w-3 h-3 text-amber-500" />
+              <span>Alerta de Orçamento</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Sistema Global de Gestão de Som */}
