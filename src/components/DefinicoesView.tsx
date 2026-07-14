@@ -33,7 +33,8 @@ import {
   Volume2,
   VolumeX,
   Bell,
-  Play
+  Play,
+  ChevronRight
 } from 'lucide-react';
 
 interface DefinicoesViewProps {
@@ -51,7 +52,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     despesas,
     produtos,
     fornecedores,
-    zonasEntrega
+    zonasEntrega,
+    isAdmin
   } = useApp();
 
   // Profile forms
@@ -413,12 +415,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
           <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
             <User className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> A Minha Conta
           </h3>
-          <span className={`text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider ${
-            profile?.plano === 'pro' 
-              ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50' 
-              : 'bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-800/50'
-          }`}>
-            Plano: {profile?.plano === 'pro' ? 'DroopFlow Pro' : 'Gratuito (Teste)'}
+          <span className="text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50">
+            Plano: DroopFlow Ativo
           </span>
         </div>
 
@@ -967,41 +965,16 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             <Crown className="w-4 h-4 mr-1.5 text-purple-600 dark:text-purple-400" /> Plano DroopFlow Pro
           </h3>
           <span className="text-[9px] bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 border border-slate-200/65 dark:border-slate-800 font-bold">
-            149 MT / mês
+            297 MT / mês
           </span>
         </div>
 
-        {profile?.plano === 'trial' ? (
-          <div className="space-y-3.5 pt-1" id="trial_status_info">
-            <div className="bg-purple-50 border border-purple-100 dark:bg-purple-950/30 dark:border-purple-800 p-3.5 rounded-2xl space-y-1.5" id="trial_box">
-              <span className="text-[10px] font-extrabold text-purple-700 dark:text-purple-400 block uppercase tracking-wide">Período de Teste Ativo</span>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Ainda te restam <strong className="text-slate-900 dark:text-slate-50 font-extrabold">6 dias grátis</strong> para explorar todas as funcionalidades sem compromisso.</p>
-            </div>
-
-            {showUpgradeSuccess ? (
-              <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-3 rounded-xl text-xs text-emerald-700 dark:text-emerald-400 flex items-center space-x-2 animate-bounce" id="upgrade_success_msg">
-                <Check className="w-4 h-4 shrink-0 stroke-[2.5]" />
-                <span>Excelente! Agora és um assinante DroopFlow Pro.</span>
-              </div>
-            ) : (
-              <button
-                id="btn_subscribe_pro"
-                onClick={handleProUpgrade}
-                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold py-3 rounded-xl text-xs shadow-sm shadow-purple-600/10 transition-all flex items-center justify-center space-x-2 cursor-pointer animate-pulse"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Subscrever Plano Pro — 149 MT</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-1.5" id="pro_status_info">
-            <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 block uppercase tracking-wide flex items-center">
-              <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
-            </span>
-            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.</p>
-          </div>
-        )}
+        <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-1.5" id="pro_status_info">
+          <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 block uppercase tracking-wide flex items-center">
+            <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
+          </span>
+          <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.</p>
+        </div>
       </div>
 
       {/* 4. Logout / Reset */}

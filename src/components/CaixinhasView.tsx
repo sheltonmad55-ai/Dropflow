@@ -79,6 +79,8 @@ export default function CaixinhasView() {
   const [cxCor, setCxCor] = useState('bg-purple-500');
   const [cxAutoDistribuir, setCxAutoDistribuir] = useState(false);
   const [cxPercentual, setCxPercentual] = useState<number>(0);
+  const [cxModo, setCxModo] = useState<'percentual' | 'fixo'>('percentual');
+  const [cxValorDistribuição, setCxValorDistribuição] = useState<string>('0');
 
   // New zone form
   const [zoneNome, setZoneNome] = useState('');
@@ -92,6 +94,8 @@ export default function CaixinhasView() {
   const [editCxPercent, setEditCxPercent] = useState<number>(50);
   const [editCxAutoDistribuir, setEditCxAutoDistribuir] = useState(false);
   const [editCxPercentualPersonalizado, setEditCxPercentualPersonalizado] = useState<number>(0);
+  const [editCxModo, setEditCxModo] = useState<'percentual' | 'fixo'>('percentual');
+  const [editCxValorDistribuição, setEditCxValorDistribuição] = useState<string>('0');
 
   const [editingZone, setEditingZone] = useState<any>(null);
   const [editZoneNome, setEditZoneNome] = useState('');
@@ -103,12 +107,22 @@ export default function CaixinhasView() {
     e.preventDefault();
     if (!cxNome) return;
     try {
-      await addCaixinha(cxNome, cxIcon, cxCor, cxPercentual, cxAutoDistribuir);
+      await addCaixinha(
+        cxNome, 
+        cxIcon, 
+        cxCor, 
+        cxModo === 'percentual' ? cxPercentual : 0, 
+        cxAutoDistribuir,
+        cxModo,
+        cxModo === 'percentual' ? cxPercentual : (parseFloat(cxValorDistribuição) || 0)
+      );
       setCxNome('');
       setCxIcon('Layers');
       setCxCor('bg-purple-500');
       setCxAutoDistribuir(false);
       setCxPercentual(0);
+      setCxModo('percentual');
+      setCxValorDistribuição('0');
       setShowAddCx(false);
     } catch (e) {
       alert('Erro ao criar pocket.');
@@ -135,29 +149,38 @@ export default function CaixinhasView() {
     e.preventDefault();
     if (!editingCx || !editCxNome) return;
     try {
+      const isCustom = editingCx.tipo === 'personalizado';
       const updates: any = {
         nome: editCxNome,
         icone: editCxIcon,
-        cor: editCxCor
+        cor: editCxCor,
+        distribuicao_modo: editCxModo,
+        valor_distribuicao: editCxModo === 'percentual'
+          ? (isCustom ? editCxPercentualPersonalizado : editCxPercent)
+          : (parseFloat(editCxValorDistribuição) || 0)
       };
 
-      if (editingCx.tipo === 'personalizado') {
+      if (isCustom) {
         updates.auto_distribuir = editCxAutoDistribuir;
-        updates.percentual_padrao = editCxPercentualPersonalizado;
+        updates.percentual_padrao = editCxModo === 'percentual' ? editCxPercentualPersonalizado : 0;
       }
 
       await editCaixinha(editingCx.id, updates);
 
       if (editingCx.tipo === 'lucro') {
-        await updateProfile({
-          lucro_percent: editCxPercent,
-          anuncios_percent: 100 - editCxPercent
-        });
+        if (editCxModo === 'percentual') {
+          await updateProfile({
+            lucro_percent: editCxPercent,
+            anuncios_percent: 100 - editCxPercent
+          });
+        }
       } else if (editingCx.tipo === 'anuncios') {
-        await updateProfile({
-          anuncios_percent: editCxPercent,
-          lucro_percent: 100 - editCxPercent
-        });
+        if (editCxModo === 'percentual') {
+          await updateProfile({
+            anuncios_percent: editCxPercent,
+            lucro_percent: 100 - editCxPercent
+          });
+        }
       }
 
       setEditingCx(null);
@@ -386,9 +409,19 @@ export default function CaixinhasView() {
                       <span className="text-xs font-bold text-slate-900 block">{cx.nome}</span>
                       <span className="text-[9px] text-slate-500 uppercase block font-medium">
                         {cx.tipo === 'personalizado' 
-                          ? (cx.auto_distribuir ? `Auto-Distribuir: ${cx.percentual_padrao}%` : 'Pocket Adicional (Manual)') 
-                          : cx.tipo === 'lucro' ? `Lucro: ${profile?.lucro_percent}%` 
-                          : cx.tipo === 'anuncios' ? `Anúncios: ${profile?.anuncios_percent}%` 
+                          ? (cx.auto_distribuir 
+                              ? (cx.distribuicao_modo === 'fixo' 
+                                  ? `Auto-Distribuir: ${cx.valor_distribuicao} ${currency}` 
+                                  : `Auto-Distribuir: ${cx.percentual_padrao}%`) 
+                              : 'Pocket Adicional (Manual)') 
+                          : cx.tipo === 'lucro' 
+                            ? (cx.distribuicao_modo === 'fixo' 
+                                ? `Lucro Fixo: ${cx.valor_distribuicao} ${currency}` 
+                                : `Lucro: ${profile?.lucro_percent}%`)
+                          : cx.tipo === 'anuncios' 
+                            ? (cx.distribuicao_modo === 'fixo' 
+                                ? `Anúncios Fixo: ${cx.valor_distribuicao} ${currency}` 
+                                : `Anúncios: ${profile?.anuncios_percent}%`)
                           : `Fórmula: auto-distribuição`
                         }
                       </span>
@@ -410,6 +443,8 @@ export default function CaixinhasView() {
                         setEditCxCor(cx.cor);
                         setEditCxAutoDistribuir(cx.auto_distribuir || false);
                         setEditCxPercentualPersonalizado(cx.percentual_padrao || 0);
+                        setEditCxModo(cx.distribuicao_modo || 'percentual');
+                        setEditCxValorDistribuição((cx.valor_distribuicao !== undefined ? cx.valor_distribuicao : (cx.tipo === 'personalizado' ? cx.percentual_padrao || 0 : cx.tipo === 'lucro' ? profile?.lucro_percent || 50 : profile?.anuncios_percent || 50)).toString());
                         if (cx.tipo === 'lucro') {
                           setEditCxPercent(profile?.lucro_percent || 50);
                         } else if (cx.tipo === 'anuncios') {
@@ -713,20 +748,61 @@ export default function CaixinhasView() {
                 </div>
 
                 {cxAutoDistribuir && (
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs text-slate-700 font-semibold">Percentual do Valor Recebido</label>
-                      <span className="text-xs font-black text-emerald-600">{cxPercentual}%</span>
+                  <div className="space-y-3 pt-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-slate-600 font-semibold">Modo de Distribuição</label>
+                      <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setCxModo('percentual')}
+                          className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${cxModo === 'percentual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          Percentual (%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCxModo('fixo')}
+                          className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${cxModo === 'fixo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          Valor Fixo ({currency})
+                        </button>
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="100"
-                      value={cxPercentual}
-                      onChange={(e) => setCxPercentual(parseInt(e.target.value))}
-                      className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
-                    />
-                    <span className="text-[9px] text-slate-400 block leading-tight">Exemplo: Em uma venda de 1.000 {currency}, {Math.round(1000 * (cxPercentual / 100))} {currency} irá automaticamente para esta caixinha.</span>
+
+                    {cxModo === 'percentual' ? (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs text-slate-700 font-semibold">Percentual do Valor Recebido</label>
+                          <span className="text-xs font-black text-emerald-600">{cxPercentual}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="100"
+                          value={cxPercentual}
+                          onChange={(e) => setCxPercentual(parseInt(e.target.value))}
+                          className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                        />
+                        <span className="text-[9px] text-slate-400 block leading-tight">Exemplo: Em uma venda de 1.000 {currency}, {Math.round(1000 * (cxPercentual / 100))} {currency} irá automaticamente para esta caixinha.</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs text-slate-700 font-semibold">Valor em Dinheiro por Venda</label>
+                          <span className="text-xs font-black text-emerald-600">{cxValorDistribuição} {currency}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={cxValorDistribuição}
+                          onChange={(e) => setCxValorDistribuição(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                          placeholder="Ex: 300"
+                        />
+                        <span className="text-[9px] text-slate-400 block leading-tight">Exemplo: Em cada venda realizada, {parseFloat(cxValorDistribuição) || 0} {currency} fixos serão depositados nesta caixinha.</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -952,31 +1028,6 @@ export default function CaixinhasView() {
                 />
               </div>
 
-              {/* Porcentagem slider if it is lucro or anuncios */}
-              {(editingCx.tipo === 'lucro' || editingCx.tipo === 'anuncios') && (
-                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2.5" id="edit_cx_percent_group">
-                  <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
-                    <span>Percentual de Auto-Distribuição</span>
-                    <span className="text-emerald-600 font-bold">{editCxPercent}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={editCxPercent}
-                    onChange={(e) => setEditCxPercent(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                  />
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    {editingCx.tipo === 'lucro' 
-                      ? `Ao definir lucro em ${editCxPercent}%, a caixinha de Anúncios será automaticamente ajustada para ${100 - editCxPercent}%.`
-                      : `Ao definir anúncios em ${editCxPercent}%, a caixinha de Lucro será automaticamente ajustada para ${100 - editCxPercent}%.`
-                    }
-                  </p>
-                </div>
-              )}
-
               {/* Color selectors */}
               <div className="space-y-1.5" id="edit_cx_colors_group">
                 <label className="text-xs text-slate-600 font-semibold block">Cor Visual</label>
@@ -1029,22 +1080,83 @@ export default function CaixinhasView() {
                       <span className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform shadow ${editCxAutoDistribuir ? 'translate-x-6' : 'translate-x-1'}`} />
                     </button>
                   </div>
+                </div>
+              )}
 
-                  {editCxAutoDistribuir && (
-                    <div className="space-y-1.5 pt-1">
+              {/* Dynamic Auto-distribution Config section for Edit Modal */}
+              {(editingCx.tipo === 'lucro' || editingCx.tipo === 'anuncios' || (editingCx.tipo === 'personalizado' && editCxAutoDistribuir)) && (
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3" id="edit_cx_distribution_settings">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-700 font-bold block">Modo de Distribuição</label>
+                    <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setEditCxModo('percentual')}
+                        className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all ${editCxModo === 'percentual' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                      >
+                        Percentual (%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditCxModo('fixo')}
+                        className={`px-2.5 py-1 text-[9px] font-bold rounded-md transition-all ${editCxModo === 'fixo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                      >
+                        Valor Fixo ({currency})
+                      </button>
+                    </div>
+                  </div>
+
+                  {editCxModo === 'percentual' ? (
+                    <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
-                        <label className="text-xs text-slate-700 font-semibold">Percentual do Valor Recebido</label>
-                        <span className="text-xs font-black text-emerald-600">{editCxPercentualPersonalizado}%</span>
+                        <label className="text-xs text-slate-600 font-semibold">Percentual</label>
+                        <span className="text-xs font-black text-emerald-600">
+                          {editingCx.tipo === 'personalizado' ? editCxPercentualPersonalizado : editCxPercent}%
+                        </span>
                       </div>
                       <input
                         type="range"
-                        min="1"
+                        min="0"
                         max="100"
-                        value={editCxPercentualPersonalizado}
-                        onChange={(e) => setEditCxPercentualPersonalizado(parseInt(e.target.value))}
-                        className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                        step={editingCx.tipo === 'personalizado' ? "1" : "5"}
+                        value={editingCx.tipo === 'personalizado' ? editCxPercentualPersonalizado : editCxPercent}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value);
+                          if (editingCx.tipo === 'personalizado') {
+                            setEditCxPercentualPersonalizado(val);
+                          } else {
+                            setEditCxPercent(val);
+                          }
+                        }}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                       />
-                      <span className="text-[9px] text-slate-400 block leading-tight">Exemplo: Em uma venda de 1.000 {currency}, {Math.round(1000 * (editCxPercentualPersonalizado / 100))} {currency} irá automaticamente para esta caixinha.</span>
+                      <p className="text-[9px] text-slate-400 leading-tight">
+                        {editingCx.tipo === 'lucro' 
+                          ? `Ao definir lucro em ${editCxPercent}%, a caixinha de Anúncios será de ${100 - editCxPercent}%.`
+                          : editingCx.tipo === 'anuncios'
+                          ? `Ao definir anúncios em ${editCxPercent}%, a caixinha de Lucro será de ${100 - editCxPercent}%.`
+                          : `Exemplo: Em uma venda, ${editCxPercentualPersonalizado}% do valor restante será direcionado para cá.`
+                        }
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs text-slate-600 font-semibold">Valor Fixo por Venda</label>
+                        <span className="text-xs font-black text-emerald-600">{editCxValorDistribuição} {currency}</span>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={editCxValorDistribuição}
+                        onChange={(e) => setEditCxValorDistribuição(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                        placeholder="Ex: 300"
+                      />
+                      <p className="text-[9px] text-slate-400 leading-tight">
+                        Exemplo: Em cada venda, {parseFloat(editCxValorDistribuição) || 0} {currency} fixos serão direcionados diretamente para esta caixinha.
+                      </p>
                     </div>
                   )}
                 </div>

@@ -32,11 +32,13 @@ import {
   Sparkles,
   RefreshCw,
   Target,
-  Shield
+  Shield,
+  ChevronRight,
+  CheckCircle2
 } from 'lucide-react';
 
 function AppContent() {
-  const { isAuthenticated, isLoadingAuth, isAdmin } = useApp();
+  const { isAuthenticated, isLoadingAuth, isAdmin, profile, triggerMockUpgrade, logout } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'metas' | 'admin' | 'definicoes'
   const [activeTab, setActiveTab] = useState<string>('dashboard');

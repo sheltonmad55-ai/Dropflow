@@ -9,17 +9,13 @@ import { TrendingUp, Megaphone, ShieldCheck, ArrowRight, Sparkles, Wallet } from
 import dropflowLogo from '../assets/images/droopflow_logo_1783896707656.jpg';
 
 export default function Onboarding() {
-  const { login, register, loginGoogle } = useApp();
+  const { login, loginGoogle } = useApp();
   // By default, start on slide 2 (auth screen) so it matches the screenshot immediately
-  const [slide, setSlide] = useState(2); // 0: intro, 1: concept, 2: auth, 3: percentage setup (only on signup)
-  const [isLogin, setIsLogin] = useState(true);
+  const [slide, setSlide] = useState(2); // 0: intro, 1: concept, 2: auth
   
   // Form fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [nome, setNome] = useState('');
-  const [pais, setPais] = useState('Moçambique');
-  const [moeda, setMoeda] = useState('MT');
   
   // Custom error
   const [error, setError] = useState('');
@@ -35,13 +31,7 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
-      if (isLogin) {
-        await login(email, password);
-      } else {
-        // If signing up, go to percentage setup first
-        setSlide(3);
-        setLoading(false);
-      }
+      await login(email, password);
     } catch (err: any) {
       setError(err.message || 'Ocorreu um erro.');
       setLoading(false);
@@ -55,18 +45,6 @@ export default function Onboarding() {
       await loginGoogle();
     } catch (err: any) {
       setError(err.message || 'Erro ao iniciar sessão com o Google.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegisterComplete = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      await register(email, password, nome, pais, moeda);
-    } catch (err: any) {
-      setError(err.message || 'Erro ao registar conta.');
     } finally {
       setLoading(false);
     }
@@ -160,7 +138,7 @@ export default function Onboarding() {
                 onClick={handleNextSlide}
                 className="w-full bg-[#006638] text-white font-bold py-3.5 px-4 rounded-2xl hover:bg-[#00522c] transition-colors flex items-center justify-center text-sm"
               >
-                Continuar para Registo/Login
+                Continuar para Login
                 <ArrowRight className="w-4 h-4 ml-2" />
               </button>
             </div>
@@ -168,12 +146,12 @@ export default function Onboarding() {
 
           {slide === 2 && (
             <div className="bg-white rounded-[32px] p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.03)] border border-slate-100 space-y-6 animate-fade-in" id="slide_2">
-              <div className="text-center space-y-1">
-                <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-                  {isLogin ? 'Bem-vindo de volta' : 'Cria a tua conta'}
+              <div className="text-center space-y-1.5">
+                <h2 className="text-2xl font-bold text-slate-900 tracking-tight animate-fade-in">
+                  Iniciar Sessão
                 </h2>
-                <p className="text-slate-500 text-sm">
-                  {isLogin ? 'Entra para continuares a gerir o teu dropshipping.' : 'Começa grátis com trial de 7 dias sem compromisso.'}
+                <p className="text-slate-500 text-xs leading-relaxed">
+                  Introduz o <strong className="text-slate-800 dark:text-slate-200">mesmo email</strong> que usaste ao efetuar o pagamento para aceder à tua conta do DroopFlow.
                 </p>
               </div>
 
@@ -209,21 +187,6 @@ export default function Onboarding() {
 
               {/* Form */}
               <form onSubmit={handleAuth} className="space-y-4" id="auth_form">
-                {!isLogin && (
-                  <div className="space-y-1.5" id="input_nome_group">
-                    <label className="text-xs font-semibold text-slate-500">Nome do Empreendedor</label>
-                    <input
-                      id="input_nome"
-                      type="text"
-                      required
-                      value={nome}
-                      onChange={(e) => setNome(e.target.value)}
-                      placeholder="Ex: Shelton Mad"
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#006638] focus:ring-1 focus:ring-[#006638] transition-colors"
-                    />
-                  </div>
-                )}
-
                 <div className="space-y-1.5" id="input_email_group">
                   <label className="text-xs font-semibold text-slate-500">Email</label>
                   <input
@@ -250,137 +213,20 @@ export default function Onboarding() {
                   />
                 </div>
 
-                {!isLogin && (
-                  <div className="grid grid-cols-2 gap-3" id="signup_selectors">
-                    <div className="space-y-1.5" id="input_pais_group">
-                      <label className="text-xs font-semibold text-slate-500">País</label>
-                      <select
-                        id="input_pais"
-                        value={pais}
-                        onChange={(e) => setPais(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#006638] transition-colors appearance-none"
-                      >
-                        <option value="Moçambique">Moçambique</option>
-                        <option value="África do Sul">África do Sul</option>
-                        <option value="Portugal">Portugal</option>
-                        <option value="Angola">Angola</option>
-                        <option value="Brasil">Brasil</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5" id="input_moeda_group">
-                      <label className="text-xs font-semibold text-slate-500">Moeda Padrão</label>
-                      <select
-                        id="input_moeda"
-                        value={moeda}
-                        onChange={(e) => setMoeda(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-3 text-sm text-slate-900 focus:outline-none focus:border-[#006638] transition-colors appearance-none"
-                      >
-                        <option value="MT">MT (Meticais)</option>
-                        <option value="ZAR">ZAR (Rands)</option>
-                        <option value="USD">USD (Dólares)</option>
-                        <option value="EUR">EUR (Euros)</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-
                 <button
                   id="btn_auth_submit"
                   type="submit"
                   disabled={loading}
                   className="w-full bg-[#006638] hover:bg-[#00522c] text-white font-bold py-3.5 px-4 rounded-xl shadow-sm transition-colors mt-2 text-sm disabled:opacity-50 flex items-center justify-center cursor-pointer"
                 >
-                  {loading ? 'A carregar...' : isLogin ? 'Entrar' : 'Seguinte: Configurar Pockets'}
-                  {!loading && !isLogin && <ArrowRight className="w-4 h-4 ml-2" />}
+                  {loading ? 'A carregar...' : 'Entrar'}
                 </button>
               </form>
 
-              {/* Toggle Footer */}
-              <div className="text-center pt-2" id="auth_toggle_wrapper">
-                <span className="text-sm text-slate-500">
-                  {isLogin ? 'Ainda não tens conta? ' : 'Já tens conta? '}
-                </span>
-                <button
-                  id="btn_auth_toggle"
-                  onClick={() => {
-                    setIsLogin(!isLogin);
-                    setError('');
-                  }}
-                  className="text-sm text-[#006638] hover:text-[#00522c] hover:underline font-bold"
-                >
-                  {isLogin ? 'Criar conta' : 'Fazer login'}
-                </button>
+              {/* Info Footer */}
+              <div className="text-center pt-2 text-[10px] text-slate-400 leading-relaxed" id="auth_info_footer">
+                Se ainda não tens uma assinatura ativa, podes assinar na nossa Landing Page para obteres acesso imediato.
               </div>
-            </div>
-          )}
-
-          {slide === 3 && (
-            <div className="bg-white rounded-[32px] p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.03)] border border-slate-100 space-y-6 animate-fade-in" id="slide_3">
-              <div className="text-center space-y-1">
-                <h2 className="text-2xl font-bold text-slate-900">Percentagens do Restante</h2>
-                <p className="text-slate-500 text-xs">
-                  Defina como dividir o valor restante de cada venda (após descontar fornecedor e entrega).
-                </p>
-              </div>
-
-              <div className="bg-slate-50 p-4 rounded-2xl space-y-5 border border-slate-100" id="percent_sliders">
-                {/* Marketing Pockets */}
-                <div className="space-y-1.5" id="slider_anuncios_group">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-sky-700 flex items-center">
-                      <span className="w-2.5 h-2.5 rounded-full bg-sky-500 mr-1.5 inline-block"></span>
-                      Caixinha Anúncios
-                    </span>
-                    <span className="text-slate-900">50%</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500">Verba reservada para campanhas de Meta Ads / TikTok Ads.</p>
-                </div>
-
-                {/* Profits Pockets */}
-                <div className="space-y-1.5" id="slider_lucro_group">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-emerald-700 flex items-center">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1.5 inline-block"></span>
-                      Caixinha Lucro Líquido
-                    </span>
-                    <span className="text-slate-900">50%</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500">Dinheiro real que podes retirar como pró-labore ou lucro da empresa.</p>
-                </div>
-
-                {/* Explanatory preview */}
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-2 shadow-sm" id="distribution_example">
-                  <span className="font-bold text-slate-800 uppercase tracking-wider text-[9px]">Simulação Exemplo:</span>
-                  <p>
-                    Venda de <span className="text-slate-900 font-bold">1.000 {moeda}</span> de um produto que custa <span className="text-slate-900 font-bold">300 {moeda}</span> e entrega de <span className="text-slate-900 font-bold">100 {moeda}</span>:
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500 pt-1" id="example_distribution_values">
-                    <div>🎁 Fornecedores: <span className="text-amber-700 font-bold">300 {moeda}</span></div>
-                    <div>🚚 Delivery: <span className="text-indigo-700 font-bold">100 {moeda}</span></div>
-                    <div>📢 Anúncios (50%): <span className="text-sky-700 font-bold">300 {moeda}</span></div>
-                    <div>💰 Lucro (50%): <span className="text-emerald-700 font-bold">300 {moeda}</span></div>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                id="btn_finish_signup"
-                onClick={handleRegisterComplete}
-                disabled={loading}
-                className="w-full bg-[#006638] hover:bg-[#00522c] text-white font-bold py-3.5 px-4 rounded-xl shadow-sm transition-colors text-sm disabled:opacity-50 flex items-center justify-center cursor-pointer"
-              >
-                {loading ? 'A criar conta...' : 'Concluir e Abrir Dashboard'}
-                {!loading && <ArrowRight className="w-4 h-4 ml-2" />}
-              </button>
-              
-              <button
-                id="btn_back_to_auth"
-                type="button"
-                onClick={() => setSlide(2)}
-                className="w-full text-xs text-slate-400 hover:text-slate-600 transition-colors font-semibold"
-              >
-                Voltar atrás
-              </button>
             </div>
           )}
         </div>

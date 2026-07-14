@@ -20,8 +20,21 @@ import {
   Info,
   Calendar,
   DollarSign,
-  Sparkles
+  Sparkles,
+  HelpCircle,
+  X,
+  Percent,
+  Calculator
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from 'recharts';
 
 interface DashboardViewProps {
   onOpenVenda: () => void;
@@ -36,7 +49,8 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     vendas, 
     despesas,
     produtos,
-    broadcasts
+    broadcasts,
+    zonasEntrega
   } = useApp();
 
   const currency = profile?.moeda || 'MT';
@@ -95,6 +109,9 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   const [pivotDateStr, setPivotDateStr] = React.useState(() => {
     return getLocalDateStr(new Date());
   });
+
+  // State to control ROI & Net Profit calculations Help Modal
+  const [showRoiHelp, setShowRoiHelp] = React.useState(false);
 
   // Stable days array centered on or ending at the pivotDateStr
   const getDaysArray = (pivotStr: string) => {
@@ -183,6 +200,26 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     expensesChangePercent = 100;
   }
 
+  // Proportional costs calculation for selected date (reused in ROI card and transparency modal)
+  const selectedProdCost = selectedVendas.reduce((acc, curr) => {
+    const prod = produtos.find(p => p.id === curr.produto_id);
+    return acc + ((prod ? prod.preco_compra : 0) * (curr.quantidade || 1));
+  }, 0);
+
+  const selectedDeliveryCost = selectedVendas.reduce((acc, curr) => {
+    const zone = zonasEntrega.find(z => z.id === curr.zona_entrega_id);
+    return acc + (zone ? zone.custo : 0);
+  }, 0);
+
+  const selectedAdCost = selectedVendas.reduce((acc, curr) => {
+    const adsCx = caixinhas.find(c => c.tipo === 'anuncios');
+    return acc + (adsCx ? (curr.distribuicao[adsCx.id] || 0) : 0);
+  }, 0);
+
+  const selectedTotalC = selectedProdCost + selectedDeliveryCost + selectedAdCost;
+  const selectedProportionalProfit = selectedSoldTotal - selectedTotalC;
+  const selectedProportionalRoi = selectedTotalC > 0 ? (selectedProportionalProfit / selectedTotalC) * 100 : 0;
+
   // ROI Calculation for selected day
   const roiValue = (() => {
     if (selectedExpensesTotal === 0) {
@@ -234,6 +271,50 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     }
     return false;
   }).sort((a,b) => b.criado_em.localeCompare(a.criado_em));
+
+  // Calculation of daily net profit for 30-day trend
+  const getDailyNetProfit = React.useCallback((dateStr: string) => {
+    const dateVendas = (vendas || []).filter(v => v.data_venda === dateStr);
+    const dateDespesas = (despesas || []).filter(d => d.data === dateStr);
+    
+    const revenue = dateVendas.reduce((acc, curr) => acc + curr.valor_recebido, 0);
+    const prodCost = dateVendas.reduce((acc, curr) => {
+      const prod = produtos.find(p => p.id === curr.produto_id);
+      return acc + ((prod ? prod.preco_compra : 0) * (curr.quantidade || 1));
+    }, 0);
+    const deliveryCost = dateVendas.reduce((acc, curr) => {
+      const zone = zonasEntrega.find(z => z.id === curr.zona_entrega_id);
+      return acc + (zone ? zone.custo : 0);
+    }, 0);
+    const adCost = dateVendas.reduce((acc, curr) => {
+      const adsCx = caixinhas.find(c => c.tipo === 'anuncios');
+      return acc + (adsCx ? (curr.distribuicao[adsCx.id] || 0) : 0);
+    }, 0);
+    const expenseAmt = dateDespesas.reduce((acc, curr) => acc + curr.valor, 0);
+    
+    return revenue - (prodCost + deliveryCost + adCost) - expenseAmt;
+  }, [vendas, despesas, produtos, zonasEntrega, caixinhas]);
+
+  const last30DaysData = React.useMemo(() => {
+    const data = [];
+    const today = new Date();
+    
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(today.getDate() - i);
+      const dateStr = getLocalDateStr(d);
+      const profit = getDailyNetProfit(dateStr);
+      
+      const formattedLabel = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+      
+      data.push({
+        dateStr,
+        label: formattedLabel,
+        "Lucro Líquido": profit,
+      });
+    }
+    return data;
+  }, [getDailyNetProfit, getLocalDateStr]);
 
   return (
     <div className="space-y-6" id="dashboard_view">
@@ -360,54 +441,104 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           </div>
         </div>
 
-        {/* Daily ROI Metrics Card */}
-        <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200/60 rounded-3xl p-6 shadow-sm relative overflow-hidden flex flex-col justify-between" id="dash_roi_card">
+        {/* Monthly Revenue Display Card */}
+        <div className="bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200/60 rounded-3xl p-6 shadow-sm relative overflow-hidden flex flex-col justify-between" id="dash_monthly_revenue_card">
           {/* Decorative backdrop glow */}
-          <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-8 -mt-8 pointer-events-none transition-all ${
-            roiValue.status === 'positive' ? 'bg-emerald-500/10' : roiValue.status === 'negative' ? 'bg-rose-500/10' : 'bg-slate-500/5'
-          }`}></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-8 -mt-8 pointer-events-none"></div>
 
-          <div className="space-y-1 relative" id="roi_details">
-            <div className="flex items-center space-x-2" id="roi_title_wrap">
-              <span className="text-[10px] font-black tracking-wider text-slate-500 uppercase">
-                ROI Diário ({formatFriendlyDate(selectedDateStr)})
-              </span>
-              <div className="group relative cursor-pointer" id="roi_info_tooltip">
-                <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-slate-900/95 backdrop-blur-md text-white text-[9px] leading-relaxed p-2.5 rounded-xl w-48 shadow-xl z-30 transition-all">
-                  Retorno Sobre Investimento do dia: (Vendas - Gastos) / Gastos. Indica quanto faturou para cada unidade monetária investida.
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-baseline space-x-2" id="roi_amount_group">
-              <h1 className={`text-4xl font-black tracking-tight transition-colors ${
-                roiValue.status === 'positive' ? 'text-emerald-600' : roiValue.status === 'negative' ? 'text-rose-600' : 'text-slate-700'
-              }`}>
-                {roiValue.label}
+          <div className="space-y-1 relative" id="monthly_revenue_details">
+            <span className="text-[10px] font-black tracking-wider text-slate-500 uppercase">Faturamento Mensal</span>
+            <div className="flex items-baseline space-x-2" id="monthly_revenue_amount_group">
+              <h1 className="text-4xl font-black text-slate-950 tracking-tight">
+                {totalSoldMonth.toLocaleString()}
               </h1>
-              {roiValue.status === 'positive' && <TrendingUp className="w-5 h-5 text-emerald-600" />}
-              {roiValue.status === 'negative' && <TrendingDown className="w-5 h-5 text-rose-600" />}
+              <span className="text-indigo-600 font-extrabold text-lg">{currency}</span>
             </div>
-
             <p className="text-[10px] text-slate-400 pt-1 leading-snug">
-              {roiValue.status === 'positive' && `Excelente! Lucro líquido de +${selectedNetTotal.toLocaleString()} ${currency}`}
-              {roiValue.status === 'negative' && `Défice: Gastos excederam as vendas em ${Math.abs(selectedNetTotal).toLocaleString()} ${currency}`}
-              {roiValue.status === 'neutral' && selectedSoldTotal === 0 && selectedExpensesTotal === 0 && 'Sem movimentos financeiros registados nesta data'}
-              {roiValue.status === 'neutral' && (selectedSoldTotal > 0 || selectedExpensesTotal > 0) && 'Retorno nulo (ponto de equilíbrio atingido)'}
+              Faturamento bruto acumulado de todas as vendas deste mês.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-6 relative" id="roi_breakdown_grid">
+          <div className="grid grid-cols-2 gap-3 pt-6 relative" id="monthly_revenue_breakdown">
             <div className="bg-white/75 border border-slate-200/50 rounded-xl p-2.5 text-center flex flex-col justify-center">
-              <span className="text-[8px] font-bold text-slate-400 block uppercase mb-0.5">Vendas do Dia</span>
-              <span className="text-xs font-extrabold text-emerald-600">{selectedSoldTotal.toLocaleString()} {currency}</span>
+              <span className="text-[8px] font-bold text-slate-400 block uppercase mb-0.5">Vendas Registadas</span>
+              <span className="text-xs font-extrabold text-indigo-600">{monthVendas.length}</span>
             </div>
             <div className="bg-white/75 border border-slate-200/50 rounded-xl p-2.5 text-center flex flex-col justify-center">
-              <span className="text-[8px] font-bold text-slate-400 block uppercase mb-0.5">Gastos do Dia</span>
-              <span className="text-xs font-extrabold text-rose-600">{selectedExpensesTotal.toLocaleString()} {currency}</span>
+              <span className="text-[8px] font-bold text-slate-400 block uppercase mb-0.5">Gastos do Mês</span>
+              <span className="text-xs font-extrabold text-rose-600">{totalExpensesMonth.toLocaleString()} {currency}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 30-Day Net Profit Trend Chart */}
+      <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4" id="net_profit_trend_container">
+        <div className="flex justify-between items-center" id="trend_header">
+          <div className="space-y-0.5" id="trend_title_group">
+            <h3 className="font-bold text-sm text-slate-900 font-display flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
+              Tendência de Lucro Líquido
+            </h3>
+            <p className="text-[10px] font-semibold text-slate-500">
+              Evolução dos lucros líquidos nos últimos 30 dias
+            </p>
+          </div>
+          <div className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-[10px] font-bold" id="trend_period">
+            Últimos 30 dias
+          </div>
+        </div>
+
+        <div className="h-56 w-full" id="trend_chart_wrapper">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={last30DaysData}
+              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis 
+                dataKey="label" 
+                tickLine={false} 
+                axisLine={false}
+                stroke="#94a3b8"
+                fontSize={9}
+                dy={10}
+              />
+              <YAxis 
+                tickLine={false} 
+                axisLine={false}
+                stroke="#94a3b8"
+                fontSize={9}
+                dx={-5}
+                tickFormatter={(value) => `${value.toLocaleString()}`}
+              />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    const value = payload[0].value as number;
+                    return (
+                      <div className="bg-slate-950 border border-slate-800 text-white p-3 rounded-2xl shadow-xl space-y-1 text-left" id="custom_chart_tooltip">
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">{formatFriendlyDate(data.dateStr)}</p>
+                        <p className={`text-xs font-black ${value >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          Lucro Líquido: {value >= 0 ? '+' : ''}{value.toLocaleString()} {currency}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="Lucro Líquido" 
+                stroke="#10b981" 
+                strokeWidth={2.5} 
+                dot={false}
+                activeDot={{ r: 5, strokeWidth: 0, fill: '#10b981' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -417,7 +548,18 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
         {/* Calendar Header with Selected Date and Date Picker Button */}
         <div className="flex justify-between items-center" id="calendar_header">
           <div className="space-y-0.5" id="calendar_title_group">
-            <h3 className="font-bold text-sm text-slate-900 font-display">Controlo Diário</h3>
+            <div className="flex items-center space-x-1.5">
+              <h3 className="font-bold text-sm text-slate-900 font-display">Controlo Diário</h3>
+              <button
+                type="button"
+                id="btn_help_controlo_diario"
+                onClick={() => setShowRoiHelp(true)}
+                className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Ver explicação das métricas e cálculos"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <p className="text-[10px] font-semibold text-slate-500">
               Métricas de <span className="text-emerald-600 font-bold">{formatFriendlyDate(selectedDateStr)}</span>
             </p>
@@ -593,6 +735,77 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
 
         </div>
 
+        {/* Cost-Proportional ROI Detail Card */}
+        {selectedVendas.length > 0 && (
+          <div className="bg-slate-50 border border-slate-200/50 rounded-2xl p-4.5 space-y-3.5" id="roi_proporcional_card">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-extrabold text-slate-900">Análise de Retorno Real (ROI)</span>
+                <span className="text-[8px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black uppercase">Vendas</span>
+                <button
+                  type="button"
+                  id="btn_open_roi_help"
+                  onClick={() => setShowRoiHelp(true)}
+                  className="flex items-center space-x-1 text-[9px] font-bold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100/80 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                  title="Clique para ver o detalhe do cálculo"
+                >
+                  <HelpCircle className="w-3 h-3 shrink-0" />
+                  <span>Como é calculado?</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                id="btn_info_roi"
+                onClick={() => setShowRoiHelp(true)}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-lg transition-all"
+                title="Ver explicação detalhada do ROI"
+              >
+                <Info className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+              <div className="col-span-1 md:border-r md:border-slate-200/80 pr-2">
+                <span className="text-[9px] font-bold text-slate-400 uppercase block mb-1">ROI Proporcional aos Custos</span>
+                <div className="flex items-baseline space-x-1.5">
+                  <span className={`text-2xl font-black ${
+                    selectedTotalC === 0 
+                      ? 'text-slate-700' 
+                      : selectedProportionalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}>
+                    {selectedTotalC === 0 
+                      ? (selectedSoldTotal > 0 ? '+100%+' : '0%') 
+                      : `${selectedProportionalRoi >= 0 ? '+' : ''}${Math.round(selectedProportionalRoi)}%`
+                    }
+                  </span>
+                </div>
+                <p className="text-[9px] text-slate-400 mt-1">Fórmula: (Vendas - Custos de Venda) / Custos de Venda</p>
+              </div>
+
+              <div className="col-span-1 md:col-span-3 grid grid-cols-3 gap-2">
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/50">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase block">Custo Produto</span>
+                  <span className="text-xs font-black text-slate-800">
+                    {selectedProdCost.toLocaleString()} <span className="text-[9px] font-normal text-slate-500">{currency}</span>
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/50">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase block">Custo Entrega</span>
+                  <span className="text-xs font-black text-slate-800">
+                    {selectedDeliveryCost.toLocaleString()} <span className="text-[9px] font-normal text-slate-500">{currency}</span>
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-xl border border-slate-200/50">
+                  <span className="text-[8px] font-bold text-slate-400 uppercase block">Custo Anúncios</span>
+                  <span className="text-xs font-black text-slate-800">
+                    {selectedAdCost.toLocaleString()} <span className="text-[9px] font-normal text-slate-500">{currency}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Monthly Summary mini-bar */}
         <div className="grid grid-cols-2 gap-2.5 pt-1 border-t border-slate-100/60" id="monthly_summary_row">
           <div className="bg-slate-50/50 p-2 rounded-xl flex items-center justify-between" id="metric_venda_mes">
@@ -754,6 +967,211 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           </div>
         )}
       </div>
+
+      {/* Transparency & Calculations Help Modal */}
+      {showRoiHelp && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in"
+          id="roi_help_modal_backdrop"
+          onClick={() => setShowRoiHelp(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col relative animate-scale-up"
+            id="roi_help_modal_content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50" id="roi_help_header">
+              <div className="flex items-center space-x-2.5">
+                <div className="bg-indigo-50 text-indigo-700 p-2 rounded-xl">
+                  <Calculator className="w-5 h-5 shrink-0" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-extrabold text-slate-900 text-sm">Transparência de Métricas & ROI</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Entenda detalhadamente como os seus lucros e retorno são calculados no DroopFlow</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowRoiHelp(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-all cursor-pointer"
+                id="btn_close_roi_help_modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-600 leading-relaxed text-left" id="roi_help_body">
+              
+              {/* Introduction */}
+              <p className="text-slate-500">
+                No dropshipping, controlar a margem real de cada venda é o fator de sucesso número um. O DroopFlow divide as suas métricas em dois conceitos fundamentais para que saiba com precisão para onde vai cada cêntimo/metical.
+              </p>
+
+              {/* Concept 1: Balance (Cashflow) */}
+              <div className="space-y-2.5" id="help_concept_balance">
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <h4 className="font-extrabold text-slate-900 text-xs">1. Balanço Diário (Fluxo de Caixa)</h4>
+                </div>
+                <div className="bg-slate-50 border border-slate-200/50 rounded-2xl p-4 space-y-2">
+                  <p className="font-medium text-slate-700">
+                    Mede o dinheiro real que entrou versus o dinheiro real que saiu (despesas registadas no dia).
+                  </p>
+                  <div className="bg-white border border-slate-100 p-3 rounded-xl font-mono text-[10px] text-slate-800 text-center flex items-center justify-center space-x-2">
+                    <span className="font-bold text-emerald-600">Faturamento Real</span>
+                    <span>-</span>
+                    <span className="font-bold text-rose-600">Gastos Registados (Saídas)</span>
+                    <span>=</span>
+                    <span className="bg-slate-100 px-2 py-0.5 rounded font-bold text-slate-900">Balanço do Dia</span>
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-500 pt-1">
+                    <li><strong>Faturamento Real:</strong> Valor total em dinheiro que cobrou aos clientes pelas vendas desse dia.</li>
+                    <li><strong>Gastos Registados:</strong> Quaisquer despesas ou retiradas de caixa feitas manualmente nesse dia (como almoço, custos operacionais gerais, etc.).</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Concept 2: Proportional ROI */}
+              <div className="space-y-2.5" id="help_concept_roi">
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  <h4 className="font-extrabold text-slate-900 text-xs">2. ROI Proporcional & Custos de Venda</h4>
+                </div>
+                <div className="bg-slate-50 border border-slate-200/50 rounded-2xl p-4 space-y-3">
+                  <p className="font-medium text-slate-700">
+                    O <strong>ROI (Retorno sobre o Investimento)</strong> analisa a viabilidade comercial dos seus produtos deduzindo os custos inerentes à operação de cada venda.
+                  </p>
+                  
+                  {/* Formulas */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 font-mono text-[10px]">
+                    <div className="bg-white border border-slate-100 p-2.5 rounded-xl text-center flex flex-col justify-center">
+                      <span className="text-[8px] text-slate-400 font-bold block uppercase mb-1">Custo de Venda</span>
+                      <span className="text-slate-800 font-bold">Custo Prod. + Custo Entr. + Custo Ads</span>
+                    </div>
+                    <div className="bg-white border border-slate-100 p-2.5 rounded-xl text-center flex flex-col justify-center">
+                      <span className="text-[8px] text-slate-400 font-bold block uppercase mb-1">Fórmula do ROI</span>
+                      <span className="text-indigo-600 font-black">((Faturamento - Custos) / Custos) × 100</span>
+                    </div>
+                  </div>
+
+                  {/* Breakdown detail list */}
+                  <div className="space-y-2.5 pt-1" id="breakdown_explanations">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Como cada custo é obtido:</span>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 space-y-1">
+                        <div className="flex items-center space-x-1 text-slate-800 font-extrabold">
+                          <Package className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span>Custo de Produto</span>
+                        </div>
+                        <p className="text-slate-500 text-[10px] leading-snug">
+                          Multiplicação da quantidade vendida pelo <strong>Preço de Compra</strong> original configurado no produto.
+                        </p>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 space-y-1">
+                        <div className="flex items-center space-x-1 text-slate-800 font-extrabold">
+                          <Truck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                          <span>Custo de Entrega</span>
+                        </div>
+                        <p className="text-slate-500 text-[10px] leading-snug">
+                          Baseia-se no valor de custo fixo atribuído à <strong>Zona de Entrega</strong> selecionada no momento de registar a venda.
+                        </p>
+                      </div>
+
+                      <div className="bg-white p-3 rounded-xl border border-slate-100 space-y-1">
+                        <div className="flex items-center space-x-1 text-slate-800 font-extrabold">
+                          <Megaphone className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                          <span>Custo de Anúncios</span>
+                        </div>
+                        <p className="text-slate-500 text-[10px] leading-snug">
+                          Valor alocado da <strong>Caixinha de Anúncios (Marketing)</strong> no registo da venda para cobrir o tráfego pago proporcional.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic live simulation based on current view date */}
+              <div className="space-y-2.5 pt-1" id="live_simulation_area">
+                <div className="flex items-center space-x-1.5">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <h4 className="font-extrabold text-slate-900 text-xs">Simulação em Tempo Real ({formatFriendlyDate(selectedDateStr)})</h4>
+                </div>
+
+                {selectedVendas.length === 0 ? (
+                  <div className="bg-amber-50/55 border border-amber-100/60 rounded-2xl p-4 text-center">
+                    <p className="text-amber-800 font-semibold text-[11px] leading-relaxed">
+                      Não existem vendas registadas em <strong>{formatFriendlyDate(selectedDateStr)}</strong>. 
+                      Selecione um dia com vendas na barra do calendário para ver uma demonstração exata de como os seus dados reais foram processados.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-900 text-slate-100 rounded-2xl p-4.5 space-y-3.5 font-mono text-[11px]">
+                    <div className="flex justify-between border-b border-slate-800 pb-2">
+                      <span className="text-slate-400 font-semibold">Métrica de Simulação</span>
+                      <span className="text-slate-400 font-semibold">Valor em {currency}</span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-slate-300">Faturamento Bruto (+)</span>
+                        <span className="text-emerald-400 font-bold">{selectedSoldTotal.toLocaleString()} {currency}</span>
+                      </div>
+                      <div className="flex justify-between pl-3 text-slate-400 text-[10px]">
+                        <span>- Custo dos Produtos</span>
+                        <span>{selectedProdCost.toLocaleString()} {currency}</span>
+                      </div>
+                      <div className="flex justify-between pl-3 text-slate-400 text-[10px]">
+                        <span>- Custo de Entregas</span>
+                        <span>{selectedDeliveryCost.toLocaleString()} {currency}</span>
+                      </div>
+                      <div className="flex justify-between pl-3 text-slate-400 text-[10px]">
+                        <span>- Custo de Publicidade</span>
+                        <span>{selectedAdCost.toLocaleString()} {currency}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-800 pt-2 font-bold">
+                        <span>Custos de Venda Totais (=)</span>
+                        <span className="text-amber-500">{selectedTotalC.toLocaleString()} {currency}</span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-dashed border-slate-700 pt-2.5 space-y-2">
+                      <div className="flex justify-between text-sm font-bold">
+                        <span>Lucro Proporcional Real (=)</span>
+                        <span className={selectedProportionalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {selectedProportionalProfit >= 0 ? '+' : ''}{selectedProportionalProfit.toLocaleString()} {currency}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm font-bold">
+                        <span>ROI Proporcional Calculado {"(=>)"}</span>
+                        <span className={selectedProportionalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                          {selectedTotalC === 0 ? '+100%+' : `${selectedProportionalRoi >= 0 ? '+' : ''}${Math.round(selectedProportionalRoi)}%`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50" id="roi_help_footer_actions">
+              <button
+                type="button"
+                onClick={() => setShowRoiHelp(false)}
+                className="bg-slate-900 text-white hover:bg-slate-800 font-extrabold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer"
+                id="btn_close_roi_help_modal_bottom"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

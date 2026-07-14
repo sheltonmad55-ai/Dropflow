@@ -58,7 +58,9 @@ service cloud.firestore {
         && (!('tipo' in data) || data.tipo is string)
         && (!('saldo_atual' in data) || data.saldo_atual is number)
         && (!('criado_em' in data) || data.criado_em is string)
-        && (!('percentual_padrao' in data) || data.percentual_padrao is number);
+        && (!('percentual_padrao' in data) || data.percentual_padrao is number)
+        && (!('distribuicao_modo' in data) || data.distribuicao_modo is string)
+        && (!('valor_distribuicao' in data) || data.valor_distribuicao is number);
     }
 
     // Vendas validation helper
@@ -75,6 +77,10 @@ service cloud.firestore {
         && (!('criado_em' in data) || data.criado_em is string)
         && (!('observacao' in data) || data.observacao is string)
         && (!('custom_anuncios_percent' in data) || data.custom_anuncios_percent is number)
+        && (!('quantidade' in data) || data.quantidade is number)
+        && (!('preco_unitario' in data) || data.preco_unitario is number)
+        && (!('desconto' in data) || data.desconto is number)
+        && (!('status' in data) || data.status is string)
         && (!('sync_status' in data) || data.sync_status is string);
     }
 
@@ -141,6 +147,21 @@ service cloud.firestore {
         && (!('orcamento_maximo' in data) || data.orcamento_maximo is number)
         && (!('orcamento_usd' in data) || data.orcamento_usd is bool)
         && (!('metricas_diarias' in data) || data.metricas_diarias is list);
+    }
+
+    // Despesas recorrentes validation helper
+    function isValidDespesaRecorrente(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('descricao' in data) || data.descricao is string)
+        && (!('valor' in data) || data.valor is number)
+        && (!('caixinha_id' in data) || data.caixinha_id is string)
+        && (!('categoria' in data) || data.categoria is string)
+        && (!('frequencia' in data) || data.frequencia is string)
+        && (!('dia_vencimento' in data) || data.dia_vencimento is number)
+        && (!('ultimo_processado' in data) || data.ultimo_processado is string)
+        && (!('ativa' in data) || data.ativa is bool)
+        && (!('criado_em' in data) || data.criado_em is string);
     }
 
     // Test collection for boot validation
@@ -270,9 +291,27 @@ service cloud.firestore {
       allow delete: if isAuth() && isValidId(campanhaId) && isOwner(resource.data.user_id);
     }
 
+    // Despesas Recorrentes Rules
+    match /despesas_recorrentes/{id} {
+      allow get: if isAuth() && isValidId(id) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidDespesaRecorrente(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(id)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidDespesaRecorrente(request.resource.data);
+      allow delete: if isAuth() && isValidId(id) && isOwner(resource.data.user_id);
+    }
+
     // Admin Logs Rules
     match /admin_logs/{logId} {
-      allow read, write: if isAdmin() && isValidId(logId);
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin();
+      allow write: if isAdmin() && isValidId(logId);
     }
 
     // Broadcasts Rules

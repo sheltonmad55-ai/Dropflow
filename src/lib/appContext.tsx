@@ -69,6 +69,8 @@ interface AppContextType {
 
   // Business Actions
   addVenda: (vendaData: Omit<Venda, 'id' | 'user_id' | 'sync_status' | 'criado_em'>) => Promise<void>;
+  editVenda: (id: string, updates: Partial<Venda>) => Promise<void>;
+  deleteVenda: (id: string) => Promise<void>;
   addDespesa: (despesaData: Omit<Despesa, 'id' | 'user_id' | 'sync_status' | 'criado_em'>) => Promise<void>;
   addProduto: (produtoData: Omit<Produto, 'id' | 'user_id' | 'margem' | 'criado_em'>) => Promise<void>;
   editProduto: (id: string, updates: Partial<Produto>) => Promise<void>;
@@ -501,17 +503,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Calculate trial expiry (7 days from now)
-      const trialExpiry = new Date();
-      trialExpiry.setDate(trialExpiry.getDate() + 7);
-
+      // Default initial plan to expired/payment pending
       const newProfile: Profile = {
         id: user.uid,
         nome,
         pais: pais || 'Moçambique',
         moeda: moeda || 'MT',
-        plano: 'trial',
-        trial_expires_at: trialExpiry.toISOString(),
+        plano: 'expired',
+        trial_expires_at: new Date().toISOString(),
         anuncios_percent: 50,
         lucro_percent: 50,
         criado_em: new Date().toISOString()
@@ -592,17 +591,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let userCaixinhas = data.caixinhas as Caixinha[];
 
       if (!userProfile) {
-        // If not, register a new profile with Google's details
-        const trialExpiry = new Date();
-        trialExpiry.setDate(trialExpiry.getDate() + 7);
-
+        // If not, register a new profile with Google's details (default to payment pending/expired)
         userProfile = {
           id: user.uid,
           nome: user.displayName || 'Empreendedor Google',
           pais: 'Moçambique',
           moeda: 'MT',
-          plano: 'trial',
-          trial_expires_at: trialExpiry.toISOString(),
+          plano: 'expired',
+          trial_expires_at: new Date().toISOString(),
           anuncios_percent: 50,
           lucro_percent: 50,
           criado_em: new Date().toISOString()
@@ -835,39 +831,76 @@ export function AppProvider({ children }: { children: ReactNode }) {
       distribution[deliveryCx.id] = shippingCost;
     }
 
-    // 3. Distribute remainder: first to personalized auto-distribute pockets, then between Ads and Profit
+    // 3. Distribute remainder: first to fixed-mode pockets, then divide the rest among percentage-mode pockets
     const remainder = value - purchaseCost - shippingCost;
+    let availableRemainder = remainder;
+
     if (remainder > 0) {
-      // Find personalized pockets with auto_distribuir: true and percentual_padrao > 0
-      const autoDists = caixinhas.filter(c => c.tipo === 'personalizado' && c.auto_distribuir && (c.percentual_padrao || 0) > 0);
-      
-      let allocatedToCustom = 0;
-      autoDists.forEach(cx => {
-        const pct = cx.percentual_padrao || 0;
-        const amt = Math.round(remainder * (pct / 100) * 100) / 100;
-        distribution[cx.id] = amt;
-        allocatedToCustom += amt;
+      const activePockets = caixinhas.filter(c => 
+        c.tipo === 'lucro' || 
+        c.tipo === 'anuncios' || 
+        (c.tipo === 'personalizado' && c.auto_distribuir)
+      );
+
+      // A. Process Fixed allocations first
+      activePockets.forEach(cx => {
+        if (cx.distribuicao_modo === 'fixo' && cx.valor_distribuicao && cx.valor_distribuicao > 0) {
+          const amt = Math.min(availableRemainder, cx.valor_distribuicao);
+          distribution[cx.id] = amt;
+          availableRemainder -= amt;
+        }
       });
 
-      const actualRemainder = Math.max(0, remainder - allocatedToCustom);
+      // B. Process Percentage allocations for the rest of the available remainder
+      const pctPockets = activePockets.filter(cx => 
+        cx.distribuicao_modo !== 'fixo' || !cx.valor_distribuicao
+      );
 
-      const adsPercent = vendaData.custom_anuncios_percent !== undefined ? vendaData.custom_anuncios_percent : profile.anuncios_percent;
-      const adsAmount = Math.round(actualRemainder * (adsPercent / 100) * 100) / 100;
-      const profitAmount = Math.round((actualRemainder - adsAmount) * 100) / 100;
+      if (pctPockets.length > 0 && availableRemainder > 0) {
+        // Sum total percentage points requested
+        const totalPct = pctPockets.reduce((sum, cx) => {
+          if (cx.tipo === 'lucro') {
+            return sum + (profile.lucro_percent || 50);
+          } else if (cx.tipo === 'anuncios') {
+            const adsPercent = vendaData.custom_anuncios_percent !== undefined ? vendaData.custom_anuncios_percent : (profile.anuncios_percent || 50);
+            return sum + adsPercent;
+          } else {
+            return sum + (cx.valor_distribuicao || cx.percentual_padrao || 0);
+          }
+        }, 0);
 
-      if (anunciosCx) {
-        distribution[anunciosCx.id] = adsAmount;
-      }
-      if (lucrosCx) {
-        distribution[lucrosCx.id] = profitAmount;
+        if (totalPct > 0) {
+          let allocatedPctSum = 0;
+          pctPockets.forEach((cx, idx) => {
+            let cxPct = 0;
+            if (cx.tipo === 'lucro') {
+              cxPct = profile.lucro_percent || 50;
+            } else if (cx.tipo === 'anuncios') {
+              cxPct = vendaData.custom_anuncios_percent !== undefined ? vendaData.custom_anuncios_percent : (profile.anuncios_percent || 50);
+            } else {
+              cxPct = cx.valor_distribuicao || cx.percentual_padrao || 0;
+            }
+
+            let amt = 0;
+            if (idx === pctPockets.length - 1) {
+              amt = Math.round(availableRemainder * 100) / 100;
+            } else {
+              amt = Math.round(availableRemainder * (cxPct / totalPct) * 100) / 100;
+            }
+            distribution[cx.id] = (distribution[cx.id] || 0) + amt;
+            allocatedPctSum += amt;
+          });
+          availableRemainder = Math.max(0, availableRemainder - allocatedPctSum);
+        }
       }
     } else {
-      // In case of loss or negative margin, write 0 to Ads and Profit
-      if (anunciosCx) distribution[anunciosCx.id] = 0;
-      if (lucrosCx) distribution[lucrosCx.id] = 0;
-      
-      const autoDists = caixinhas.filter(c => c.tipo === 'personalizado' && c.auto_distribuir);
-      autoDists.forEach(cx => {
+      // In case of loss or negative margin, write 0 to auto-distribute pockets
+      const activePockets = caixinhas.filter(c => 
+        c.tipo === 'lucro' || 
+        c.tipo === 'anuncios' || 
+        (c.tipo === 'personalizado' && c.auto_distribuir)
+      );
+      activePockets.forEach(cx => {
         distribution[cx.id] = 0;
       });
     }
@@ -1004,6 +1037,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Update React states
     setCaixinhas(updatedCaixinhas);
     setVendas(prev => [newVenda, ...prev]);
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function editVenda(id: string, updates: Partial<Venda>) {
+    const original = vendas.find(v => v.id === id);
+    if (!original) return;
+
+    const updated = { ...original, ...updates, sync_status: 'pending' as const };
+    await db.putItem('vendas', updated);
+    await db.addToSyncQueue({ type: 'venda', action: 'update', data: updated });
+    setVendas(prev => prev.map(v => v.id === id ? updated : v));
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function deleteVenda(id: string) {
+    const original = vendas.find(v => v.id === id);
+    if (!original) return;
+
+    // 1. Revert product stock quantity (add back quantity sold)
+    const product = produtos.find(p => p.id === original.produto_id);
+    if (product) {
+      const newQty = product.quantidade + (original.quantidade || 1);
+      const updatedProduct = { ...product, quantidade: newQty };
+      await db.putItem('produtos', updatedProduct);
+      await db.addToSyncQueue({ type: 'produto', action: 'update', data: updatedProduct });
+      setProdutos(prev => prev.map(p => p.id === product.id ? updatedProduct : p));
+    }
+
+    // 2. Revert supplier outstanding value (valor_pendente) if there is any supplier
+    if (original.fornecedor_id) {
+      const purchaseCost = (product ? product.preco_compra : 0) * (original.quantidade || 1);
+      const supplier = fornecedores.find(f => f.id === original.fornecedor_id);
+      if (supplier) {
+        const newPending = Math.max(0, Math.round((supplier.valor_pendente - purchaseCost) * 100) / 100);
+        const updatedSupplier = { ...supplier, valor_pendente: newPending };
+        await db.putItem('fornecedores', updatedSupplier);
+        await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
+        setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
+      }
+    }
+
+    // 3. Revert local balances of Caixinhas
+    const updatedCaixinhas = caixinhas.map(cx => {
+      const distributedAmt = original.distribuicao?.[cx.id] || 0;
+      if (distributedAmt > 0) {
+        const newBalance = Math.max(0, Math.round((cx.saldo_atual - distributedAmt) * 100) / 100);
+        const updatedCx = { ...cx, saldo_atual: newBalance };
+        db.putItem('caixinhas', updatedCx);
+        db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+        return updatedCx;
+      }
+      return cx;
+    });
+    setCaixinhas(updatedCaixinhas);
+
+    // 4. Delete the Venda
+    await db.deleteItem('vendas', id);
+    await db.addToSyncQueue({ type: 'venda', action: 'delete', data: original });
+    setVendas(prev => prev.filter(v => v.id !== id));
 
     setSyncStatus('pending');
     syncWithServer();
@@ -1169,7 +1265,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   // Caixinhas management
-  async function addCaixinha(nome: string, icone: string, cor: string, percentual?: number, auto_distribuir?: boolean) {
+  async function addCaixinha(
+    nome: string, 
+    icone: string, 
+    cor: string, 
+    percentual?: number, 
+    auto_distribuir?: boolean,
+    distribuicao_modo?: 'percentual' | 'fixo',
+    valor_distribuicao?: number
+  ) {
     if (!profile) return;
     const id = crypto.randomUUID();
     const newCx: Caixinha = {
@@ -1182,6 +1286,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       percentual_padrao: percentual,
       saldo_atual: 0,
       auto_distribuir: auto_distribuir || false,
+      distribuicao_modo: distribuicao_modo || 'percentual',
+      valor_distribuicao: valor_distribuicao !== undefined ? valor_distribuicao : (percentual || 0),
       criado_em: new Date().toISOString()
     };
 
@@ -1366,6 +1472,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncWithServer,
 
       addVenda,
+      editVenda,
+      deleteVenda,
       addDespesa,
       addProduto,
       editProduto,

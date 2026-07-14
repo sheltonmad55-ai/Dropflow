@@ -65,6 +65,8 @@ export interface Caixinha {
   saldo_atual: number;
   criado_em: string;
   auto_distribuir?: boolean; // se vai receber de forma automatica quando houver vendas
+  distribuicao_modo?: 'percentual' | 'fixo'; // 'percentual' ou 'fixo'
+  valor_distribuicao?: number; // valor fixo ou percentual dependendo do modo
 }
 
 export interface DespesaRecorrente {
@@ -98,6 +100,7 @@ export interface Venda {
   quantidade?: number;
   preco_unitario?: number;
   desconto?: number;
+  status?: 'pendente' | 'entregue';
   sync_status: 'synced' | 'pending';
   criado_em: string;
 }

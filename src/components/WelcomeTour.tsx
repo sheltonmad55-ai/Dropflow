@@ -46,14 +46,14 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
   const steps: StepConfig[] = [
     {
       title: 'Bem-vindo ao DroopFlow! 🚀',
-      content: 'Este é o seu centro inteligente de gestão financeira e operacional para Dropshipping. Vamos fazer um tour guiado rápido de 1 minuto para dominar a aplicação?',
+      content: 'Este é o seu centro inteligente de gestão financeira e operacional para Dropshipping. Vamos fazer um tour guiado rápido de 1 minuto para dominar a aplicação? Clique no botão "Seguinte" abaixo para começar!',
       targetSelector: 'none',
       icon: <Sparkles className="w-8 h-8 text-emerald-500" />,
       badge: 'Início'
     },
     {
       title: 'Resumo Diário (Bento Grid) 📊',
-      content: 'Aqui vê o seu balanço financeiro diário: Faturação de Hoje, Saídas e o seu Lucro Líquido Real atualizados instantaneamente. Tudo se ajusta conforme o dia que selecionar.',
+      content: 'Aqui vê o seu balanço financeiro diário. Pode clicar diretamente num dos cards de métricas (como "Faturação" ou "Caixinha") para ver detalhes ou escolher outro dia para recalcular os valores.',
       targetSelector: '#selected_day_metrics_grid',
       tab: 'dashboard',
       icon: <TrendingUp className="w-8 h-8 text-indigo-500" />,
@@ -61,7 +61,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Calendário Semanal 📅',
-      content: 'Navegue livremente pelos dias. Os pontos coloridos sob as datas mostram rapidamente se houve vendas (verde) ou despesas (vermelho) registadas nesse dia.',
+      content: 'Navegue livremente pelos dias. Clique diretamente numa data do calendário com ponto colorido para carregar as vendas (ponto verde) ou despesas (ponto vermelho) desse dia.',
       targetSelector: '#calendar_strip_wrapper',
       tab: 'dashboard',
       icon: <Sparkles className="w-8 h-8 text-amber-500" />,
@@ -69,7 +69,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Registos Rápidos de Caixa ➕',
-      content: 'Use estes botões (ou o botão flutuante no telemóvel) para lançar novas vendas ou despesas. Cada venda distribui automaticamente o lucro líquido para as suas caixas de reserva!',
+      content: 'Estes botões no menu lateral são para registos imediatos. Clique em "Registar Venda" para adicionar uma encomenda com divisão de lucro automática ou "Registar Despesa" para registar saídas.',
       targetSelector: '#sidebar_actions',
       tab: 'dashboard',
       icon: <DollarSign className="w-8 h-8 text-emerald-500" />,
@@ -77,7 +77,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Pockets Virtuais (Caixinhas) 📦',
-      content: 'Divida o seu saldo de forma inteligente! Crie pockets para impostos, marketing, fornecedores e capital de giro. Defina as regras de distribuição no perfil comercial e proteja o seu fluxo de caixa contra surpresas!',
+      content: 'Clique em "Configurar Caixinhas" no canto superior direito para ir ao seu perfil comercial e definir exatamente a percentagem de lucro que cada venda distribui para estas caixas.',
       targetSelector: '#caixinhas_view',
       tab: 'caixinhas',
       icon: <Layers className="w-8 h-8 text-purple-500" />,
@@ -85,7 +85,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Controlo de Vendas e Estoque 💰',
-      content: 'Registe os seus produtos, fornecedores e zonas de entrega. Na lista de vendas, o lucro líquido de cada transação é calculado subtraindo as taxas e o custo do produto em tempo real.',
+      content: 'Gestão operacional completa. Clique em "Nova Venda" para adicionar novos pedidos de dropshipping ou clique em "Exportar CSV" para descarregar todo o seu histórico financeiro.',
       targetSelector: '#vendas_view',
       tab: 'vendas',
       icon: <CheckCircle2 className="w-8 h-8 text-sky-500" />,
@@ -93,7 +93,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Performance de Anúncios & ROAS 📣',
-      content: 'Insira os gastos reais diários de tráfego pago (Facebook Ads, TikTok Ads, etc.) para calcular o ROAS real e o Retorno de Campanha líquido ao final de cada dia.',
+      content: 'Clique no botão de edição de gastos diários (lápis) na tabela para introduzir o valor investido em tráfego pago (Facebook Ads, TikTok). O DroopFlow calcula o seu ROAS real de imediato!',
       targetSelector: '#campanhas_view_wrapper',
       tab: 'campanhas',
       icon: <Megaphone className="w-8 h-8 text-rose-500" />,
@@ -101,7 +101,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Relatórios Dinâmicos e DRE 📈',
-      content: 'Analise relatórios de fluxo de caixa e lucros em gráficos interativos. Acompanhe a evolução do faturamento e gere declarações estruturadas para o seu negócio.',
+      content: 'Para obter uma análise em PDF completa do seu negócio para fornecedores ou sócios, clique no botão "Descarregar Relatório" ou passe o cursor sobre os gráficos para ver o detalhe diário.',
       targetSelector: '#relatorios_view',
       tab: 'relatorios',
       icon: <BarChart2 className="w-8 h-8 text-indigo-500" />,
@@ -109,7 +109,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Objetivos e Metas Financeiras 🎯',
-      content: 'Estipule as suas metas de faturamento diárias, semanais ou mensais e acompanhe barras visuais de progresso dinâmico para motivar a sua operação.',
+      content: 'Clique em "Nova Meta" para estipular o seu objetivo de faturamento diário, semanal ou mensal. A barra de progresso visual é atualizada automaticamente a cada nova venda registada!',
       targetSelector: '#metas_view_container',
       tab: 'metas',
       icon: <Target className="w-8 h-8 text-rose-500" />,
@@ -117,7 +117,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Tudo Pronto! 🎉',
-      content: 'Concluiu o tour de boas-vindas com sucesso! Agora tem a carteira inteligente do seu dropshipping sob controlo absoluto. Se precisar de rever este tour, aceda ao botão nas Definições.',
+      content: 'Concluiu o tour com sucesso! Pode aceder a este guia interativo sempre que quiser clicando em "Rever Tour de Boas-vindas" nas Definições. Clique no botão "Concluir" abaixo para começar!',
       targetSelector: 'none',
       tab: 'dashboard',
       icon: <CheckCircle2 className="w-8 h-8 text-emerald-500" />,

@@ -434,7 +434,7 @@ export default function CampanhasView() {
           </div>
         ) : (
           <div className="overflow-x-auto" id="campanhas_table_scroll">
-            <table className="w-full text-left border-collapse" id="campanhas_table">
+            <table className="w-full min-w-[800px] text-left border-collapse" id="campanhas_table">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800">
                   <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">Campanha</th>
@@ -878,7 +878,7 @@ export default function CampanhasView() {
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-xs">
+                      <table className="w-full min-w-[600px] text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase text-slate-400">
                             <th className="p-3">Data</th>
