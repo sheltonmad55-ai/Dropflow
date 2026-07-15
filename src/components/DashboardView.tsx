@@ -105,6 +105,17 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     return getLocalDateStr(new Date());
   });
 
+  // Master Date Range Picker States
+  const [dateRangeType, setDateRangeType] = React.useState<'hoje' | 'semana' | 'mes' | 'personalizado'>('hoje');
+  const [startDateStr, setStartDateStr] = React.useState(() => getLocalDateStr(new Date()));
+  const [endDateStr, setEndDateStr] = React.useState(() => getLocalDateStr(new Date()));
+
+  // Ref for native datepicker input element (retained for backward compatibility if needed)
+  const dateInputRef = React.useRef<HTMLInputElement>(null);
+
+  // State for view mode: 'dia' (single day) or 'semana' (entire carousel week)
+  const [dateViewMode, setDateViewMode] = React.useState<'dia' | 'semana'>('dia');
+
   // Pivot date to anchor the stable 7-day strip
   const [pivotDateStr, setPivotDateStr] = React.useState(() => {
     return getLocalDateStr(new Date());
@@ -134,8 +145,34 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     return days;
   };
 
+  const handleRangePreset = (type: 'hoje' | 'semana' | 'mes') => {
+    setDateRangeType(type);
+    const today = new Date();
+    const todayStr = getLocalDateStr(today);
+    if (type === 'hoje') {
+      setStartDateStr(todayStr);
+      setEndDateStr(todayStr);
+      setSelectedDateStr(todayStr);
+    } else if (type === 'semana') {
+      const d = new Date();
+      d.setDate(today.getDate() - 6);
+      setStartDateStr(getLocalDateStr(d));
+      setEndDateStr(todayStr);
+      setSelectedDateStr(todayStr);
+    } else if (type === 'mes') {
+      const d = new Date();
+      d.setDate(today.getDate() - 29);
+      setStartDateStr(getLocalDateStr(d));
+      setEndDateStr(todayStr);
+      setSelectedDateStr(todayStr);
+    }
+  };
+
   const handleSelectDate = (dateStr: string) => {
     setSelectedDateStr(dateStr);
+    setDateRangeType('personalizado');
+    setStartDateStr(dateStr);
+    setEndDateStr(dateStr);
     
     // Update pivot if the selected date is not in the currently displayed 7 days
     const currentDays = getDaysArray(pivotDateStr).map(d => getLocalDateStr(d));
@@ -161,6 +198,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     const todayStr = getLocalDateStr(new Date());
     setSelectedDateStr(todayStr);
     setPivotDateStr(todayStr);
+    handleRangePreset('hoje');
   };
 
   // Calculations
@@ -175,18 +213,77 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   const totalSoldMonth = monthVendas.reduce((acc, curr) => acc + curr.valor_recebido, 0);
   const totalExpensesMonth = monthDespesas.reduce((acc, curr) => acc + curr.valor, 0);
 
-  // Selected Date specific metrics
-  const selectedVendas = vendas.filter(v => v.data_venda === selectedDateStr);
-  const selectedDespesas = despesas.filter(d => d.data === selectedDateStr);
+  // Derive master dates active for filter
+  const activeStartDate = React.useMemo(() => {
+    const today = new Date();
+    if (dateRangeType === 'hoje') {
+      return getLocalDateStr(today);
+    } else if (dateRangeType === 'semana') {
+      const d = new Date();
+      d.setDate(today.getDate() - 6);
+      return getLocalDateStr(d);
+    } else if (dateRangeType === 'mes') {
+      const d = new Date();
+      d.setDate(today.getDate() - 29);
+      return getLocalDateStr(d);
+    } else {
+      return startDateStr;
+    }
+  }, [dateRangeType, startDateStr, getLocalDateStr]);
+
+  const activeEndDate = React.useMemo(() => {
+    if (dateRangeType === 'personalizado') {
+      return endDateStr;
+    }
+    return getLocalDateStr(new Date());
+  }, [dateRangeType, endDateStr, getLocalDateStr]);
+
+  // Selected Date specific metrics (now fully driven by master Date Range)
+  const carouselDays = getDaysArray(pivotDateStr).map(d => getLocalDateStr(d));
+  
+  const selectedVendas = React.useMemo(() => {
+    return (vendas || []).filter(v => v.data_venda >= activeStartDate && v.data_venda <= activeEndDate);
+  }, [vendas, activeStartDate, activeEndDate]);
+
+  const selectedDespesas = React.useMemo(() => {
+    return (despesas || []).filter(d => d.data >= activeStartDate && d.data <= activeEndDate);
+  }, [despesas, activeStartDate, activeEndDate]);
 
   const selectedSoldTotal = selectedVendas.reduce((acc, curr) => acc + curr.valor_recebido, 0);
   const selectedExpensesTotal = selectedDespesas.reduce((acc, curr) => acc + curr.valor, 0);
   const selectedNetTotal = selectedSoldTotal - selectedExpensesTotal;
 
-  // Comparison Day specific metrics (the day prior to selected date)
-  const prevDateStr = getPrevDateStr(selectedDateStr);
-  const prevVendas = vendas.filter(v => v.data_venda === prevDateStr);
-  const prevDespesas = despesas.filter(d => d.data === prevDateStr);
+  // Comparison specific metrics - prior period of exact same duration
+  const getPrevPeriodDates = React.useMemo(() => {
+    const startParts = activeStartDate.split('-');
+    const endParts = activeEndDate.split('-');
+    
+    const start = new Date(parseInt(startParts[0]), parseInt(startParts[1]) - 1, parseInt(startParts[2]));
+    const end = new Date(parseInt(endParts[0]), parseInt(endParts[1]) - 1, parseInt(endParts[2]));
+    
+    const durationMs = end.getTime() - start.getTime();
+    const durationDays = Math.round(durationMs / (1000 * 60 * 60 * 24)) + 1;
+    
+    const prevStart = new Date(start.getTime());
+    prevStart.setDate(prevStart.getDate() - durationDays);
+    
+    const prevEnd = new Date(start.getTime());
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    
+    return {
+      startStr: getLocalDateStr(prevStart),
+      endStr: getLocalDateStr(prevEnd),
+      durationDays
+    };
+  }, [activeStartDate, activeEndDate, getLocalDateStr]);
+
+  const prevVendas = React.useMemo(() => {
+    return (vendas || []).filter(v => v.data_venda >= getPrevPeriodDates.startStr && v.data_venda <= getPrevPeriodDates.endStr);
+  }, [vendas, getPrevPeriodDates]);
+
+  const prevDespesas = React.useMemo(() => {
+    return (despesas || []).filter(d => d.data >= getPrevPeriodDates.startStr && d.data <= getPrevPeriodDates.endStr);
+  }, [despesas, getPrevPeriodDates]);
 
   const prevSoldTotal = prevVendas.reduce((acc, curr) => acc + curr.valor_recebido, 0);
   const prevExpensesTotal = prevDespesas.reduce((acc, curr) => acc + curr.valor, 0);
@@ -205,6 +302,33 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   } else if (selectedExpensesTotal > 0) {
     expensesChangePercent = 100;
   }
+
+  // Dynamic labels for range
+  const rangeLabel = React.useMemo(() => {
+    if (dateRangeType === 'hoje') {
+      return 'Faturamento de Hoje';
+    } else if (dateRangeType === 'semana') {
+      return 'Faturamento Semanal';
+    } else if (dateRangeType === 'mes') {
+      return 'Faturamento Mensal';
+    } else {
+      return 'Faturamento Selecionado';
+    }
+  }, [dateRangeType]);
+
+  const rangeDescription = React.useMemo(() => {
+    if (activeStartDate === activeEndDate) {
+      return `Vendas no dia ${formatFriendlyDate(activeStartDate)}`;
+    }
+    return `Período: ${formatFriendlyDate(activeStartDate)} até ${formatFriendlyDate(activeEndDate)}`;
+  }, [activeStartDate, activeEndDate, formatFriendlyDate]);
+
+  const comparisonLabelSuffix = React.useMemo(() => {
+    if (dateRangeType === 'hoje') {
+      return 'vs ontem';
+    }
+    return 'vs período anterior';
+  }, [dateRangeType]);
 
   // Proportional costs calculation for selected date (reused in ROI card and transparency modal)
   const selectedProdCost = selectedVendas.reduce((acc, curr) => {
@@ -408,6 +532,8 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
         </div>
       )}
 
+
+
       {/* Hero: Metrics Grid at the top */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4" id="top_metrics_grid">
         {/* Faturamento Diário Display Card (Left side) */}
@@ -423,11 +549,11 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           <div className="space-y-1 relative" id="faturamento_card_details">
             <div className="flex justify-between items-center" id="faturamento_card_badge_row">
               <span className="text-[10px] font-black tracking-wider text-slate-500 dark:text-slate-400 uppercase">
-                Faturamento Diário
+                {rangeLabel}
               </span>
               <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[8px] font-black tracking-wider uppercase px-2 py-0.5 rounded border border-emerald-500/20 select-none flex items-center gap-1">
                 <Sparkles className="w-2.5 h-2.5" />
-                <span>Diário</span>
+                <span>Ativo</span>
               </span>
             </div>
             
@@ -439,19 +565,19 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             </div>
             
             <p className="text-[10px] text-slate-400 dark:text-slate-450 pt-1 leading-snug">
-              Vendas no dia {formatFriendlyDate(selectedDateStr)}. <span className="text-emerald-600 dark:text-emerald-400 font-bold underline">Clique para ver histórico completo.</span>
+              {rangeDescription}. <span className="text-emerald-600 dark:text-emerald-400 font-bold underline">Clique para ver histórico completo.</span>
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-6 relative" id="faturamento_card_breakdown">
             <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
-              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Vendas do Dia</span>
+              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Vendas no Período</span>
               <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
                 {selectedVendas.length}
               </span>
             </div>
             <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
-              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Balanço do Dia</span>
+              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Balanço no Período</span>
               <span className={`text-xs font-extrabold ${selectedNetTotal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {selectedNetTotal >= 0 ? '+' : ''}{selectedNetTotal.toLocaleString()} {currency}
               </span>
@@ -603,10 +729,10 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
       <div className="bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-4.5 shadow-sm space-y-4" id="daily_calendar_container">
         
         {/* Calendar Header with Selected Date and Date Picker Button */}
-        <div className="flex justify-between items-center" id="calendar_header">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100/60 dark:border-slate-800/60 pb-3" id="calendar_header">
           <div className="space-y-0.5" id="calendar_title_group">
             <div className="flex items-center space-x-1.5">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 font-display">Controlo Diário</h3>
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 font-display">Controlo Periódico</h3>
               <button
                 type="button"
                 id="btn_help_controlo_diario"
@@ -618,24 +744,69 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
               </button>
             </div>
             <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-              Métricas de <span className="text-emerald-600 font-bold">{formatFriendlyDate(selectedDateStr)}</span>
+              Período: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatFriendlyDate(activeStartDate)}</span> {activeStartDate !== activeEndDate && <>até <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatFriendlyDate(activeEndDate)}</span></>}
             </p>
           </div>
           
-          {/* Custom Date Selector Trigger & Today buttons */}
-          <div className="flex items-center space-x-2 shrink-0" id="calendar_actions_wrapper">
-            <button
-              onClick={jumpToToday}
-              className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100/50 dark:border-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/55 text-emerald-700 dark:text-emerald-400 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              id="btn_jump_to_today"
-            >
-              Hoje
-            </button>
- 
+          {/* Custom Date Range Selector (Hoje, 7D, 30D, Personalizado) */}
+          <div className="flex flex-wrap items-center gap-2" id="calendar_actions_wrapper">
+            
+            {/* Presets Toggle Group */}
+            <div className="flex bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/40 dark:border-slate-700/40" id="range_presets_group">
+              <button
+                type="button"
+                onClick={() => handleRangePreset('hoje')}
+                className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer ${
+                  dateRangeType === 'hoje'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
+              >
+                Hoje
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRangePreset('semana')}
+                className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer ${
+                  dateRangeType === 'semana'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
+              >
+                7 Dias
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRangePreset('mes')}
+                className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer ${
+                  dateRangeType === 'mes'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
+              >
+                30 Dias
+              </button>
+              <button
+                type="button"
+                onClick={() => setDateRangeType('personalizado')}
+                className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer ${
+                  dateRangeType === 'personalizado'
+                    ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
+              >
+                Personalizado
+              </button>
+            </div>
+
+            {/* Quick Single Date Selector using Native Input */}
             <div className="relative shrink-0" id="custom_date_trigger_wrapper">
-              <button className="flex items-center space-x-1 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-300 py-1.5 px-3 rounded-xl text-xs font-bold transition-colors">
+              <button 
+                type="button"
+                className="flex items-center space-x-1 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-300 py-1.5 px-3 rounded-xl text-[10px] font-bold uppercase transition-colors"
+              >
                 <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                <span>Outra Data</span>
+                <span>Escolher Dia</span>
               </button>
               <input
                 type="date"
@@ -646,11 +817,46 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                     handleSelectDate(e.target.value);
                   }
                 }}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
               />
             </div>
           </div>
         </div>
+
+        {/* Custom Range Inputs (Rendered inline inside the card when 'personalizado' is active) */}
+        {dateRangeType === 'personalizado' && (
+          <div className="grid grid-cols-2 gap-3 bg-slate-50/50 dark:bg-slate-900/25 p-3 rounded-2xl border border-slate-100 dark:border-slate-800/40 animate-fade-in" id="custom_range_inputs_container">
+            <div className="space-y-1">
+              <label className="text-[8px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">Data de Início</label>
+              <input
+                type="date"
+                value={startDateStr}
+                max={endDateStr}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setStartDateStr(e.target.value);
+                  }
+                }}
+                className="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold border border-slate-200/70 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-[10px] outline-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[8px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-wider">Data de Fim</label>
+              <input
+                type="date"
+                value={endDateStr}
+                min={startDateStr}
+                max={getLocalDateStr(new Date())}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setEndDateStr(e.target.value);
+                  }
+                }}
+                className="w-full bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold border border-slate-200/70 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-[10px] outline-none"
+              />
+            </div>
+          </div>
+        )}
 
         {/* 7-Day Carousel Strip wrapped with stable Week Navigators */}
         <div className="flex items-center space-x-1" id="calendar_strip_wrapper">
@@ -676,7 +882,12 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
               return (
                 <button
                   key={idx}
-                  onClick={() => setSelectedDateStr(dayStr)}
+                  onClick={() => {
+                    setSelectedDateStr(dayStr);
+                    setDateRangeType('personalizado');
+                    setStartDateStr(dayStr);
+                    setEndDateStr(dayStr);
+                  }}
                   className={`flex flex-col items-center justify-between py-2 px-1 rounded-xl transition-all cursor-pointer select-none ${
                     isSelected 
                       ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
@@ -737,12 +948,12 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             </div>
             {salesChangePercent !== 0 && (
               <span className={`text-[8px] font-bold block truncate ${salesChangePercent > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                {salesChangePercent > 0 ? '↑' : '↓'} {Math.abs(salesChangePercent)}% vs ontem
+                {salesChangePercent > 0 ? '↑' : '↓'} {Math.abs(salesChangePercent)}% {comparisonLabelSuffix}
               </span>
             )}
             {salesChangePercent === 0 && (
               <span className="text-[8px] font-medium text-slate-400 block truncate">
-                igual a ontem
+                {dateRangeType === 'hoje' ? 'igual a ontem' : 'igual ao anterior'}
               </span>
             )}
           </div>
@@ -760,12 +971,12 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             </div>
             {expensesChangePercent !== 0 && (
               <span className={`text-[8px] font-bold block truncate ${expensesChangePercent > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                {expensesChangePercent > 0 ? '↑' : '↓'} {Math.abs(expensesChangePercent)}% vs ontem
+                {expensesChangePercent > 0 ? '↑' : '↓'} {Math.abs(expensesChangePercent)}% {comparisonLabelSuffix}
               </span>
             )}
             {expensesChangePercent === 0 && (
               <span className="text-[8px] font-medium text-slate-400 block truncate">
-                igual a ontem
+                {dateRangeType === 'hoje' ? 'igual a ontem' : 'igual ao anterior'}
               </span>
             )}
           </div>
