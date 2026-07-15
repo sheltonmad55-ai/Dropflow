@@ -437,6 +437,142 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, profile?.id]);
 
+  const previousMetGoalsRef = useRef<{
+    daily: boolean;
+    weekly: boolean;
+    monthly: boolean;
+    profileId: string | null;
+  }>({
+    daily: false,
+    weekly: false,
+    monthly: false,
+    profileId: null
+  });
+
+  // Watch sales progress in real-time to alert the user via local browser notifications when a goal is achieved/exceeded
+  useEffect(() => {
+    if (!profile) {
+      previousMetGoalsRef.current = { daily: false, weekly: false, monthly: false, profileId: null };
+      return;
+    }
+
+    // 1. Daily Goal Calculations
+    const goalDailyVal = profile.metaDiaria || 0;
+    const pDiaria = profile.periodoDiaria || 1;
+    const startDaily = new Date();
+    startDaily.setHours(0, 0, 0, 0);
+    startDaily.setDate(startDaily.getDate() - (pDiaria - 1));
+
+    const salesDaily = vendas
+      .filter(v => {
+        const vDate = new Date(v.data_venda + 'T00:00:00');
+        return vDate >= startDaily;
+      })
+      .reduce((acc, v) => acc + v.valor_recebido, 0);
+
+    const isDailyMet = goalDailyVal > 0 && salesDaily >= goalDailyVal;
+
+    // 2. Weekly Goal Calculations
+    const goalWeeklyVal = profile.metaSemanal || 0;
+    const pSemanal = profile.periodoSemanal || 1;
+    const getStartOfWeek = () => {
+      const d = new Date();
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const m = new Date(d.setDate(diff));
+      m.setHours(0, 0, 0, 0);
+      return m;
+    };
+    const mondayDate = getStartOfWeek();
+    const startWeekly = new Date(mondayDate);
+    startWeekly.setDate(mondayDate.getDate() - (pSemanal - 1) * 7);
+
+    const salesWeekly = vendas
+      .filter(v => {
+        const vDate = new Date(v.data_venda + 'T00:00:00');
+        return vDate >= startWeekly;
+      })
+      .reduce((acc, v) => acc + v.valor_recebido, 0);
+
+    const isWeeklyMet = goalWeeklyVal > 0 && salesWeekly >= goalWeeklyVal;
+
+    // 3. Monthly Goal Calculations
+    const goalMonthlyVal = profile.metaMensal || 0;
+    const pMensal = profile.periodoMensal || 1;
+    const now = new Date();
+    const startMonthly = new Date(now.getFullYear(), now.getMonth() - (pMensal - 1), 1, 0, 0, 0, 0);
+
+    const salesMonthly = vendas
+      .filter(v => {
+        const vDate = new Date(v.data_venda + 'T00:00:00');
+        return vDate >= startMonthly;
+      })
+      .reduce((acc, v) => acc + v.valor_recebido, 0);
+
+    const isMonthlyMet = goalMonthlyVal > 0 && salesMonthly >= goalMonthlyVal;
+
+    // If it's the initial load for this profile, initialize ref silently to avoid spamming alerts on page refresh
+    if (previousMetGoalsRef.current.profileId !== profile.id) {
+      previousMetGoalsRef.current = {
+        daily: isDailyMet,
+        weekly: isWeeklyMet,
+        monthly: isMonthlyMet,
+        profileId: profile.id
+      };
+      return;
+    }
+
+    // Subsequent changes: trigger notifications and sound effect when any goal state shifts from incomplete to achieved
+    const dailyJustMet = isDailyMet && !previousMetGoalsRef.current.daily;
+    const weeklyJustMet = isWeeklyMet && !previousMetGoalsRef.current.weekly;
+    const monthlyJustMet = isMonthlyMet && !previousMetGoalsRef.current.monthly;
+
+    if (dailyJustMet || weeklyJustMet || monthlyJustMet) {
+      import('./notifications.ts').then(({ sendNotification }) => {
+        let msg = '';
+        const currency = profile.moeda || 'MT';
+        
+        if (dailyJustMet) {
+          msg = `A sua Meta Diária de ${goalDailyVal.toLocaleString()} ${currency} foi atingida com sucesso! Faturamento atual: ${salesDaily.toLocaleString()} ${currency}. 🎉`;
+          sendNotification("Meta Diária Alcançada! 🎉", msg);
+        }
+        if (weeklyJustMet) {
+          msg = `Espetacular! A sua Meta Semanal de ${goalWeeklyVal.toLocaleString()} ${currency} foi superada! Faturamento atual: ${salesWeekly.toLocaleString()} ${currency}. 🚀`;
+          sendNotification("Meta Semanal Alcançada! 🚀", msg);
+        }
+        if (monthlyJustMet) {
+          msg = `Histórico! A sua Meta Mensal de ${goalMonthlyVal.toLocaleString()} ${currency} foi batida! Faturamento atual: ${salesMonthly.toLocaleString()} ${currency}. 🏆`;
+          sendNotification("Meta Mensal Alcançada! 🏆", msg);
+        }
+
+        // Play the cash register celebration sound
+        import('./audio.ts').then(({ playCashRegister }) => {
+          playCashRegister(profile.ativarSons !== false && profile.somMetas !== false);
+        });
+      });
+    }
+
+    // Keep ref values synchronized
+    previousMetGoalsRef.current = {
+      daily: isDailyMet,
+      weekly: isWeeklyMet,
+      monthly: isMonthlyMet,
+      profileId: profile.id
+    };
+  }, [
+    vendas,
+    profile?.id,
+    profile?.metaDiaria,
+    profile?.metaSemanal,
+    profile?.metaMensal,
+    profile?.periodoDiaria,
+    profile?.periodoSemanal,
+    profile?.periodoMensal,
+    profile?.moeda,
+    profile?.ativarSons,
+    profile?.somMetas
+  ]);
+
   async function loadAllLocalData(userId: string) {
     try {
       const [
@@ -953,86 +1089,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Save Venda to Local DB & queue sync
     await db.putItem('vendas', newVenda);
     await db.addToSyncQueue({ type: 'venda', action: 'create', data: newVenda });
-
-    // Evaluate goals before and after this sale to trigger comemmorations/notifications
-    const goalDailyVal = profile.metaDiaria || 0;
-    const goalWeeklyVal = profile.metaSemanal || 0;
-    const goalMonthlyVal = profile.metaMensal || 0;
-
-    const pDiaria = profile.periodoDiaria || 1;
-    const startDaily = new Date();
-    startDaily.setHours(0,0,0,0);
-    startDaily.setDate(startDaily.getDate() - (pDiaria - 1));
-
-    const pSemanal = profile.periodoSemanal || 1;
-    const getStartOfWeek = () => {
-      const d = new Date();
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const m = new Date(d.setDate(diff));
-      m.setHours(0,0,0,0);
-      return m;
-    };
-    const mondayDate = getStartOfWeek();
-    const startWeekly = new Date(mondayDate);
-    startWeekly.setDate(mondayDate.getDate() - (pSemanal - 1) * 7);
-
-    const pMensal = profile.periodoMensal || 1;
-    const now = new Date();
-    const startMonthly = new Date(now.getFullYear(), now.getMonth() - (pMensal - 1), 1, 0, 0, 0, 0);
-
-    const salesDailyBefore = vendas
-      .filter(v => {
-        const vDate = new Date(v.data_venda + 'T00:00:00');
-        return vDate >= startDaily;
-      })
-      .reduce((acc, v) => acc + v.valor_recebido, 0);
-
-    const salesWeeklyBefore = vendas
-      .filter(v => {
-        const vDate = new Date(v.data_venda + 'T00:00:00');
-        return vDate >= startWeekly;
-      })
-      .reduce((acc, v) => acc + v.valor_recebido, 0);
-
-    const salesMonthlyBefore = vendas
-      .filter(v => {
-        const vDate = new Date(v.data_venda + 'T00:00:00');
-        return vDate >= startMonthly;
-      })
-      .reduce((acc, v) => acc + v.valor_recebido, 0);
-
-    const salesDailyAfter = salesDailyBefore + value;
-    const salesWeeklyAfter = salesWeeklyBefore + value;
-    const salesMonthlyAfter = salesMonthlyBefore + value;
-
-    const dailyGoalCrossed = goalDailyVal > 0 && salesDailyBefore < goalDailyVal && salesDailyAfter >= goalDailyVal;
-    const weeklyGoalCrossed = goalWeeklyVal > 0 && salesWeeklyBefore < goalWeeklyVal && salesWeeklyAfter >= goalWeeklyVal;
-    const monthlyGoalCrossed = goalMonthlyVal > 0 && salesMonthlyBefore < goalMonthlyVal && salesMonthlyAfter >= goalMonthlyVal;
-
-    if (dailyGoalCrossed || weeklyGoalCrossed || monthlyGoalCrossed) {
-      import('./audio.ts').then(({ playCashRegister }) => {
-        playCashRegister(profile.ativarSons !== false && profile.somMetas !== false);
-      });
-
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        let msg = '';
-        if (dailyGoalCrossed) {
-          msg += `Meta Diária (${pDiaria === 1 ? 'Hoje' : `${pDiaria} dias`}) de ${goalDailyVal.toLocaleString()} ${profile.moeda || 'MT'} alcançada! 🎉 `;
-        }
-        if (weeklyGoalCrossed) {
-          msg += `Meta Semanal (${pSemanal === 1 ? 'Esta Semana' : `${pSemanal} semanas`}) de ${goalWeeklyVal.toLocaleString()} ${profile.moeda || 'MT'} alcançada! 🚀 `;
-        }
-        if (monthlyGoalCrossed) {
-          msg += `Meta Mensal (${pMensal === 1 ? 'Este Mês' : `${pMensal} meses`}) de ${goalMonthlyVal.toLocaleString()} ${profile.moeda || 'MT'} alcançada! 🏆 `;
-        }
-        try {
-          new Notification("DroopFlow - Meta Atingida!", { body: msg.trim() });
-        } catch (e) {
-          console.warn("Notification error:", e);
-        }
-      }
-    }
 
     // Update React states
     setCaixinhas(updatedCaixinhas);

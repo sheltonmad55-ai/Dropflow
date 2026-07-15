@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import Papa from 'papaparse';
 import { useApp } from '../lib/appContext.tsx';
 import { Campanha, MetricaDiaria } from '../types.ts';
 import { 
@@ -48,6 +49,28 @@ export default function CampanhasView() {
   // New States for Maximum Budget & Currency
   const [orcamentoMaximo, setOrcamentoMaximo] = useState('');
   const [orcamentoUsd, setOrcamentoUsd] = useState(false);
+
+  // Campaign Objective & Dynamic Metrics states
+  const [objetivo, setObjetivo] = useState<'mensagens' | 'vendas' | 'trafego' | 'reconhecimento'>('mensagens');
+  const [conversasIniciadas, setConversasIniciadas] = useState('');
+  const [custoPorConversa, setCustoPorConversa] = useState('');
+  const [alcance, setAlcance] = useState('');
+  const [frequencia, setFrequencia] = useState('');
+  const [cpm, setCpm] = useState('');
+  const [compras, setCompras] = useState('');
+  const [custoPorCompra, setCustoPorCompra] = useState('');
+  const [cliquesNaLigacao, setCliquesNaLigacao] = useState('');
+  const [ctr, setCtr] = useState('');
+  const [cpc, setCpc] = useState('');
+  const [visualizacoesPaginaDestino, setVisualizacoesPaginaDestino] = useState('');
+  const [cliquesTodos, setCliquesTodos] = useState('');
+  const [ctrTudo, setCtrTudo] = useState('');
+  const [cpcTudo, setCpcTudo] = useState('');
+
+  // CSV Import states
+  const [csvCampaignsList, setCsvCampaignsList] = useState<Array<Record<string, string>>>([]);
+  const [showCsvSelection, setShowCsvSelection] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState('64.0');
 
   // Daily Metrics Modal States
   const [selectedCampanhaForMetrics, setSelectedCampanhaForMetrics] = useState<Campanha | null>(null);
@@ -152,6 +175,23 @@ export default function CampanhasView() {
     setDataCampanha(new Date().toISOString().split('T')[0]);
     setOrcamentoMaximo('');
     setOrcamentoUsd(false);
+
+    setObjetivo('mensagens');
+    setConversasIniciadas('');
+    setCustoPorConversa('');
+    setAlcance('');
+    setFrequencia('');
+    setCpm('');
+    setCompras('');
+    setCustoPorCompra('');
+    setCliquesNaLigacao('');
+    setCtr('');
+    setCpc('');
+    setVisualizacoesPaginaDestino('');
+    setCliquesTodos('');
+    setCtrTudo('');
+    setCpcTudo('');
+
     setIsModalOpen(true);
   };
 
@@ -169,7 +209,238 @@ export default function CampanhasView() {
     setDataCampanha(campanha.data);
     setOrcamentoMaximo(campanha.orcamento_maximo?.toString() || '');
     setOrcamentoUsd(!!campanha.orcamento_usd);
+
+    setObjetivo(campanha.objetivo || 'mensagens');
+    setConversasIniciadas(campanha.conversas_iniciadas?.toString() || '');
+    setCustoPorConversa(campanha.custo_por_conversa?.toString() || '');
+    setAlcance(campanha.alcance?.toString() || '');
+    setFrequencia(campanha.frequencia?.toString() || '');
+    setCpm(campanha.cpm?.toString() || '');
+    setCompras(campanha.compras?.toString() || '');
+    setCustoPorCompra(campanha.custo_por_compra?.toString() || '');
+    setCliquesNaLigacao(campanha.cliques_na_ligacao?.toString() || '');
+    setCtr(campanha.ctr?.toString() || '');
+    setCpc(campanha.cpc?.toString() || '');
+    setVisualizacoesPaginaDestino(campanha.visualizacoes_pagina_destino?.toString() || '');
+    setCliquesTodos(campanha.cliques_todos?.toString() || '');
+    setCtrTudo(campanha.ctr_tudo?.toString() || '');
+    setCpcTudo(campanha.cpc_tudo?.toString() || '');
+
     setIsModalOpen(true);
+  };
+
+  // CSV Import handlers
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data as Array<Record<string, string>>;
+        if (rows.length === 0) {
+          alert("O ficheiro CSV está vazio.");
+          return;
+        }
+        
+        // Filter out totals rows or rows without campaign names
+        const campaignRows = rows.filter(row => {
+          const name = row['Nome da campanha'] || row['Campaign name'] || '';
+          return name && !name.toLowerCase().includes('total');
+        });
+
+        if (campaignRows.length === 0) {
+          alert("Nenhuma campanha válida encontrada no ficheiro CSV.");
+          return;
+        }
+
+        if (campaignRows.length === 1) {
+          importCsvRow(campaignRows[0]);
+        } else {
+          setCsvCampaignsList(campaignRows);
+          setShowCsvSelection(true);
+        }
+      },
+      error: (err) => {
+        alert("Erro ao ler o ficheiro CSV: " + err.message);
+      }
+    });
+  };
+
+  const importCsvRow = (row: Record<string, string>) => {
+    const campaignName = row['Nome da campanha'] || row['Campaign name'] || '';
+    if (campaignName && !nome) {
+      setNome(campaignName);
+    }
+
+    const rate = Number(exchangeRate) || 1;
+
+    const parseCsvNumber = (val: string | undefined): number => {
+      if (!val) return 0;
+      let cleaned = val.replace(/[^\d.,-]/g, '').trim();
+      if (cleaned.includes(',') && cleaned.includes('.')) {
+        if (cleaned.indexOf('.') < cleaned.indexOf(',')) {
+          cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+        } else {
+          cleaned = cleaned.replace(/,/g, '');
+        }
+      } else if (cleaned.includes(',')) {
+        const parts = cleaned.split(',');
+        if (parts[1] && parts[1].length === 3) {
+          cleaned = cleaned.replace(/,/g, '');
+        } else {
+          cleaned = cleaned.replace(',', '.');
+        }
+      }
+      return Number(cleaned) || 0;
+    };
+
+    const convertValueIfNeeded = (usdValue: number) => {
+      if (orcamentoUsd) {
+        return usdValue;
+      } else {
+        return usdValue * rate;
+      }
+    };
+
+    // 1. Gasto
+    const gastoUsdKey = Object.keys(row).find(k => k.toLowerCase().includes('gasto') || k.toLowerCase().includes('spent'));
+    if (gastoUsdKey) {
+      const rawGasto = parseCsvNumber(row[gastoUsdKey]);
+      const isHeaderUsd = gastoUsdKey.toUpperCase().includes('USD');
+      if (isHeaderUsd) {
+        setGasto(convertValueIfNeeded(rawGasto).toFixed(2));
+      } else {
+        setGasto(rawGasto.toFixed(2));
+      }
+    }
+
+    // 2. Resultados + Indicador
+    const resultadosKey = Object.keys(row).find(k => k === 'Resultados' || k === 'Results');
+    const resultadosVal = resultadosKey ? parseCsvNumber(row[resultadosKey]) : 0;
+
+    if (resultadosKey) {
+      if (objetivo === 'mensagens') {
+        setConversasIniciadas(resultadosVal.toString());
+      } else if (objetivo === 'vendas') {
+        setCompras(resultadosVal.toString());
+        setConversoes(resultadosVal.toString());
+      } else if (objetivo === 'trafego') {
+        setCliquesTodos(resultadosVal.toString());
+        setCliques(resultadosVal.toString());
+      }
+    }
+
+    // 3. Custo por resultados
+    const custoResultadosKey = Object.keys(row).find(k => k.toLowerCase().includes('custo por resultado') || k.toLowerCase().includes('cost per result'));
+    if (custoResultadosKey) {
+      const rawCustoResult = parseCsvNumber(row[custoResultadosKey]);
+      const isHeaderUsd = custoResultadosKey.toUpperCase().includes('USD');
+      const val = isHeaderUsd ? convertValueIfNeeded(rawCustoResult) : rawCustoResult;
+      if (objetivo === 'mensagens') {
+        setCustoPorConversa(val.toFixed(2));
+      } else if (objetivo === 'vendas') {
+        setCustoPorCompra(val.toFixed(2));
+      }
+    }
+
+    // 4. Impressões
+    const impressoesKey = Object.keys(row).find(k => k === 'Impressões' || k === 'Impressions' || k.toLowerCase().includes('impressoes'));
+    if (impressoesKey) {
+      setImpressoes(parseCsvNumber(row[impressoesKey]).toString());
+    }
+
+    // 5. Alcance
+    const alcanceKey = Object.keys(row).find(k => k === 'Alcance' || k === 'Reach');
+    if (alcanceKey) {
+      setAlcance(parseCsvNumber(row[alcanceKey]).toString());
+    }
+
+    // 6. Frequência
+    const frequenciaKey = Object.keys(row).find(k => k === 'Frequência' || k === 'Frequency' || k.toLowerCase().includes('frequencia'));
+    if (frequenciaKey) {
+      setFrequencia(parseCsvNumber(row[frequenciaKey]).toFixed(2));
+    }
+
+    // 7. CPM
+    const cpmKey = Object.keys(row).find(k => k.toUpperCase().startsWith('CPM'));
+    if (cpmKey) {
+      const rawCpm = parseCsvNumber(row[cpmKey]);
+      const isHeaderUsd = cpmKey.toUpperCase().includes('USD');
+      const val = isHeaderUsd ? convertValueIfNeeded(rawCpm) : rawCpm;
+      setCpm(val.toFixed(2));
+    }
+
+    // 8. Cliques na ligação
+    const cliquesLigacaoKey = Object.keys(row).find(k => k.toLowerCase().includes('cliques na ligação') || k.toLowerCase().includes('cliques na ligacao') || k.toLowerCase().includes('link clicks'));
+    if (cliquesLigacaoKey) {
+      const cl = parseCsvNumber(row[cliquesLigacaoKey]);
+      setCliquesNaLigacao(cl.toString());
+      setCliques(cl.toString());
+    }
+
+    // 9. CTR
+    const ctrKey = Object.keys(row).find(k => k.toLowerCase().includes('ctr (taxa de cliques na ligação') || k.toLowerCase().includes('ctr (taxa de cliques na ligacao') || k.toLowerCase().includes('outbound ctr'));
+    if (ctrKey) {
+      setCtr(parseCsvNumber(row[ctrKey]).toFixed(2));
+    }
+
+    // 10. CPC
+    const cpcKey = Object.keys(row).find(k => k.toLowerCase().includes('cpc (custo por clique na ligação') || k.toLowerCase().includes('cpc (custo por clique na ligacao') || k.toLowerCase().includes('cost per outbound click'));
+    if (cpcKey) {
+      const rawCpc = parseCsvNumber(row[cpcKey]);
+      const isHeaderUsd = cpcKey.toUpperCase().includes('USD');
+      setCpc((isHeaderUsd ? convertValueIfNeeded(rawCpc) : rawCpc).toFixed(2));
+    }
+
+    // 11. Cliques (Todos)
+    const cliquesTodosKey = Object.keys(row).find(k => k === 'Cliques (Todos)' || k === 'Clicks (All)' || k.toLowerCase().includes('cliques (todos)'));
+    if (cliquesTodosKey) {
+      const clT = parseCsvNumber(row[cliquesTodosKey]);
+      setCliquesTodos(clT.toString());
+      if (objetivo === 'trafego') {
+        setCliques(clT.toString());
+      }
+    }
+
+    // 12. CTR (tudo)
+    const ctrTudoKey = Object.keys(row).find(k => k.toLowerCase().includes('ctr (tudo)') || k.toLowerCase().includes('ctr (all)'));
+    if (ctrTudoKey) {
+      setCtrTudo(parseCsvNumber(row[ctrTudoKey]).toFixed(2));
+    }
+
+    // 13. CPC (tudo)
+    const cpcTudoKey = Object.keys(row).find(k => k.toLowerCase().includes('cpc (tudo)') || k.toLowerCase().includes('cpc (all)'));
+    if (cpcTudoKey) {
+      const rawCpcTudo = parseCsvNumber(row[cpcTudoKey]);
+      const isHeaderUsd = cpcTudoKey.toUpperCase().includes('USD');
+      setCpcTudo((isHeaderUsd ? convertValueIfNeeded(rawCpcTudo) : rawCpcTudo).toFixed(2));
+    }
+
+    // 14. Compras
+    const comprasKey = Object.keys(row).find(k => k === 'Compras' || k === 'Purchases' || k.toLowerCase().includes('compras'));
+    if (comprasKey) {
+      const comp = parseCsvNumber(row[comprasKey]);
+      setCompras(comp.toString());
+      setConversoes(comp.toString());
+    }
+
+    // 15. Custo por compra
+    const custoCompraKey = Object.keys(row).find(k => k.toLowerCase().includes('custo por compra') || k.toLowerCase().includes('cost per purchase'));
+    if (custoCompraKey) {
+      const rawCustoCompra = parseCsvNumber(row[custoCompraKey]);
+      const isHeaderUsd = custoCompraKey.toUpperCase().includes('USD');
+      setCustoPorCompra((isHeaderUsd ? convertValueIfNeeded(rawCustoCompra) : rawCustoCompra).toFixed(2));
+    }
+
+    // 16. Visualizações da página de destino
+    const viewsKey = Object.keys(row).find(k => k.toLowerCase().includes('visualizações da página de destino') || k.toLowerCase().includes('visualizacoes da pagina de destino') || k.toLowerCase().includes('landing page views'));
+    if (viewsKey) {
+      setVisualizacoesPaginaDestino(parseCsvNumber(row[viewsKey]).toString());
+    }
+
+    setShowCsvSelection(false);
   };
 
   // Submit form
@@ -187,6 +458,21 @@ export default function CampanhasView() {
       orcamento_maximo: Number(orcamentoMaximo) || 0,
       orcamento_usd: orcamentoUsd,
       data: dataCampanha,
+      objetivo,
+      conversas_iniciadas: Number(conversasIniciadas) || 0,
+      custo_por_conversa: Number(custoPorConversa) || 0,
+      alcance: Number(alcance) || 0,
+      frequencia: Number(frequencia) || 0,
+      cpm: Number(cpm) || 0,
+      compras: Number(compras) || 0,
+      custo_por_compra: Number(custoPorCompra) || 0,
+      cliques_na_ligacao: Number(cliquesNaLigacao) || 0,
+      ctr: Number(ctr) || 0,
+      cpc: Number(cpc) || 0,
+      visualizacoes_pagina_destino: Number(visualizacoesPaginaDestino) || 0,
+      cliques_todos: Number(cliquesTodos) || 0,
+      ctr_tudo: Number(ctrTudo) || 0,
+      cpc_tudo: Number(cpcTudo) || 0,
     };
 
     if (hasDailyMetrics) {
@@ -255,9 +541,11 @@ export default function CampanhasView() {
 
   // Render performance badge helper
   const getPerformanceBadge = (c: Campanha) => {
+    const res = c.valor_vendas - c.gasto;
     const roas = c.gasto > 0 ? (c.valor_vendas / c.gasto) : 0;
-    
-    if (c.gasto === 0) {
+    const unit = c.orcamento_usd ? '$' : moedaSymbol;
+
+    if (c.gasto === 0 && c.valor_vendas === 0) {
       return (
         <span className="px-2.5 py-1 text-[10px] font-bold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
           Inativa
@@ -265,26 +553,38 @@ export default function CampanhasView() {
       );
     }
 
-    if (roas >= 2.0) {
+    const threshold = c.gasto * 0.01;
+    const isEmpatado = Math.abs(res) <= (c.gasto === 0 ? 0 : threshold);
+
+    if (isEmpatado) {
       return (
-        <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-extrabold rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border border-emerald-100 dark:border-emerald-900/50">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Alta Perf. (ROAS {roas.toFixed(1)}x)</span>
-        </span>
+        <div className="flex flex-col items-center space-y-1">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-600 border border-amber-100 dark:border-amber-900/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            <span>Empatado</span>
+          </span>
+          <span className="text-[9px] text-slate-400">ROAS: {roas.toFixed(2)}x</span>
+        </div>
       );
-    } else if (roas >= 1.0) {
+    } else if (res > 0) {
       return (
-        <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-600 border border-sky-100 dark:border-sky-900/50">
-          <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
-          <span>Lucrativa (ROAS {roas.toFixed(1)}x)</span>
-        </span>
+        <div className="flex flex-col items-center space-y-1">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-black rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 border border-emerald-100 dark:border-emerald-900/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Lucro: {res.toLocaleString()} {unit}</span>
+          </span>
+          <span className="text-[9px] text-slate-400">ROAS: {roas.toFixed(2)}x</span>
+        </div>
       );
     } else {
       return (
-        <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-500 border border-rose-100 dark:border-rose-900/50">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-          <span>Prejuízo (ROAS {roas.toFixed(1)}x)</span>
-        </span>
+        <div className="flex flex-col items-center space-y-1">
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-bold rounded-full bg-rose-50 dark:bg-rose-950/20 text-rose-500 border border-rose-100 dark:border-rose-900/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+            <span>Prejuízo: {Math.abs(res).toLocaleString()} {unit}</span>
+          </span>
+          <span className="text-[9px] text-slate-400">ROAS: {roas.toFixed(2)}x</span>
+        </div>
       );
     }
   };
@@ -458,9 +758,17 @@ export default function CampanhasView() {
                       {/* Name & Date */}
                       <td className="p-4">
                         <div className="font-bold text-xs text-slate-900 dark:text-slate-50">{campanha.nome}</div>
-                        <div className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5">
-                          <Calendar className="w-3 h-3" />
-                          <span>{campanha.data}</span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="text-[8px] font-black tracking-wider uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-200/50 dark:border-slate-700/50">
+                            {campanha.objetivo === 'vendas' ? '🛒 Vendas' :
+                             campanha.objetivo === 'trafego' ? '🚦 Tráfego' :
+                             campanha.objetivo === 'reconhecimento' ? '📢 Reconhecimento' :
+                             '💬 Mensagens'}
+                          </span>
+                          <span className="text-[10px] text-slate-400 flex items-center space-x-1">
+                            <Calendar className="w-3 h-3" />
+                            <span>{campanha.data}</span>
+                          </span>
                         </div>
                       </td>
                       
@@ -640,6 +948,56 @@ export default function CampanhasView() {
                 />
               </div>
 
+              {/* Objetivo da Campanha */}
+              <div>
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1">Objetivo da Campanha</label>
+                <select
+                  value={objetivo}
+                  onChange={(e) => setObjetivo(e.target.value as any)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-4 py-3 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="mensagens">💬 Mensagens (WhatsApp)</option>
+                  <option value="vendas">🛒 Vendas/Conversões</option>
+                  <option value="trafego">🚦 Tráfego</option>
+                  <option value="reconhecimento">📢 Reconhecimento/Alcance</option>
+                </select>
+              </div>
+
+              {/* CSV Import Area */}
+              <div className="bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30 p-3 rounded-2xl space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider block">Importar CSV Meta Ads</label>
+                  <span className="text-[9px] text-slate-400">Suporta português/inglês</span>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    id="csv_file_input"
+                    onChange={handleCsvUpload}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="csv_file_input"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black py-2 px-3 rounded-xl shadow-sm text-center cursor-pointer transition-colors"
+                  >
+                    Selecionar Relatório .csv
+                  </label>
+                  
+                  <div className="w-24">
+                    <input
+                      type="number"
+                      placeholder="Taxa (USD->MT)"
+                      title="Taxa de câmbio para converter USD para a moeda local"
+                      value={exchangeRate}
+                      onChange={(e) => setExchangeRate(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1.5 text-[10px] font-bold focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 {/* Plataforma */}
                 <div>
@@ -739,54 +1097,260 @@ export default function CampanhasView() {
                 />
               </div>
 
-              {/* Base Metrics group header */}
+              {/* Dynamic Metrics Section */}
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-2">Métricas Base (Opcionais)</span>
+                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-2">Métricas por Objetivo ({objetivo.toUpperCase()})</span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                {/* Cliques */}
-                <div>
-                  <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Cliques</label>
-                  <input
-                    type="number"
-                    min="0"
-                    disabled={editingCampanha && editingCampanha.metricas_diarias && editingCampanha.metricas_diarias.length > 0}
-                    placeholder="0"
-                    value={cliques}
-                    onChange={(e) => setCliques(e.target.value)}
-                    className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none ${(editingCampanha && editingCampanha.metricas_diarias && editingCampanha.metricas_diarias.length > 0) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  />
+              {objetivo === 'mensagens' && (
+                <div className="grid grid-cols-2 gap-3" id="mensagens_metrics_group">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Conversas Iniciadas</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={conversasIniciadas}
+                      onChange={(e) => setConversasIniciadas(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Custo por Conversa ({orcamentoUsd ? '$' : moedaSymbol})</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={custoPorConversa}
+                      onChange={(e) => setCustoPorConversa(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Alcance</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={alcance}
+                      onChange={(e) => setAlcance(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Impressões</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={impressoes}
+                      onChange={(e) => setImpressoes(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">CPM</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={cpm}
+                      onChange={(e) => setCpm(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Frequência</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={frequencia}
+                      onChange={(e) => setFrequencia(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
                 </div>
+              )}
 
-                {/* Impressoes */}
-                <div>
-                  <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Impressões</label>
-                  <input
-                    type="number"
-                    min="0"
-                    disabled={editingCampanha && editingCampanha.metricas_diarias && editingCampanha.metricas_diarias.length > 0}
-                    placeholder="0"
-                    value={impressoes}
-                    onChange={(e) => setImpressoes(e.target.value)}
-                    className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none ${(editingCampanha && editingCampanha.metricas_diarias && editingCampanha.metricas_diarias.length > 0) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  />
+              {objetivo === 'vendas' && (
+                <div className="grid grid-cols-2 gap-3" id="vendas_metrics_group">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Compras</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={compras}
+                      onChange={(e) => setCompras(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Custo por Compra ({orcamentoUsd ? '$' : moedaSymbol})</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={custoPorCompra}
+                      onChange={(e) => setCustoPorCompra(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Cliques na Ligação</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={cliquesNaLigacao}
+                      onChange={(e) => setCliquesNaLigacao(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">CTR (%)</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={ctr}
+                      onChange={(e) => setCtr(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">CPC ({orcamentoUsd ? '$' : moedaSymbol})</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={cpc}
+                      onChange={(e) => setCpc(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Views Pág. Destino</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={visualizacoesPaginaDestino}
+                      onChange={(e) => setVisualizacoesPaginaDestino(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
                 </div>
+              )}
 
-                {/* Conversoes */}
-                <div>
-                  <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Conversões</label>
-                  <input
-                    type="number"
-                    min="0"
-                    disabled={editingCampanha && editingCampanha.metricas_diarias && editingCampanha.metricas_diarias.length > 0}
-                    placeholder="0"
-                    value={conversoes}
-                    onChange={(e) => setConversoes(e.target.value)}
-                    className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none ${(editingCampanha && editingCampanha.metricas_diarias && editingCampanha.metricas_diarias.length > 0) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  />
+              {objetivo === 'trafego' && (
+                <div className="grid grid-cols-2 gap-3" id="trafego_metrics_group">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Cliques (Todos)</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={cliquesTodos}
+                      onChange={(e) => setCliquesTodos(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">CTR Tudo (%)</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={ctrTudo}
+                      onChange={(e) => setCtrTudo(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">CPC Tudo ({orcamentoUsd ? '$' : moedaSymbol})</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={cpcTudo}
+                      onChange={(e) => setCpcTudo(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Views Pág. Destino</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={visualizacoesPaginaDestino}
+                      onChange={(e) => setVisualizacoesPaginaDestino(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {objetivo === 'reconhecimento' && (
+                <div className="grid grid-cols-2 gap-3" id="reconhecimento_metrics_group">
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Alcance</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={alcance}
+                      onChange={(e) => setAlcance(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Impressões</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      min="0"
+                      value={impressoes}
+                      onChange={(e) => setImpressoes(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">CPM</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={cpm}
+                      onChange={(e) => setCpm(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase block mb-1">Frequência</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      value={frequencia}
+                      onChange={(e) => setFrequencia(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Valor Vendas */}
               <div>
@@ -1057,6 +1621,49 @@ export default function CampanhasView() {
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MULTIPLE CAMPAIGNS CSV SELECTION OVERLAY */}
+      {showCsvSelection && csvCampaignsList.length > 0 && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-55 animate-fade-in" id="csv_selector_modal">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
+            <h4 className="text-xs font-black text-slate-900 dark:text-slate-50 uppercase tracking-wider mb-3">
+              Múltiplas campanhas encontradas no CSV
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+              Selecione qual a campanha que deseja importar para este formulário:
+            </p>
+            
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {csvCampaignsList.map((row, idx) => {
+                const name = row['Nome da campanha'] || row['Campaign name'] || `Linha ${idx + 1}`;
+                const spend = row['Montante gasto (USD)'] || row['Valor gasto (USD)'] || row['Montante gasto'] || '0';
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => importCsvRow(row)}
+                    className="w-full text-left p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex justify-between items-center"
+                  >
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate pr-2 max-w-[250px]">{name}</span>
+                    <span className="text-[10px] font-mono text-emerald-600 shrink-0">Gasto: {spend}</span>
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setShowCsvSelection(false);
+                setCsvCampaignsList([]);
+              }}
+              className="mt-4 w-full bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 py-2.5 rounded-xl text-xs font-bold"
+            >
+              Cancelar
+            </button>
           </div>
         </div>
       )}

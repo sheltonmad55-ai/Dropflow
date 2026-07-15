@@ -157,6 +157,22 @@ export interface MetricaDiaria {
   conversoes: number;
   valor_vendas: number;
   observacao?: string;
+  // Dynamic metrics
+  objetivo?: 'mensagens' | 'vendas' | 'trafego' | 'reconhecimento';
+  conversas_iniciadas?: number;
+  custo_por_conversa?: number;
+  alcance?: number;
+  frequencia?: number;
+  cpm?: number;
+  compras?: number;
+  custo_por_compra?: number;
+  cliques_na_ligacao?: number;
+  ctr?: number;
+  cpc?: number;
+  visualizacoes_pagina_destino?: number;
+  cliques_todos?: number;
+  ctr_tudo?: number;
+  cpc_tudo?: number;
 }
 
 export interface Campanha {
@@ -175,6 +191,22 @@ export interface Campanha {
   orcamento_maximo?: number;
   orcamento_usd?: boolean;
   metricas_diarias?: MetricaDiaria[];
+  // Dynamic metrics
+  objetivo?: 'mensagens' | 'vendas' | 'trafego' | 'reconhecimento';
+  conversas_iniciadas?: number;
+  custo_por_conversa?: number;
+  alcance?: number;
+  frequencia?: number;
+  cpm?: number;
+  compras?: number;
+  custo_por_compra?: number;
+  cliques_na_ligacao?: number;
+  ctr?: number;
+  cpc?: number;
+  visualizacoes_pagina_destino?: number;
+  cliques_todos?: number;
+  ctr_tudo?: number;
+  cpc_tudo?: number;
 }
 
 export interface SyncQueueItem {
