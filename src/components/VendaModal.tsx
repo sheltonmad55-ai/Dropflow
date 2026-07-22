@@ -13,7 +13,7 @@ interface VendaModalProps {
 }
 
 export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
-  const { produtos, fornecedores, zonasEntrega, addVenda, profile, addProduto, addZonaEntrega, addFornecedor } = useApp();
+  const { produtos, fornecedores, zonasEntrega, addVenda, profile, addProduto, addZonaEntrega, addFornecedor, metaItems } = useApp();
   
   // Form fields
   const [valorRecebido, setValorRecebido] = useState<string>('');
@@ -23,8 +23,18 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [formaPagamento, setFormaPagamento] = useState<string>('M-Pesa');
   const [observacao, setObservacao] = useState<string>('');
   const [dataVenda, setDataVenda] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  // Custom Ads state (Percentual %, Meticais MT, Dólares USD)
   const [isCustomAds, setIsCustomAds] = useState<boolean>(false);
+  const [customAdsTipo, setCustomAdsTipo] = useState<'percentual' | 'mt' | 'usd'>('percentual');
   const [customAdsPercent, setCustomAdsPercent] = useState<number>(40);
+  const [customAdsValor, setCustomAdsValor] = useState<string>('');
+  const [taxaCambioUsd, setTaxaCambioUsd] = useState<string>('64'); // Default MT/USD exchange rate
+
+  // Custom Goal (Meta de Sonho/Objetivo) Allocation state
+  const [selectedMetaId, setSelectedMetaId] = useState<string>('');
+  const [metaAllocType, setMetaAllocType] = useState<'mt' | 'percent'>('mt');
+  const [metaAllocVal, setMetaAllocVal] = useState<string>('');
 
   const [quantidade, setQuantidade] = useState<string>('1');
   const [precoUnitario, setPrecoUnitario] = useState<string>('');
@@ -87,6 +97,10 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     if (isOpen && profile) {
       setCustomAdsPercent(profile.anuncios_percent);
       setIsCustomAds(false);
+      setCustomAdsTipo('percentual');
+      setCustomAdsValor('');
+      setSelectedMetaId('');
+      setMetaAllocVal('');
       setQuantidade('1');
       setPrecoUnitario('');
       setDesconto('0');
@@ -110,6 +124,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     remainder: 0,
     adsAmount: 0,
     profitAmount: 0,
+    metaAllocatedAmount: 0,
     isNegative: false
   });
 
@@ -132,12 +147,32 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     const isNeg = rem < 0;
 
     let ads = 0;
-    let prof = 0;
 
-    if (rem > 0 && profile) {
-      const activePercent = isCustomAds ? customAdsPercent : profile.anuncios_percent;
-      ads = Math.round(rem * (activePercent / 100) * 100) / 100;
-      prof = Math.round((rem - ads) * 100) / 100;
+    if (isCustomAds) {
+      if (customAdsTipo === 'percentual') {
+        ads = Math.round(rem * (customAdsPercent / 100) * 100) / 100;
+      } else if (customAdsTipo === 'mt') {
+        ads = parseFloat(customAdsValor) || 0;
+      } else if (customAdsTipo === 'usd') {
+        const valUsd = parseFloat(customAdsValor) || 0;
+        const rate = parseFloat(taxaCambioUsd) || 64;
+        ads = Math.round(valUsd * rate * 100) / 100;
+      }
+    } else if (rem > 0 && profile) {
+      ads = Math.round(rem * (profile.anuncios_percent / 100) * 100) / 100;
+    }
+
+    let prof = Math.max(0, Math.round((rem - ads) * 100) / 100);
+
+    // Calculate goal allocation if selected
+    let metaVal = 0;
+    if (selectedMetaId && val > 0) {
+      const numInput = parseFloat(metaAllocVal) || 0;
+      if (metaAllocType === 'mt') {
+        metaVal = numInput;
+      } else {
+        metaVal = Math.round((val * (numInput / 100)) * 100) / 100;
+      }
     }
 
     setPreview({
@@ -146,6 +181,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       remainder: Math.round(rem * 100) / 100,
       adsAmount: ads,
       profitAmount: prof,
+      metaAllocatedAmount: metaVal,
       isNegative: isNeg
     });
 
@@ -153,7 +189,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     if (prod && prod.fornecedor_id && !fornecedorId) {
       setFornecedorId(prod.fornecedor_id);
     }
-  }, [valorRecebido, quantidade, produtoId, zonaEntregaId, produtos, zonasEntrega, profile, fornecedorId, isCustomAds, customAdsPercent]);
+  }, [valorRecebido, quantidade, produtoId, zonaEntregaId, produtos, zonasEntrega, profile, fornecedorId, isCustomAds, customAdsPercent, customAdsTipo, customAdsValor, taxaCambioUsd, selectedMetaId, metaAllocType, metaAllocVal]);
 
   if (!isOpen) return null;
 
@@ -171,7 +207,12 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
         forma_pagamento: formaPagamento,
         observacao: observacao,
         data_venda: dataVenda,
-        custom_anuncios_percent: isCustomAds ? customAdsPercent : undefined,
+        custom_anuncios_percent: isCustomAds && customAdsTipo === 'percentual' ? customAdsPercent : undefined,
+        custom_anuncios_tipo: isCustomAds ? customAdsTipo : undefined,
+        custom_anuncios_valor: isCustomAds && customAdsTipo !== 'percentual' ? (parseFloat(customAdsValor) || 0) : undefined,
+        custom_anuncios_taxa_cambio: isCustomAds && customAdsTipo === 'usd' ? (parseFloat(taxaCambioUsd) || 64) : undefined,
+        meta_id: selectedMetaId || undefined,
+        meta_valor_alocado: selectedMetaId ? preview.metaAllocatedAmount : undefined,
         quantidade: parseInt(quantidade) || 1,
         preco_unitario: parseFloat(precoUnitario) || 0,
         desconto: parseFloat(desconto) || 0
@@ -186,6 +227,8 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setQuantidade('1');
       setPrecoUnitario('');
       setDesconto('0');
+      setSelectedMetaId('');
+      setMetaAllocVal('');
       onClose();
     } catch (err) {
       alert('Erro ao registar venda.');
@@ -529,39 +572,181 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
             />
           </div>
 
-          {/* Custom Ads Percentage Control */}
+          {/* Custom Ads Control (%, MT, USD) */}
           {!preview.isNegative && parseFloat(valorRecebido) > 0 && (
-            <div className="bg-slate-50/50 p-3.5 rounded-2xl border border-slate-200/60 space-y-2.5 animate-fade-in" id="field_venda_custom_ads">
+            <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80 space-y-3 animate-fade-in" id="field_venda_custom_ads">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-600 flex items-center cursor-pointer select-none">
+                <label className="text-xs font-bold text-slate-700 flex items-center cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={isCustomAds}
                     onChange={(e) => setIsCustomAds(e.target.checked)}
                     className="mr-2 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
                   />
-                  Customizar anúncios para esta venda
+                  Customizar Custo de Anúncios
                 </label>
-                <span className="text-[10px] font-bold text-slate-400">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase">
                   {isCustomAds ? 'Personalizado' : `Padrão (${profile?.anuncios_percent}%)`}
                 </span>
               </div>
 
               {isCustomAds && (
-                <div className="space-y-2 pt-1" id="custom_ads_slider_container">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={customAdsPercent}
-                    onChange={(e) => setCustomAdsPercent(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                  />
-                  <div className="flex justify-between text-[10px] font-black">
-                    <span className="text-sky-600">📢 Anúncios: {customAdsPercent}%</span>
-                    <span className="text-emerald-600">💰 Lucro: {100 - customAdsPercent}%</span>
+                <div className="space-y-3 pt-1 border-t border-slate-200/60" id="custom_ads_expanded">
+                  <div className="flex items-center space-x-1.5 bg-white p-1 rounded-xl border border-slate-200" id="ads_unit_selector">
+                    <button
+                      type="button"
+                      onClick={() => setCustomAdsTipo('percentual')}
+                      className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-colors ${
+                        customAdsTipo === 'percentual' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      % Percentual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomAdsTipo('mt')}
+                      className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-colors ${
+                        customAdsTipo === 'mt' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      MT Meticais
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomAdsTipo('usd')}
+                      className={`flex-1 py-1.5 text-[10px] font-black rounded-lg transition-colors ${
+                        customAdsTipo === 'usd' ? 'bg-sky-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                      }`}
+                    >
+                      $ USD Dólares
+                    </button>
                   </div>
+
+                  {customAdsTipo === 'percentual' && (
+                    <div className="space-y-2" id="custom_ads_slider_container">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        value={customAdsPercent}
+                        onChange={(e) => setCustomAdsPercent(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-600"
+                      />
+                      <div className="flex justify-between text-[10px] font-black">
+                        <span className="text-sky-600">📢 Anúncios: {customAdsPercent}%</span>
+                        <span className="text-emerald-600">💰 Lucro: {100 - customAdsPercent}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {customAdsTipo === 'mt' && (
+                    <div className="space-y-1" id="custom_ads_mt_input">
+                      <label className="text-[10px] font-bold text-slate-500">Valor em Meticais (MT)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Ex: 350 MT"
+                        value={customAdsValor}
+                        onChange={(e) => setCustomAdsValor(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500"
+                      />
+                    </div>
+                  )}
+
+                  {customAdsTipo === 'usd' && (
+                    <div className="grid grid-cols-2 gap-2" id="custom_ads_usd_inputs">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500">Valor em Dólares ($ USD)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Ex: 5.50 $"
+                          value={customAdsValor}
+                          onChange={(e) => setCustomAdsValor(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500">Câmbio (1 USD = ? MT)</label>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="64 MT"
+                          value={taxaCambioUsd}
+                          onChange={(e) => setTaxaCambioUsd(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-sky-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Transfer Funds to Personal Goal / Meta (Optionally) */}
+          {metaItems && metaItems.length > 0 && (
+            <div className="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200/60 space-y-2.5 animate-fade-in" id="field_venda_meta_transfer">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-900 flex items-center">
+                  🎯 Alocar para Meta / Objetivo
+                </label>
+                <span className="text-[10px] font-bold text-amber-700">Opcional</span>
+              </div>
+
+              <select
+                value={selectedMetaId}
+                onChange={(e) => setSelectedMetaId(e.target.value)}
+                className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-amber-500"
+              >
+                <option value="">Não transferir para nenhuma meta</option>
+                {metaItems.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.nome} ({m.valor_atual.toLocaleString()} / {m.valor_alvo.toLocaleString()} MT)
+                  </option>
+                ))}
+              </select>
+
+              {selectedMetaId && (
+                <div className="space-y-2 pt-1 border-t border-amber-200/60" id="meta_transfer_inputs">
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center bg-white rounded-lg p-0.5 border border-amber-200 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setMetaAllocType('mt')}
+                        className={`px-2 py-1 text-[10px] font-extrabold rounded ${
+                          metaAllocType === 'mt' ? 'bg-amber-500 text-white' : 'text-slate-500'
+                        }`}
+                      >
+                        Valor MT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMetaAllocType('percent')}
+                        className={`px-2 py-1 text-[10px] font-extrabold rounded ${
+                          metaAllocType === 'percent' ? 'bg-amber-500 text-white' : 'text-slate-500'
+                        }`}
+                      >
+                        % da Venda
+                      </button>
+                    </div>
+
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder={metaAllocType === 'mt' ? 'Ex: 250 MT' : 'Ex: 10%'}
+                      value={metaAllocVal}
+                      onChange={(e) => setMetaAllocVal(e.target.value)}
+                      className="w-full bg-white border border-amber-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  {preview.metaAllocatedAmount > 0 && (
+                    <p className="text-[10px] text-amber-800 font-bold flex items-center">
+                      ✨ Serão guardados +{preview.metaAllocatedAmount.toLocaleString()} MT diretamente nesta meta!
+                    </p>
+                  )}
                 </div>
               )}
             </div>

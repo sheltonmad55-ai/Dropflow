@@ -5,8 +5,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import * as db from './db.ts';
-import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente } from '../types.ts';
-import { checkCampaignBudget, startNotificationScheduler } from './notifications.ts';
+import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem } from '../types.ts';
+import { checkCampaignBudget, startNotificationScheduler, sendNotification } from './notifications.ts';
 import { 
   auth, 
   db as fDb,
@@ -61,6 +61,12 @@ interface AppContextType {
   zonasEntrega: ZonaEntrega[];
   campanhas: Campanha[];
   despesasRecorrentes: DespesaRecorrente[];
+  metaItems: MetaItem[];
+
+  // Toast / Notification Popup State
+  activeToast: { title: string; body: string; type?: 'success' | 'info' | 'warning' } | null;
+  triggerToast: (title: string, body: string, type?: 'success' | 'info' | 'warning') => void;
+  dismissToast: () => void;
 
   // Sync / Online State
   isOnline: boolean;
@@ -78,6 +84,12 @@ interface AppContextType {
   editFornecedor: (id: string, updates: Partial<Fornecedor>) => Promise<void>;
   addZonaEntrega: (zonaData: Omit<ZonaEntrega, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
   editZonaEntrega: (id: string, updates: Partial<ZonaEntrega>) => Promise<void>;
+  
+  // Custom Goals (Metas de Objetivos) Management
+  addMetaItem: (metaData: Omit<MetaItem, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
+  editMetaItem: (id: string, updates: Partial<MetaItem>) => Promise<void>;
+  deleteMetaItem: (id: string) => Promise<void>;
+  alocarParaMetaItem: (id: string, valorMT: number) => Promise<void>;
   
   // Caixinhas management
   addCaixinha: (nome: string, icone: string, cor: string, percentual?: number, auto_distribuir?: boolean) => Promise<void>;
@@ -120,6 +132,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [zonasEntrega, setZonasEntrega] = useState<ZonaEntrega[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [despesasRecorrentes, setDespesasRecorrentes] = useState<DespesaRecorrente[]>([]);
+  const [metaItems, setMetaItems] = useState<MetaItem[]>([]);
+
+  // Toast / Notification Popup State for Mobile & Desktop
+  const [activeToast, setActiveToast] = useState<{ title: string; body: string; type?: 'success' | 'info' | 'warning' } | null>(null);
+
+  const triggerToast = (title: string, body: string, type: 'success' | 'info' | 'warning' = 'info') => {
+    setActiveToast({ title, body, type });
+    // Also dispatch native browser / mobile notification via SW
+    sendNotification(title, body);
+  };
+
+  const dismissToast = () => {
+    setActiveToast(null);
+  };
 
   // Sync / Online state
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
@@ -310,6 +336,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
             (error) => console.error("DespesasRecorrentes real-time listener error:", error)
           );
           unsubscribesRef.current.push(unsubDespesasRecorrentes);
+
+          // 7.7. Listen to user meta_items collection
+          const unsubMetaItems = onSnapshot(
+            query(collection(fDb, 'meta_items'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as MetaItem);
+              setMetaItems(data.sort((a, b) => b.criado_em.localeCompare(a.criado_em)));
+              db.clearStore('meta_items').then(() => {
+                data.forEach(item => db.putItem('meta_items', item));
+              });
+            },
+            (error) => console.error("MetaItems real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubMetaItems);
 
           // 8. Listen to broadcasts collection
           const unsubBroadcasts = onSnapshot(
@@ -585,6 +625,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dbZonas,
         dbCampanhas,
         dbDespesasRecorrentes,
+        dbMetaItems,
         queue
       ] = await Promise.all([
         db.getAll<Profile>('profiles'),
@@ -596,6 +637,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         db.getAll<ZonaEntrega>('zonas_entrega'),
         db.getAll<Campanha>('campanhas'),
         db.getAll<DespesaRecorrente>('despesas_recorrentes'),
+        db.getAll<MetaItem>('meta_items'),
         db.getAll<SyncQueueItem>('sync_queue')
       ]);
 
@@ -612,6 +654,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setZonasEntrega(dbZonas.filter(z => z.user_id === userId));
       setCampanhas(dbCampanhas.filter(c => c.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
       setDespesasRecorrentes(dbDespesasRecorrentes.filter(dr => dr.user_id === userId));
+      setMetaItems(dbMetaItems.filter(m => m.user_id === userId).sort((a,b) => b.criado_em.localeCompare(a.criado_em)));
 
       if (queue.length > 0) {
         setSyncStatus('pending');
@@ -1090,9 +1133,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.putItem('vendas', newVenda);
     await db.addToSyncQueue({ type: 'venda', action: 'create', data: newVenda });
 
+    // If a goal allocation was selected, allocate funds to that custom goal
+    if (vendaData.meta_id && vendaData.meta_valor_alocado && vendaData.meta_valor_alocado > 0) {
+      await alocarParaMetaItem(vendaData.meta_id, vendaData.meta_valor_alocado);
+    }
+
     // Update React states
     setCaixinhas(updatedCaixinhas);
     setVendas(prev => [newVenda, ...prev]);
+
+    const curr = profile.moeda || 'MT';
+    triggerToast(
+      'Venda Registada com Sucesso! 💰',
+      `Faturamento: +${value.toLocaleString()} ${curr}`,
+      'success'
+    );
 
     setSyncStatus('pending');
     syncWithServer();
@@ -1210,6 +1265,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCaixinhas(updatedCaixinhas);
     setDespesas(prev => [newDespesa, ...prev]);
 
+    const curr = profile.moeda || 'MT';
+    triggerToast(
+      'Saída Registada com Sucesso! 📉',
+      `Despesa: -${despesaData.valor.toLocaleString()} ${curr} (${despesaData.categoria})`,
+      'warning'
+    );
+
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  // Custom Goals (Metas de Objetivos / Compras) Management
+  async function addMetaItem(metaData: Omit<MetaItem, 'id' | 'user_id' | 'criado_em'>) {
+    if (!profile) return;
+    const newMeta: MetaItem = {
+      ...metaData,
+      id: crypto.randomUUID(),
+      user_id: profile.id,
+      valor_atual: metaData.valor_atual || 0,
+      criado_em: new Date().toISOString()
+    };
+
+    setMetaItems(prev => [newMeta, ...prev]);
+    await db.putItem('meta_items', newMeta);
+    await db.addToSyncQueue({ type: 'meta_item', action: 'create', data: newMeta });
+    
+    triggerToast(
+      'Nova Meta Criada! 🎯',
+      `Meta "${newMeta.nome}" de ${newMeta.valor_alvo.toLocaleString()} MT guardada com sucesso!`,
+      'success'
+    );
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function editMetaItem(id: string, updates: Partial<MetaItem>) {
+    if (!profile) return;
+    const target = metaItems.find(m => m.id === id);
+    if (!target) return;
+    const updated = { ...target, ...updates };
+
+    setMetaItems(prev => prev.map(m => m.id === id ? updated : m));
+    await db.putItem('meta_items', updated);
+    await db.addToSyncQueue({ type: 'meta_item', action: 'update', data: updated });
+    triggerToast('Meta Atualizada! ✏️', `A meta "${updated.nome}" foi atualizada.`, 'info');
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function deleteMetaItem(id: string) {
+    if (!profile) return;
+    const target = metaItems.find(m => m.id === id);
+    setMetaItems(prev => prev.filter(m => m.id !== id));
+    await db.deleteItem('meta_items', id);
+    await db.addToSyncQueue({ type: 'meta_item', action: 'delete', data: { id } });
+    if (target) {
+      triggerToast('Meta Eliminada', `A meta "${target.nome}" foi removida.`, 'warning');
+    }
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function alocarParaMetaItem(id: string, valorMT: number) {
+    if (!profile || valorMT <= 0) return;
+    const target = metaItems.find(m => m.id === id);
+    if (!target) return;
+
+    const newCurrent = Math.round((target.valor_atual + valorMT) * 100) / 100;
+    const updated = { ...target, valor_atual: newCurrent };
+
+    setMetaItems(prev => prev.map(m => m.id === id ? updated : m));
+    await db.putItem('meta_items', updated);
+    await db.addToSyncQueue({ type: 'meta_item', action: 'update', data: updated });
+    
+    const pct = Math.min(100, Math.round((newCurrent / target.valor_alvo) * 100));
+    triggerToast(
+      'Progresso na Meta! 🎉', 
+      `+${valorMT.toLocaleString()} MT transferidos para "${target.nome}"! (${pct}% concluído)`,
+      'success'
+    );
     setSyncStatus('pending');
     syncWithServer();
   }
@@ -1522,6 +1657,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       zonasEntrega,
       campanhas,
       despesasRecorrentes,
+      metaItems,
+
+      activeToast,
+      triggerToast,
+      dismissToast,
 
       isOnline,
       syncStatus,
@@ -1537,6 +1677,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editFornecedor,
       addZonaEntrega,
       editZonaEntrega,
+
+      addMetaItem,
+      editMetaItem,
+      deleteMetaItem,
+      alocarParaMetaItem,
       
       addCaixinha,
       editCaixinha,

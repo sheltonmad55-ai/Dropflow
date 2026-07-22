@@ -130,6 +130,9 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   // State to control Faturamento History Modal
   const [showFaturamentoModal, setShowFaturamentoModal] = React.useState(false);
 
+  // State to control Financial Transparency & Real Net Profit Breakdown Modal
+  const [showTransparenciaModal, setShowTransparenciaModal] = React.useState(false);
+
   // Stable days array centered on or ending at the pivotDateStr
   const getDaysArray = (pivotStr: string) => {
     const days = [];
@@ -251,7 +254,49 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
 
   const selectedSoldTotal = selectedVendas.reduce((acc, curr) => acc + curr.valor_recebido, 0);
   const selectedExpensesTotal = selectedDespesas.reduce((acc, curr) => acc + curr.valor, 0);
-  const selectedNetTotal = selectedSoldTotal - selectedExpensesTotal;
+
+  const selectedProdCost = React.useMemo(() => {
+    return selectedVendas.reduce((acc, curr) => {
+      const prod = produtos.find(p => p.id === curr.produto_id);
+      return acc + ((prod ? prod.preco_compra : 0) * (curr.quantidade || 1));
+    }, 0);
+  }, [selectedVendas, produtos]);
+
+  const selectedDeliveryCost = React.useMemo(() => {
+    return selectedVendas.reduce((acc, curr) => {
+      const zone = zonasEntrega.find(z => z.id === curr.zona_entrega_id);
+      return acc + (zone ? zone.custo : 0);
+    }, 0);
+  }, [selectedVendas, zonasEntrega]);
+
+  const selectedAdCost = React.useMemo(() => {
+    return selectedVendas.reduce((acc, curr) => {
+      if (curr.custom_anuncios_tipo === 'mt') {
+        return acc + (curr.custom_anuncios_valor || 0);
+      } else if (curr.custom_anuncios_tipo === 'usd') {
+        const rate = curr.custom_anuncios_taxa_cambio || 64;
+        return acc + ((curr.custom_anuncios_valor || 0) * rate);
+      } else if (curr.custom_anuncios_percent !== undefined) {
+        const prod = produtos.find(p => p.id === curr.produto_id);
+        const sCost = (prod ? prod.preco_compra : 0) * (curr.quantidade || 1);
+        const zone = zonasEntrega.find(z => z.id === curr.zona_entrega_id);
+        const dCost = zone ? zone.custo : 0;
+        const rem = curr.valor_recebido - sCost - dCost;
+        return acc + (rem > 0 ? rem * (curr.custom_anuncios_percent / 100) : 0);
+      } else {
+        const adsCx = caixinhas.find(c => c.tipo === 'anuncios');
+        return acc + (adsCx ? (curr.distribuicao[adsCx.id] || 0) : 0);
+      }
+    }, 0);
+  }, [selectedVendas, produtos, zonasEntrega, caixinhas]);
+
+  const selectedMetaAllocations = React.useMemo(() => {
+    return selectedVendas.reduce((acc, curr) => acc + (curr.meta_alocada_valor || 0), 0);
+  }, [selectedVendas]);
+
+  const selectedTotalC = selectedProdCost + selectedDeliveryCost + selectedAdCost;
+  // REAL NET PROFIT (LUCRO LÍQUIDO REAL) = Revenue - (Product Cost + Delivery Fees + Ads Cost + Operational Expenses)
+  const selectedNetTotal = selectedSoldTotal - (selectedTotalC + selectedExpensesTotal);
 
   // Comparison specific metrics - prior period of exact same duration
   const getPrevPeriodDates = React.useMemo(() => {
@@ -330,23 +375,6 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     return 'vs período anterior';
   }, [dateRangeType]);
 
-  // Proportional costs calculation for selected date (reused in ROI card and transparency modal)
-  const selectedProdCost = selectedVendas.reduce((acc, curr) => {
-    const prod = produtos.find(p => p.id === curr.produto_id);
-    return acc + ((prod ? prod.preco_compra : 0) * (curr.quantidade || 1));
-  }, 0);
-
-  const selectedDeliveryCost = selectedVendas.reduce((acc, curr) => {
-    const zone = zonasEntrega.find(z => z.id === curr.zona_entrega_id);
-    return acc + (zone ? zone.custo : 0);
-  }, 0);
-
-  const selectedAdCost = selectedVendas.reduce((acc, curr) => {
-    const adsCx = caixinhas.find(c => c.tipo === 'anuncios');
-    return acc + (adsCx ? (curr.distribuicao[adsCx.id] || 0) : 0);
-  }, 0);
-
-  const selectedTotalC = selectedProdCost + selectedDeliveryCost + selectedAdCost;
   const selectedProportionalProfit = selectedSoldTotal - selectedTotalC;
   const selectedProportionalRoi = selectedTotalC > 0 ? (selectedProportionalProfit / selectedTotalC) * 100 : 0;
 
@@ -585,52 +613,67 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           </div>
         </div>
 
-        {/* Saldo Total Disponível Display Card (Right side) */}
+        {/* Lucro Líquido / Lucro de Hoje Display Card (Right side) */}
         <div 
-          onClick={() => setActiveTab('caixinhas')}
-          className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-3xl p-6 shadow-sm relative overflow-hidden flex flex-col justify-between cursor-pointer group hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:shadow-md transition-all active:scale-[0.99] select-none" 
+          onClick={() => setShowTransparenciaModal(true)}
+          className="bg-gradient-to-br from-emerald-50/50 via-slate-50 to-slate-100 dark:from-emerald-950/20 dark:via-slate-900 dark:to-slate-950 border border-emerald-500/20 dark:border-emerald-500/20 rounded-3xl p-6 shadow-sm relative overflow-hidden flex flex-col justify-between cursor-pointer group hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:shadow-md transition-all active:scale-[0.99] select-none" 
           id="dash_balance_card"
-          title="Clique para ver todas as caixinhas"
+          title="Clique para ver o detalhamento financeiro completo"
         >
           {/* Decorative backdrop glow */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-8 -mt-8 pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-8 -mt-8 pointer-events-none"></div>
 
           <div className="space-y-1 relative" id="balance_details">
             <div className="flex justify-between items-center" id="balance_badge_row">
               <span className="text-[10px] font-black tracking-wider text-slate-500 dark:text-slate-400 uppercase">
-                Saldo Total Disponível
+                {dateRangeType === 'hoje' ? 'Lucro de Hoje' : dateRangeType === 'semana' ? 'Lucro da Semana' : dateRangeType === 'mes' ? 'Lucro do Mês' : 'Lucro Líquido'}
               </span>
-              <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[8px] font-black tracking-wider uppercase px-2 py-0.5 rounded border border-indigo-500/20 select-none flex items-center gap-1">
-                <DollarSign className="w-2.5 h-2.5" />
-                <span>Balanço</span>
+              <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[8px] font-black tracking-wider uppercase px-2 py-0.5 rounded border border-emerald-500/20 select-none flex items-center gap-1">
+                <TrendingUp className="w-2.5 h-2.5" />
+                <span>{selectedNetTotal >= 0 ? 'Lucro Real' : 'Prejuízo'}</span>
               </span>
             </div>
             
             <div className="flex items-baseline space-x-2" id="balance_amount_group">
-              <h1 className="text-4xl font-black text-slate-950 dark:text-slate-50 tracking-tight font-display">
-                {totalBalance.toLocaleString()}
+              <h1 className={`text-4xl font-black tracking-tight font-display ${selectedNetTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                {selectedNetTotal.toLocaleString()}
               </h1>
-              <span className="text-indigo-600 dark:text-indigo-400 font-extrabold text-lg">{currency}</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-lg">{currency}</span>
             </div>
             
             <p className="text-[10px] text-slate-400 dark:text-slate-450 pt-1 leading-snug">
-              Soma total em caixa. <span className="text-indigo-600 dark:text-indigo-400 font-bold underline">Clique para gerir as caixinhas.</span>
+              Lucro líquido limpo. <span className="text-emerald-600 dark:text-emerald-400 font-bold underline">Clique para ver o detalhamento de custos.</span>
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-6 relative" id="balance_card_breakdown">
-            <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
-              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Caixinhas Ativas</span>
-              <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                {caixinhas.length}
-              </span>
+          <div className="space-y-3 pt-4 relative" id="balance_card_breakdown">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
+                <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Margem Líquida</span>
+                <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {selectedSoldTotal > 0 ? ((selectedNetTotal / selectedSoldTotal) * 100).toFixed(1) + '%' : '0%'}
+                </span>
+              </div>
+              <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
+                <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Custos Totais</span>
+                <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                  {(selectedTotalC + selectedExpensesTotal).toLocaleString()} {currency}
+                </span>
+              </div>
             </div>
-            <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
-              <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Média por Caixa</span>
-              <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">
-                {Math.round(totalBalance / (caixinhas.length || 1)).toLocaleString()} {currency}
-              </span>
-            </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTransparenciaModal(true);
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] py-2 px-3 rounded-xl shadow-sm flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+              id="btn_open_transparencia_modal_card"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>Ver Detalhamento de Custos</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1596,6 +1639,238 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                 id="btn_close_faturamento_modal_bottom"
               >
                 Fechar Histórico
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Financial Transparency & Real Net Profit Breakdown Modal */}
+      {showTransparenciaModal && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in"
+          id="transparencia_modal_backdrop"
+          onClick={() => setShowTransparenciaModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden max-h-[92vh] flex flex-col relative animate-scale-up"
+            id="transparencia_modal_content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950" id="transparencia_modal_header">
+              <div className="flex items-center space-x-2.5">
+                <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 p-2.5 rounded-2xl">
+                  <Calculator className="w-5 h-5 shrink-0" />
+                </div>
+                <div className="text-left">
+                  <h3 className="font-extrabold text-slate-900 dark:text-slate-50 text-sm font-display">
+                    Detalhamento Financeiro & Lucro Líquido Real
+                  </h3>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    Demonstração completa de entradas, saídas/custos e o dinheiro verdadeiramente livre
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTransparenciaModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 rounded-xl transition-all cursor-pointer"
+                id="btn_close_transparencia_modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-600 dark:text-slate-300 text-left" id="transparencia_modal_body">
+
+              {/* Range Indicator */}
+              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/60 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-600" />
+                  <span>{rangeDescription}</span>
+                </span>
+                <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl">
+                  {rangeLabel}
+                </span>
+              </div>
+
+              {/* Top Summary Cards */}
+              <div className="grid grid-cols-3 gap-3" id="transparencia_summary_grid">
+                <div className="bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 p-4 rounded-2xl flex flex-col justify-between">
+                  <span className="text-[9px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase block mb-1">
+                    (+) Entrou (Faturamento)
+                  </span>
+                  <span className="text-lg font-black text-emerald-700 dark:text-emerald-400">
+                    +{selectedSoldTotal.toLocaleString()} <span className="text-[10px]">{currency}</span>
+                  </span>
+                </div>
+
+                <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40 p-4 rounded-2xl flex flex-col justify-between">
+                  <span className="text-[9px] font-extrabold text-amber-800 dark:text-amber-300 uppercase block mb-1">
+                    (-) Retiros & Custos
+                  </span>
+                  <span className="text-lg font-black text-amber-700 dark:text-amber-400">
+                    -{(selectedTotalC + selectedExpensesTotal).toLocaleString()} <span className="text-[10px]">{currency}</span>
+                  </span>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-4 rounded-2xl flex flex-col justify-between shadow-sm">
+                  <span className="text-[9px] font-extrabold text-emerald-100 uppercase block mb-1">
+                    (=) Lucro Líquido Real
+                  </span>
+                  <span className="text-xl font-black">
+                    {selectedNetTotal.toLocaleString()} <span className="text-[10px]">{currency}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Itemized Breakdown: Para onde foi cada parte do dinheiro */}
+              <div className="space-y-3" id="transparencia_breakdown_section">
+                <h4 className="font-extrabold text-slate-900 dark:text-slate-100 text-xs flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                  <span>Onde Foi Cada Parte do Dinheiro ({currency})</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Percentual do Faturamento</span>
+                </h4>
+
+                <div className="space-y-2.5">
+                  {/* COGS / Custo Produtos */}
+                  <div className="bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Package className="w-4 h-4 text-amber-600" />
+                        <span>1. Custo dos Produtos (Aquisição / COGS)</span>
+                      </span>
+                      <span className="text-amber-600 dark:text-amber-400 font-extrabold">
+                        {selectedProdCost.toLocaleString()} {currency} ({selectedSoldTotal > 0 ? ((selectedProdCost / selectedSoldTotal) * 100).toFixed(1) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${selectedSoldTotal > 0 ? Math.min(100, (selectedProdCost / selectedSoldTotal) * 100) : 0}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Valor para pagar fornecedores ou repor o estoque vendido no período.</p>
+                  </div>
+
+                  {/* Deliveries */}
+                  <div className="bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Truck className="w-4 h-4 text-indigo-600" />
+                        <span>2. Custo de Entregas & Estafetas</span>
+                      </span>
+                      <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
+                        {selectedDeliveryCost.toLocaleString()} {currency} ({selectedSoldTotal > 0 ? ((selectedDeliveryCost / selectedSoldTotal) * 100).toFixed(1) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${selectedSoldTotal > 0 ? Math.min(100, (selectedDeliveryCost / selectedSoldTotal) * 100) : 0}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Valor repassado aos estafetas e motoboys das zonas de entrega.</p>
+                  </div>
+
+                  {/* Ads / Marketing */}
+                  <div className="bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <Megaphone className="w-4 h-4 text-sky-600" />
+                        <span>3. Custo de Anúncios & Publicidade (Meta/IG/FB)</span>
+                      </span>
+                      <span className="text-sky-600 dark:text-sky-400 font-extrabold">
+                        {selectedAdCost.toLocaleString()} {currency} ({selectedSoldTotal > 0 ? ((selectedAdCost / selectedSoldTotal) * 100).toFixed(1) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-sky-500 h-full rounded-full" style={{ width: `${selectedSoldTotal > 0 ? Math.min(100, (selectedAdCost / selectedSoldTotal) * 100) : 0}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Investimento em campanhas digitais para captar vendas.</p>
+                  </div>
+
+                  {/* Operational Expenses */}
+                  <div className="bg-slate-50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-1.5">
+                    <div className="flex justify-between items-center text-xs font-bold">
+                      <span className="text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-rose-500" />
+                        <span>4. Despesas Operacionais & Recorrentes</span>
+                      </span>
+                      <span className="text-rose-500 dark:text-rose-400 font-extrabold">
+                        {selectedExpensesTotal.toLocaleString()} {currency} ({selectedSoldTotal > 0 ? ((selectedExpensesTotal / selectedSoldTotal) * 100).toFixed(1) : 0}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-rose-500 h-full rounded-full" style={{ width: `${selectedSoldTotal > 0 ? Math.min(100, (selectedExpensesTotal / selectedSoldTotal) * 100) : 0}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Contas, embalagens, aluguer, licenças e custos fixos registados.</p>
+                  </div>
+
+                  {/* Goal Allocations */}
+                  {selectedMetaAllocations > 0 && (
+                    <div className="bg-amber-50/60 dark:bg-amber-950/20 p-3.5 rounded-2xl border border-amber-200/60 dark:border-amber-900/30 space-y-1.5">
+                      <div className="flex justify-between items-center text-xs font-bold">
+                        <span className="text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-amber-500" />
+                          <span>5. Alocado para Metas / Sonhos de Compra</span>
+                        </span>
+                        <span className="text-amber-600 dark:text-amber-400 font-extrabold">
+                          {selectedMetaAllocations.toLocaleString()} {currency}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-amber-700/80 dark:text-amber-400">Dinheiro redirecionado automaticamente para os seus objetivos pessoais.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Mathematical Equation & Real Profit Definition */}
+              <div className="bg-slate-900 text-slate-100 p-4.5 rounded-2xl space-y-3 font-mono text-xs">
+                <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-sans flex items-center gap-2">
+                  <Calculator className="w-4 h-4 text-emerald-400" />
+                  <span>Demonstrativo do Lucro Líquido Real</span>
+                </h5>
+
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex justify-between">
+                    <span className="text-emerald-400">(+) Faturamento de Vendas</span>
+                    <span className="font-bold">{selectedSoldTotal.toLocaleString()} {currency}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>(-) Custo dos Produtos (COGS)</span>
+                    <span>-{selectedProdCost.toLocaleString()} {currency}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>(-) Custo de Entregas</span>
+                    <span>-{selectedDeliveryCost.toLocaleString()} {currency}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>(-) Custo de Anúncios</span>
+                    <span>-{selectedAdCost.toLocaleString()} {currency}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>(-) Despesas Operacionais</span>
+                    <span>-{selectedExpensesTotal.toLocaleString()} {currency}</span>
+                  </div>
+                  <div className="border-t border-slate-700 pt-2 flex justify-between text-sm font-black font-sans">
+                    <span className="text-emerald-400 font-display">(=) LUCRO LÍQUIDO REAL</span>
+                    <span className={selectedNetTotal >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                      {selectedNetTotal.toLocaleString()} {currency}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-300 font-sans leading-relaxed">
+                  ✨ <strong>Liberdade Total de Uso:</strong> Este valor de <strong>{selectedNetTotal.toLocaleString()} {currency}</strong> é o seu lucro limpo. Você pode usá-lo livremente para retiradas de sócio (pro-labore), novos investimentos ou reserva pessoal sem afetar as operações ou dívidas da empresa.
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50 dark:bg-slate-950" id="transparencia_modal_footer">
+              <button
+                type="button"
+                onClick={() => setShowTransparenciaModal(false)}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer"
+                id="btn_close_transparencia_modal_bottom"
+              >
+                Entendido & Fechar
               </button>
             </div>
           </div>

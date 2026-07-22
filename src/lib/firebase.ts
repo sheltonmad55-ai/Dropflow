@@ -126,7 +126,8 @@ export async function pullAllUserData(userId: string) {
     fornecedores,
     zonas_entrega,
     campanhas,
-    despesas_recorrentes
+    despesas_recorrentes,
+    meta_items
   ] = await Promise.all([
     fetchCol('caixinhas').then(res => res || []),
     fetchCol('vendas').then(res => res || []),
@@ -135,7 +136,8 @@ export async function pullAllUserData(userId: string) {
     fetchCol('fornecedores').then(res => res || []),
     fetchCol('zonas_entrega').then(res => res || []),
     fetchCol('campanhas').then(res => res || []),
-    fetchCol('despesas_recorrentes').then(res => res || [])
+    fetchCol('despesas_recorrentes').then(res => res || []),
+    fetchCol('meta_items').then(res => res || [])
   ]);
 
   return {
@@ -147,7 +149,8 @@ export async function pullAllUserData(userId: string) {
     fornecedores,
     zonas_entrega,
     campanhas,
-    despesas_recorrentes
+    despesas_recorrentes,
+    meta_items
   };
 }
 
@@ -174,6 +177,8 @@ export async function pushQueueToFirestore(queue: any[]) {
       colName = 'fornecedores';
     } else if (type === 'despesa_recorrente') {
       colName = 'despesas_recorrentes';
+    } else if (type === 'meta_item') {
+      colName = 'meta_items';
     }
     const docId = data.id;
     if (!docId) continue;

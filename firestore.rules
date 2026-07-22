@@ -164,6 +164,18 @@ service cloud.firestore {
         && (!('criado_em' in data) || data.criado_em is string);
     }
 
+    // MetaItems validation helper
+    function isValidMetaItem(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
+        && (!('valor_alvo' in data) || data.valor_alvo is number)
+        && (!('valor_atual' in data) || data.valor_atual is number)
+        && (!('categoria' in data) || data.categoria is string)
+        && (!('icone' in data) || data.icone is string)
+        && (!('criado_em' in data) || data.criado_em is string);
+    }
+
     // Test collection for boot validation
     match /test/connection {
       allow read: if true;
@@ -305,6 +317,22 @@ service cloud.firestore {
         && isOwner(request.resource.data.user_id)
         && isValidDespesaRecorrente(request.resource.data);
       allow delete: if isAuth() && isValidId(id) && isOwner(resource.data.user_id);
+    }
+
+    // MetaItems Rules
+    match /meta_items/{metaId} {
+      allow get: if isAuth() && isValidId(metaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(metaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidMetaItem(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(metaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidMetaItem(request.resource.data);
+      allow delete: if isAuth() && isValidId(metaId) && isOwner(resource.data.user_id);
     }
 
     // Admin Logs Rules

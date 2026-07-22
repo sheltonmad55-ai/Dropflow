@@ -84,3 +84,69 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
+
+// Notification Click Event (Mobile & Desktop PWA)
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          if ('navigate' in client && targetUrl !== '/') {
+            client.navigate(targetUrl);
+          }
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+
+// Push Event Receiver for background push notifications
+self.addEventListener('push', (event) => {
+  let data = { title: 'DropFlow', body: 'Nova atualização do seu negócio!' };
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (_) {
+      data.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    vibrate: [200, 100, 200],
+    tag: 'dropflow-push-' + Date.now(),
+    renotify: true,
+    data: {
+      dateOfArrival: Date.now(),
+      primaryKey: '1'
+    }
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+// Client Message Event Receiver (Trigger notifications on mobile PWA & Desktop)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, body } = event.data;
+    const options = {
+      body: body || 'Notificação DropFlow',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: 'dropflow-msg-' + Date.now(),
+      renotify: true
+    };
+    self.registration.showNotification(title || 'DropFlow 🚀', options);
+  }
+});

@@ -137,6 +137,22 @@
         "metricas_diarias": { "type": "array" }
       },
       "required": ["id", "user_id", "nome", "plataforma", "orcamento", "gasto", "cliques", "impressoes", "conversoes", "valor_vendas", "data", "criado_em"]
+    },
+    "MetaItem": {
+      "title": "MetaItem",
+      "description": "Custom personal goal or purchasing dream item.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome": { "type": "string" },
+        "valor_alvo": { "type": "number" },
+        "valor_atual": { "type": "number" },
+        "categoria": { "type": "string" },
+        "icone": { "type": "string" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "nome", "valor_alvo", "valor_atual", "criado_em"]
     }
   },
   "firestore": {
@@ -171,6 +187,10 @@
     "/campanhas/{campanhaId}": {
       "schema": "Campanha",
       "description": "Ad campaign performance metrics"
+    },
+    "/meta_items/{metaId}": {
+      "schema": "MetaItem",
+      "description": "Custom personal goal target allocations"
     }
   }
 }

@@ -6,16 +6,26 @@
 import { Profile, Campanha, Venda } from '../types.ts';
 
 /**
- * Solicita permissão para notificações do navegador.
+ * Solicita permissão para notificações do navegador e ServiceWorker.
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
-    console.warn('Este navegador não suporta notificações de desktop.');
+    console.warn('Este navegador não suporta notificações de desktop/telemóvel.');
     return 'denied';
   }
 
   try {
     const permission = await Notification.requestPermission();
+    
+    // Register ServiceWorker if not already registered
+    if ('serviceWorker' in navigator) {
+      try {
+        await navigator.serviceWorker.register('/sw.js');
+      } catch (swErr) {
+        console.warn('Erro ao registar ServiceWorker para notificações:', swErr);
+      }
+    }
+
     return permission;
   } catch (error) {
     console.error('Erro ao solicitar permissão de notificação:', error);
@@ -24,14 +34,40 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
- * Envia uma notificação de forma segura.
+ * Envia uma notificação de forma altamente compatível com telemóveis (Android / iOS / PWA) e PC Chrome.
  */
-export function sendNotification(title: string, body: string, options?: NotificationOptions) {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
-    return;
+export async function sendNotification(title: string, body: string, options?: NotificationOptions) {
+  if (typeof window === 'undefined') return;
+
+  // Trigger haptic vibration if supported on mobile
+  if (navigator.vibrate) {
+    try {
+      navigator.vibrate([200, 100, 200]);
+    } catch (_) {}
   }
 
-  if (Notification.permission === 'granted') {
+  // 1. Try ServiceWorker Registration showNotification (Works reliably on Chrome Mobile & PWAs)
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && registration.showNotification) {
+        await (registration as unknown as { showNotification: (t: string, o?: object) => Promise<void> }).showNotification(title, {
+          body,
+          icon: '/public/manifest.json',
+          vibrate: [200, 100, 200],
+          renotify: true,
+          tag: 'dropflow-alert-' + Date.now(),
+          ...options
+        });
+        return;
+      }
+    } catch (swError) {
+      console.warn('ServiceWorker showNotification falhou, tentando fallback local:', swError);
+    }
+  }
+
+  // 2. Fallback to standard Notification API (PC Chrome / Desktop)
+  if ('Notification' in window && Notification.permission === 'granted') {
     try {
       new Notification(title, { body, ...options });
     } catch (e) {

@@ -83,6 +83,19 @@ export interface DespesaRecorrente {
   criado_em: string;
 }
 
+export interface MetaItem {
+  id: string;
+  user_id: string;
+  nome: string;          // ex: "Comprar Celular"
+  valor_alvo: number;    // ex: 25000 MT
+  valor_atual: number;   // ex: 5000 MT
+  data_limite?: string;  // YYYY-MM-DD
+  categoria?: string;    // "Pessoal", "Equipamento", "Sonho", "Negócio"
+  icone?: string;        // "smartphone", "car", "laptop", "home", "gift"
+  sync_status?: 'synced' | 'pending';
+  criado_em: string;
+}
+
 export interface Venda {
   id: string;
   user_id: string;
@@ -97,6 +110,11 @@ export interface Venda {
     [caixinhaId: string]: number; // snapshot of distributed values
   };
   custom_anuncios_percent?: number;
+  custom_anuncios_tipo?: 'percentual' | 'mt' | 'usd';
+  custom_anuncios_valor?: number;
+  custom_anuncios_taxa_cambio?: number; // ex: 64 MT por 1 USD
+  meta_id?: string;             // ID da Meta (Sonho/Objetivo) para alocação direta
+  meta_valor_alocado?: number;  // Valor em MT alocado para a meta
   quantidade?: number;
   preco_unitario?: number;
   desconto?: number;
@@ -211,7 +229,7 @@ export interface Campanha {
 
 export interface SyncQueueItem {
   id: string;
-  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente';
+  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente' | 'meta_item';
   action: 'create' | 'update' | 'delete';
   data: any;
   timestamp: number;

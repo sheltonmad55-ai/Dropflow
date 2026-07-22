@@ -38,10 +38,20 @@ import {
 } from 'lucide-react';
 
 function AppContent() {
-  const { isAuthenticated, isLoadingAuth, isAdmin, profile, triggerMockUpgrade, logout } = useApp();
+  const { isAuthenticated, isLoadingAuth, isAdmin, profile, triggerMockUpgrade, logout, activeToast, dismissToast } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'metas' | 'admin' | 'definicoes'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // Auto-dismiss active toast after 4 seconds
+  React.useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        dismissToast();
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast, dismissToast]);
 
   // Initialize and apply dark mode preference
   React.useEffect(() => {
@@ -446,6 +456,41 @@ function AppContent() {
       {/* Global Form Modals */}
       <VendaModal isOpen={isVendaOpen} onClose={() => setIsVendaOpen(false)} />
       <DespesaModal isOpen={isDespesaOpen} onClose={() => setIsDespesaOpen(false)} />
+
+      {/* Global In-App Toast Popup Banner (Visible on mobile PWA and PC) */}
+      <AnimatePresence>
+        {activeToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.95 }}
+            className="fixed top-4 left-4 right-4 md:left-auto md:right-6 md:w-96 z-50 pointer-events-auto"
+            id="global_app_toast"
+          >
+            <div className={`p-4 rounded-2xl shadow-2xl border backdrop-blur-xl flex items-start justify-between gap-3 ${
+              activeToast.type === 'success' 
+                ? 'bg-emerald-950/90 text-white border-emerald-500/30' 
+                : activeToast.type === 'warning'
+                ? 'bg-amber-950/90 text-white border-amber-500/30'
+                : 'bg-slate-900/90 text-white border-slate-700'
+            }`}>
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-black tracking-wide flex items-center gap-1.5 uppercase text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{activeToast.title}</span>
+                </h4>
+                <p className="text-xs text-slate-200 leading-snug">{activeToast.body}</p>
+              </div>
+              <button 
+                onClick={dismissToast}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Welcome Guided Onboarding Tour */}
       <WelcomeTour 
