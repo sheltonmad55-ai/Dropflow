@@ -59,6 +59,7 @@ export default function VendasView() {
   // New supplier form
   const [suppNome, setSuppNome] = useState('');
   const [suppFone, setSuppFone] = useState('');
+  const [suppPendente, setSuppPendente] = useState('');
 
   // Product editing
   const [editingProd, setEditingProd] = useState<any>(null);
@@ -193,10 +194,11 @@ export default function VendasView() {
       await addFornecedor({
         nome: suppNome,
         telefone: suppFone,
-        valor_pendente: 0
+        valor_pendente: suppPendente ? parseFloat(suppPendente) || 0 : 0
       });
       setSuppNome('');
       setSuppFone('');
+      setSuppPendente('');
       setShowAddSupp(false);
     } catch (e) {
       alert('Erro ao criar fornecedor.');
@@ -536,52 +538,62 @@ export default function VendasView() {
               <p className="text-[10px] text-slate-500">Adicione produtos para habilitar a distribuição rápida de vendas.</p>
             </div>
           ) : (
-            filteredProdutos.map(p => (
-              <div key={p.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex justify-between items-center shadow-sm hover:shadow-md transition-shadow" id={`product_card_${p.id}`}>
-                <div className="space-y-1" id="product_details">
-                  <span className="text-xs font-bold text-slate-900 block">{p.nome}</span>
-                  <div className="flex items-center space-x-2 text-[9px] text-slate-500 font-medium" id="product_costs">
-                    <span>Compra: <strong className="text-amber-700 font-bold">{p.preco_compra} {currency}</strong></span>
-                    <span>•</span>
-                    <span>Venda: <strong className="text-emerald-700 font-bold">{p.preco_venda} {currency}</strong></span>
+            filteredProdutos.map(p => {
+              const supp = fornecedores.find(f => f.id === p.fornecedor_id);
+              return (
+                <div key={p.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex justify-between items-center shadow-sm hover:shadow-md transition-shadow" id={`product_card_${p.id}`}>
+                  <div className="space-y-1" id="product_details">
+                    <span className="text-xs font-bold text-slate-900 block">{p.nome}</span>
+                    <div className="flex items-center space-x-2 text-[9px] text-slate-500 font-medium" id="product_costs">
+                      <span>Compra: <strong className="text-amber-700 font-bold">{p.preco_compra} {currency}</strong></span>
+                      <span>•</span>
+                      <span>Venda: <strong className="text-emerald-700 font-bold">{p.preco_venda} {currency}</strong></span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold inline-block" id="product_stock">
+                        Qtd: {p.quantidade} em estoque
+                      </span>
+                      {supp && (
+                        <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold inline-block" id="product_supplier_badge">
+                          Fornecedor: {supp.nome}
+                        </span>
+                      )}
+                      {p.kits && p.kits.length > 0 && (
+                        <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold inline-block" id="product_kits_badge">
+                          Kits ({p.kits.length})
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold inline-block mr-2" id="product_stock">
-                    Qtd: {p.quantidade} em estoque
-                  </span>
-                  {p.kits && p.kits.length > 0 && (
-                    <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold inline-block" id="product_kits_badge">
-                      Kits Configurados ({p.kits.length})
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center space-x-3.5" id="product_actions">
-                  <div className="text-right" id="product_margin_badge">
-                    <span className="text-[8px] text-slate-500 uppercase tracking-wide block font-black">Margem Bruta</span>
-                    <span className="text-xs font-black text-emerald-600 block flex items-center justify-end">
-                      <TrendingUp className="w-3.5 h-3.5 mr-0.5" />
-                      {p.margem}%
-                    </span>
+                  <div className="flex items-center space-x-3.5" id="product_actions">
+                    <div className="text-right" id="product_margin_badge">
+                      <span className="text-[8px] text-slate-500 uppercase tracking-wide block font-black">Margem Bruta</span>
+                      <span className="text-xs font-black text-emerald-600 block flex items-center justify-end">
+                        <TrendingUp className="w-3.5 h-3.5 mr-0.5" />
+                        {p.margem}%
+                      </span>
+                    </div>
+                    <button
+                      id={`btn_edit_product_${p.id}`}
+                      onClick={() => {
+                        setEditingProd(p);
+                        setEditProdNome(p.nome);
+                        setEditProdCat(p.categoria);
+                        setEditProdSuppId(p.fornecedor_id);
+                        setEditProdCompra(p.preco_compra.toString());
+                        setEditProdVenda(p.preco_venda.toString());
+                        setEditProdQty(p.quantidade.toString());
+                        setEditProdKits(p.kits || []);
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                      title="Editar produto"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button
-                    id={`btn_edit_product_${p.id}`}
-                    onClick={() => {
-                      setEditingProd(p);
-                      setEditProdNome(p.nome);
-                      setEditProdCat(p.categoria);
-                      setEditProdSuppId(p.fornecedor_id);
-                      setEditProdCompra(p.preco_compra.toString());
-                      setEditProdVenda(p.preco_venda.toString());
-                      setEditProdQty(p.quantidade.toString());
-                      setEditProdKits(p.kits || []);
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors"
-                    title="Editar produto"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
@@ -595,40 +607,74 @@ export default function VendasView() {
               <p className="text-[10px] text-slate-500">Crie fornecedores para controlar as faturas pendentes de estoque.</p>
             </div>
           ) : (
-            filteredFornecedores.map(f => (
-              <div key={f.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex justify-between items-center shadow-sm hover:shadow-md transition-shadow" id={`supplier_card_${f.id}`}>
-                <div className="space-y-1" id="supplier_details">
-                  <span className="text-xs font-bold text-slate-900 block">{f.nome}</span>
-                  {f.telefone && (
-                    <span className="text-[9px] text-slate-500 flex items-center font-medium" id="supplier_phone">
-                      <Phone className="w-3 h-3 mr-1 text-slate-400" />
-                      {f.telefone}
-                    </span>
-                  )}
-                  <span className="text-[9px] text-slate-400 block font-medium">Criado em: {new Date(f.criado_em).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center space-x-3.5" id="supplier_actions">
-                  <div className="text-right" id="supplier_pending_badge">
-                    <span className="text-[8px] text-rose-600 uppercase block font-black">Fatura Pendente</span>
-                    <span className="text-xs font-extrabold text-rose-600 block">
-                      {f.valor_pendente} {currency}
-                    </span>
+            filteredFornecedores.map(f => {
+              const suppProds = produtos.filter(p => p.fornecedor_id === f.id);
+              return (
+                <div key={f.id} className="bg-white border border-slate-100 rounded-2xl p-4 space-y-3 shadow-sm hover:shadow-md transition-shadow" id={`supplier_card_${f.id}`}>
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1" id="supplier_details">
+                      <span className="text-xs font-extrabold text-slate-900 block">{f.nome}</span>
+                      {f.telefone && (
+                        <span className="text-[10px] text-slate-500 flex items-center font-medium" id="supplier_phone">
+                          <Phone className="w-3 h-3 mr-1 text-slate-400" />
+                          {f.telefone}
+                        </span>
+                      )}
+                      <span className="text-[9px] text-slate-400 block font-medium">Criado em: {new Date(f.criado_em).toLocaleDateString()}</span>
+                    </div>
+
+                    <div className="flex items-center space-x-3" id="supplier_actions">
+                      <div className="text-right" id="supplier_pending_badge">
+                        <span className="text-[8px] text-rose-600 uppercase block font-black">Fatura Pendente</span>
+                        <span className="text-xs font-extrabold text-rose-600 block">
+                          {f.valor_pendente} {currency}
+                        </span>
+                      </div>
+                      <button
+                        id={`btn_edit_supplier_${f.id}`}
+                        onClick={() => {
+                          setEditingSupp(f);
+                          setEditSuppNome(f.nome);
+                          setEditSuppFone(f.telefone || '');
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                        title="Editar fornecedor"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    id={`btn_edit_supplier_${f.id}`}
-                    onClick={() => {
-                      setEditingSupp(f);
-                      setEditSuppNome(f.nome);
-                      setEditSuppFone(f.telefone || '');
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors"
-                    title="Editar fornecedor"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
+
+                  {/* Supplier Products List and Quick Add Button */}
+                  <div className="pt-2 border-t border-slate-100/80 flex flex-wrap items-center justify-between gap-2" id="supplier_products_section">
+                    <div className="flex items-center space-x-1.5 flex-wrap gap-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Produtos ({suppProds.length}):</span>
+                      {suppProds.length === 0 ? (
+                        <span className="text-[10px] text-slate-400 italic">Nenhum produto associado ainda</span>
+                      ) : (
+                        suppProds.map(sp => (
+                          <span key={sp.id} className="text-[9px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg font-bold">
+                            {sp.nome} ({sp.preco_compra} {currency})
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      id={`btn_add_product_for_supp_${f.id}`}
+                      onClick={() => {
+                        setProdSuppId(f.id);
+                        setShowAddProd(true);
+                      }}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[10px] px-2.5 py-1 rounded-xl transition-colors flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3 stroke-[2.5]" />
+                      <span>Adicionar Produto</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
@@ -688,13 +734,22 @@ export default function VendasView() {
                   />
                 </div>
                 <div className="space-y-1" id="prod_supp_group">
-                  <label className="text-xs text-slate-600 font-semibold">Fornecedor</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs text-slate-600 font-semibold">Fornecedor</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddSupp(true)}
+                      className="text-[10px] text-emerald-600 hover:underline font-bold cursor-pointer"
+                    >
+                      + Novo
+                    </button>
+                  </div>
                   <select
                     value={prodSuppId}
                     onChange={(e) => setProdSuppId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 appearance-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
                   >
-                    <option value="">Nenhum...</option>
+                    <option value="">Nenhum / Selecionar...</option>
                     {fornecedores.map(f => (
                       <option key={f.id} value={f.id}>{f.nome}</option>
                     ))}
@@ -957,6 +1012,67 @@ export default function VendasView() {
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs"
                 >
                   Salvar Fornecedor
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CREATE SUPPLIER MODAL ================= */}
+      {showAddSupp && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="add_supplier_modal">
+          <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="add_supplier_content">
+            <h3 className="font-extrabold text-slate-900 text-base font-display">Novo Fornecedor / Fábrica</h3>
+            <form onSubmit={handleAddSupplier} className="space-y-3.5" id="add_supplier_form">
+              <div className="space-y-1" id="add_supp_nome_group">
+                <label className="text-xs text-slate-600 font-semibold">Nome do Fornecedor ou Fábrica</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Shenzhen Electronics Ltd / Donna Lar"
+                  value={suppNome}
+                  onChange={(e) => setSuppNome(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="space-y-1" id="add_supp_fone_group">
+                <label className="text-xs text-slate-600 font-semibold">Telefone / WhatsApp</label>
+                <input
+                  type="text"
+                  placeholder="Ex: +258 84 123 4567 ou +86 189 2234 ..."
+                  value={suppFone}
+                  onChange={(e) => setSuppFone(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="space-y-1" id="add_supp_pendente_group">
+                <label className="text-xs text-slate-600 font-semibold">Fatura Pendente Inicial ({currency}) - Opcional</label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={suppPendente}
+                  onChange={(e) => setSuppPendente(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-2" id="add_supp_modal_actions">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSupp(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer"
+                >
+                  Confirmar Fornecedor
                 </button>
               </div>
             </form>

@@ -117,7 +117,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
       setPermissionStatus(permission);
       if (permission === 'granted') {
         try {
-          new Notification('DroopFlow', {
+          new Notification('DropFlow', {
             body: 'Notificações ativadas com sucesso! 🎉',
           });
         } catch (nErr) {

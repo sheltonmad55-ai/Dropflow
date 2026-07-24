@@ -93,14 +93,14 @@ function AppContent() {
         <div className="w-20 h-20 bg-white dark:bg-slate-900 p-1 rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800 animate-pulse overflow-hidden flex items-center justify-center" id="loading_logo">
           <img 
             src={dropflowLogo} 
-            alt="DroopFlow Logo" 
+            alt="DropFlow Logo" 
             className="w-full h-full object-cover rounded-2xl" 
             referrerPolicy="no-referrer"
           />
         </div>
         <div className="space-y-2 text-center" id="loading_text_group">
-          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight font-display">DroopFlow</h2>
-          <p className="text-xs text-slate-400 dark:text-slate-500">A inicializar o DroopFlow...</p>
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight font-display">DropFlow</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500">A inicializar o DropFlow...</p>
         </div>
       </div>
     );
@@ -123,12 +123,12 @@ function AppContent() {
             <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/50 dark:border-slate-700 flex items-center justify-center shadow-sm">
               <img 
                 src={dropflowLogo} 
-                alt="DroopFlow Logo" 
+                alt="DropFlow Logo" 
                 className="w-full h-full object-cover" 
                 referrerPolicy="no-referrer"
               />
             </div>
-            <span className="text-base font-black text-slate-900 dark:text-slate-50 tracking-tight font-display">DroopFlow</span>
+            <span className="text-base font-black text-slate-900 dark:text-slate-50 tracking-tight font-display">DropFlow</span>
           </div>
  
           {/* Navigation Links */}
@@ -271,7 +271,7 @@ function AppContent() {
             <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200/50 dark:border-slate-700 flex items-center justify-center shadow-sm md:hidden" id="header_logo_badge">
               <img 
                 src={dropflowLogo} 
-                alt="DroopFlow Logo" 
+                alt="DropFlow Logo" 
                 className="w-full h-full object-cover" 
                 referrerPolicy="no-referrer"
               />

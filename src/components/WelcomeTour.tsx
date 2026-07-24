@@ -45,7 +45,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
   // Tour steps definition
   const steps: StepConfig[] = [
     {
-      title: 'Bem-vindo ao DroopFlow! 🚀',
+      title: 'Bem-vindo ao DropFlow! 🚀',
       content: 'Este é o seu centro inteligente de gestão financeira e operacional para Dropshipping. Vamos fazer um tour guiado rápido de 1 minuto para dominar a aplicação? Clique no botão "Seguinte" abaixo para começar!',
       targetSelector: 'none',
       icon: <Sparkles className="w-8 h-8 text-emerald-500" />,
@@ -93,7 +93,7 @@ export default function WelcomeTour({ isOpen, onClose, activeTab, setActiveTab }
     },
     {
       title: 'Performance de Anúncios & ROAS 📣',
-      content: 'Clique no botão de edição de gastos diários (lápis) na tabela para introduzir o valor investido em tráfego pago (Facebook Ads, TikTok). O DroopFlow calcula o seu ROAS real de imediato!',
+      content: 'Clique no botão de edição de gastos diários (lápis) na tabela para introduzir o valor investido em tráfego pago (Facebook Ads, TikTok). O DropFlow calcula o seu ROAS real de imediato!',
       targetSelector: '#campanhas_view_wrapper',
       tab: 'campanhas',
       icon: <Megaphone className="w-8 h-8 text-rose-500" />,
