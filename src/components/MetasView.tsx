@@ -5,10 +5,76 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../lib/appContext.tsx';
-import { Target, Calendar, Award, Save, CheckCircle2, Clock, Plus, Trash2, Smartphone, Car, Laptop, Home, Gift, DollarSign } from 'lucide-react';
+import { 
+  Target, Calendar, Award, Save, CheckCircle2, Clock, Plus, Trash2, Edit, 
+  Smartphone, Car, Laptop, Home, Gift, DollarSign, Briefcase, Plane, ShoppingBag, 
+  History, RotateCcw, AlertCircle, Sparkles, ChevronRight 
+} from 'lucide-react';
+import { MetaItem, HistoricoMeta } from '../types.ts';
+
+// Date Helpers
+const formatDateToISO = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatDateToBR = (dateStr: string): string => {
+  if (!dateStr) return '---';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
+const getTodayStr = () => formatDateToISO(new Date());
+
+const getTomorrowStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return formatDateToISO(d);
+};
+
+const getThisWeekRange = () => {
+  const d = new Date();
+  const day = d.getDay();
+  const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d.setDate(diffToMonday));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { start: formatDateToISO(monday), end: formatDateToISO(sunday) };
+};
+
+const getNextWeekRange = () => {
+  const thisWeek = getThisWeekRange();
+  const monday = new Date(thisWeek.start + 'T00:00:00');
+  monday.setDate(monday.getDate() + 7);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return { start: formatDateToISO(monday), end: formatDateToISO(sunday) };
+};
+
+const getThisMonthRange = () => {
+  const d = new Date();
+  const firstDay = new Date(d.getFullYear(), d.getMonth(), 1);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { start: formatDateToISO(firstDay), end: formatDateToISO(lastDay) };
+};
+
+const getNextMonthRange = () => {
+  const d = new Date();
+  const firstDay = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 2, 0);
+  return { start: formatDateToISO(firstDay), end: formatDateToISO(lastDay) };
+};
 
 export default function MetasView() {
-  const { profile, updateProfile, vendas, metaItems, addMetaItem, deleteMetaItem, alocarParaMetaItem } = useApp();
+  const { profile, updateProfile, vendas, metaItems, addMetaItem, editMetaItem, deleteMetaItem, alocarParaMetaItem } = useApp();
+
+  const currency = profile?.moeda || 'MT';
+  const todayStr = getTodayStr();
 
   // Custom Goal Creation State
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
@@ -17,126 +83,219 @@ export default function MetasView() {
   const [goalInitialVal, setGoalInitialVal] = useState('');
   const [goalCategory, setGoalCategory] = useState('Sonho');
   const [goalIcon, setGoalIcon] = useState('smartphone');
+  const [goalDataLimite, setGoalDataLimite] = useState('');
+
+  // Custom Goal Editing State
+  const [editingMeta, setEditingMeta] = useState<MetaItem | null>(null);
+  const [editGoalName, setEditGoalName] = useState('');
+  const [editGoalTargetVal, setEditGoalTargetVal] = useState('');
+  const [editGoalCurrentVal, setEditGoalCurrentVal] = useState('');
+  const [editGoalCategory, setEditGoalCategory] = useState('Sonho');
+  const [editGoalIcon, setEditGoalIcon] = useState('smartphone');
+  const [editGoalDataLimite, setEditGoalDataLimite] = useState('');
 
   // Manual Deposit Modal State
   const [depositMetaId, setDepositMetaId] = useState<string | null>(null);
   const [depositAmount, setDepositAmount] = useState<string>('');
 
-  const handleCreateCustomGoal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!goalName || !goalTargetVal) return;
-
-    await addMetaItem({
-      nome: goalName,
-      valor_alvo: parseFloat(goalTargetVal) || 0,
-      valor_atual: parseFloat(goalInitialVal) || 0,
-      categoria: goalCategory,
-      icone: goalIcon
-    });
-
-    setGoalName('');
-    setGoalTargetVal('');
-    setGoalInitialVal('');
-    setShowAddGoalModal(false);
-  };
-
-  const handleDepositSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!depositMetaId || !depositAmount) return;
-
-    await alocarParaMetaItem(depositMetaId, parseFloat(depositAmount) || 0);
-    setDepositMetaId(null);
-    setDepositAmount('');
-  };
-  
-  // Silent permission request on mount for a smoother experience
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        Notification.requestPermission().catch(err => console.error("Error requesting notification permission:", err));
-      }
-    }
-  }, []);
-
   // 1. Daily Goal States
-  const [metaDiaria, setMetaDiaria] = useState<string>(profile?.metaDiaria?.toString() || '');
-  const [periodoDiaria, setPeriodoDiaria] = useState<number>(profile?.periodoDiaria || 1);
+  const [metaDiariaVal, setMetaDiariaVal] = useState<string>(profile?.metaDiaria?.toString() || '');
+  const [metaDiariaInicio, setMetaDiariaInicio] = useState<string>(profile?.metaDiariaInicio || todayStr);
+  const [metaDiariaFim, setMetaDiariaFim] = useState<string>(profile?.metaDiariaFim || todayStr);
+  const [dailyPreset, setDailyPreset] = useState<'hoje' | 'amanha' | 'custom'>('hoje');
   const [savingDaily, setSavingDaily] = useState(false);
   const [successDaily, setSuccessDaily] = useState(false);
 
   // 2. Weekly Goal States
-  const [metaSemanal, setMetaSemanal] = useState<string>(profile?.metaSemanal?.toString() || '');
-  const [periodoSemanal, setPeriodoSemanal] = useState<number>(profile?.periodoSemanal || 1);
+  const thisWeek = getThisWeekRange();
+  const [metaSemanalVal, setMetaSemanalVal] = useState<string>(profile?.metaSemanal?.toString() || '');
+  const [metaSemanalInicio, setMetaSemanalInicio] = useState<string>(profile?.metaSemanalInicio || thisWeek.start);
+  const [metaSemanalFim, setMetaSemanalFim] = useState<string>(profile?.metaSemanalFim || thisWeek.end);
+  const [weeklyPreset, setWeeklyPreset] = useState<'esta_semana' | 'proxima_semana' | 'custom'>('esta_semana');
   const [savingWeekly, setSavingWeekly] = useState(false);
   const [successWeekly, setSuccessWeekly] = useState(false);
 
   // 3. Monthly Goal States
-  const [metaMensal, setMetaMensal] = useState<string>(profile?.metaMensal?.toString() || '');
-  const [periodoMensal, setPeriodoMensal] = useState<number>(profile?.periodoMensal || 1);
+  const thisMonth = getThisMonthRange();
+  const [metaMensalVal, setMetaMensalVal] = useState<string>(profile?.metaMensal?.toString() || '');
+  const [metaMensalInicio, setMetaMensalInicio] = useState<string>(profile?.metaMensalInicio || thisMonth.start);
+  const [metaMensalFim, setMetaMensalFim] = useState<string>(profile?.metaMensalFim || thisMonth.end);
+  const [monthlyPreset, setMonthlyPreset] = useState<'este_mes' | 'proximo_mes' | 'custom'>('este_mes');
   const [savingMonthly, setSavingMonthly] = useState(false);
   const [successMonthly, setSuccessMonthly] = useState(false);
 
-  const currency = profile?.moeda || 'MT';
+  // Auto-reset check & sync when loading
+  useEffect(() => {
+    if (!profile) return;
 
-  // Helper date calculations
-  const now = new Date();
+    let historyUpdated = false;
+    const newHistory: HistoricoMeta[] = [...(profile.historicoMetas || [])];
+    const profileUpdates: Partial<typeof profile> = {};
 
-  const getStartOfWeek = () => {
-    const d = new Date(now);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(d.setDate(diff));
-    monday.setHours(0,0,0,0);
-    return monday;
+    // Check Daily Goal Expiry
+    const dStart = profile.metaDiariaInicio || todayStr;
+    const dFim = profile.metaDiariaFim || todayStr;
+    const dTarget = profile.metaDiaria || 0;
+
+    if (dFim < todayStr && dTarget > 0) {
+      // Calculate final sales achieved for that daily cycle
+      const dSales = vendas
+        .filter(v => v.data_venda >= dStart && v.data_venda <= dFim)
+        .reduce((sum, v) => sum + v.valor_recebido, 0);
+
+      newHistory.unshift({
+        id: crypto.randomUUID(),
+        tipo: 'diaria',
+        titulo: `Meta Diária (${formatDateToBR(dStart)} a ${formatDateToBR(dFim)})`,
+        data_inicio: dStart,
+        data_fim: dFim,
+        valor_alvo: dTarget,
+        valor_atingido: dSales,
+        status: dSales >= dTarget ? 'batida' : 'nao_atingida',
+        porcentagem: dTarget > 0 ? Math.min(100, Math.round((dSales / dTarget) * 100)) : 0,
+        criado_em: new Date().toISOString()
+      });
+
+      // Auto Reset Daily dates to Today
+      profileUpdates.metaDiariaInicio = todayStr;
+      profileUpdates.metaDiariaFim = todayStr;
+      setMetaDiariaInicio(todayStr);
+      setMetaDiariaFim(todayStr);
+      historyUpdated = true;
+    }
+
+    // Check Weekly Goal Expiry
+    const wStart = profile.metaSemanalInicio || thisWeek.start;
+    const wFim = profile.metaSemanalFim || thisWeek.end;
+    const wTarget = profile.metaSemanal || 0;
+
+    if (wFim < todayStr && wTarget > 0) {
+      const wSales = vendas
+        .filter(v => v.data_venda >= wStart && v.data_venda <= wFim)
+        .reduce((sum, v) => sum + v.valor_recebido, 0);
+
+      newHistory.unshift({
+        id: crypto.randomUUID(),
+        tipo: 'semanal',
+        titulo: `Meta Semanal (${formatDateToBR(wStart)} a ${formatDateToBR(wFim)})`,
+        data_inicio: wStart,
+        data_fim: wFim,
+        valor_alvo: wTarget,
+        valor_atingido: wSales,
+        status: wSales >= wTarget ? 'batida' : 'nao_atingida',
+        porcentagem: wTarget > 0 ? Math.min(100, Math.round((wSales / wTarget) * 100)) : 0,
+        criado_em: new Date().toISOString()
+      });
+
+      // Auto Reset Weekly dates to This Week
+      const tw = getThisWeekRange();
+      profileUpdates.metaSemanalInicio = tw.start;
+      profileUpdates.metaSemanalFim = tw.end;
+      setMetaSemanalInicio(tw.start);
+      setMetaSemanalFim(tw.end);
+      historyUpdated = true;
+    }
+
+    // Check Monthly Goal Expiry
+    const mStart = profile.metaMensalInicio || thisMonth.start;
+    const mFim = profile.metaMensalFim || thisMonth.end;
+    const mTarget = profile.metaMensal || 0;
+
+    if (mFim < todayStr && mTarget > 0) {
+      const mSales = vendas
+        .filter(v => v.data_venda >= mStart && v.data_venda <= mFim)
+        .reduce((sum, v) => sum + v.valor_recebido, 0);
+
+      newHistory.unshift({
+        id: crypto.randomUUID(),
+        tipo: 'mensal',
+        titulo: `Meta Mensal (${formatDateToBR(mStart)} a ${formatDateToBR(mFim)})`,
+        data_inicio: mStart,
+        data_fim: mFim,
+        valor_alvo: mTarget,
+        valor_atingido: mSales,
+        status: mSales >= mTarget ? 'batida' : 'nao_atingida',
+        porcentagem: mTarget > 0 ? Math.min(100, Math.round((mSales / mTarget) * 100)) : 0,
+        criado_em: new Date().toISOString()
+      });
+
+      // Auto Reset Monthly dates to This Month
+      const tm = getThisMonthRange();
+      profileUpdates.metaMensalInicio = tm.start;
+      profileUpdates.metaMensalFim = tm.end;
+      setMetaMensalInicio(tm.start);
+      setMetaMensalFim(tm.end);
+      historyUpdated = true;
+    }
+
+    if (historyUpdated) {
+      profileUpdates.historicoMetas = newHistory;
+      updateProfile(profileUpdates);
+    }
+  }, [profile?.id]);
+
+  // Helper calculation for sales in date range
+  const calcSalesInRange = (startStr: string, endStr: string) => {
+    if (!startStr || !endStr) return 0;
+    return vendas
+      .filter(v => v.data_venda >= startStr && v.data_venda <= endStr)
+      .reduce((sum, v) => sum + v.valor_recebido, 0);
   };
 
-  // --- Real-time Dynamic Calculations Based on Local Inputs ---
-  
-  // A. Daily Sales Calculation
-  const startDaily = new Date();
-  startDaily.setHours(0,0,0,0);
-  startDaily.setDate(startDaily.getDate() - (periodoDiaria - 1));
+  // Dynamic Sales Calculations
+  const salesDaily = calcSalesInRange(metaDiariaInicio, metaDiariaFim);
+  const salesWeekly = calcSalesInRange(metaSemanalInicio, metaSemanalFim);
+  const salesMonthly = calcSalesInRange(metaMensalInicio, metaMensalFim);
 
-  const salesDaily = vendas
-    .filter(v => {
-      const vDate = new Date(v.data_venda + 'T00:00:00');
-      return vDate >= startDaily;
-    })
-    .reduce((acc, v) => acc + v.valor_recebido, 0);
+  const goalDailyVal = parseFloat(metaDiariaVal) || 0;
+  const goalWeeklyVal = parseFloat(metaSemanalVal) || 0;
+  const goalMonthlyVal = parseFloat(metaMensalVal) || 0;
 
-  // B. Weekly Sales Calculation
-  const mondayDate = getStartOfWeek();
-  const startWeekly = new Date(mondayDate);
-  startWeekly.setDate(mondayDate.getDate() - (periodoSemanal - 1) * 7);
-
-  const salesWeekly = vendas
-    .filter(v => {
-      const vDate = new Date(v.data_venda + 'T00:00:00');
-      return vDate >= startWeekly;
-    })
-    .reduce((acc, v) => acc + v.valor_recebido, 0);
-
-  // C. Monthly Sales Calculation
-  const startMonthly = new Date(now.getFullYear(), now.getMonth() - (periodoMensal - 1), 1, 0, 0, 0, 0);
-
-  const salesMonthly = vendas
-    .filter(v => {
-      const vDate = new Date(v.data_venda + 'T00:00:00');
-      return vDate >= startMonthly;
-    })
-    .reduce((acc, v) => acc + v.valor_recebido, 0);
-
-  // Goal configurations
-  const goalDailyVal = parseFloat(metaDiaria) || 0;
-  const goalWeeklyVal = parseFloat(metaSemanal) || 0;
-  const goalMonthlyVal = parseFloat(metaMensal) || 0;
-
-  // Progress Percentages
   const progressDaily = goalDailyVal > 0 ? Math.min(100, Math.round((salesDaily / goalDailyVal) * 100)) : 0;
   const progressWeekly = goalWeeklyVal > 0 ? Math.min(100, Math.round((salesWeekly / goalWeeklyVal) * 100)) : 0;
   const progressMonthly = goalMonthlyVal > 0 ? Math.min(100, Math.round((salesMonthly / goalMonthlyVal) * 100)) : 0;
 
-  // --- Individual Save Handlers ---
+  // Preset Handlers
+  const handleDailyPresetChange = (preset: 'hoje' | 'amanha' | 'custom') => {
+    setDailyPreset(preset);
+    if (preset === 'hoje') {
+      const today = getTodayStr();
+      setMetaDiariaInicio(today);
+      setMetaDiariaFim(today);
+    } else if (preset === 'amanha') {
+      const tom = getTomorrowStr();
+      setMetaDiariaInicio(tom);
+      setMetaDiariaFim(tom);
+    }
+  };
+
+  const handleWeeklyPresetChange = (preset: 'esta_semana' | 'proxima_semana' | 'custom') => {
+    setWeeklyPreset(preset);
+    if (preset === 'esta_semana') {
+      const tw = getThisWeekRange();
+      setMetaSemanalInicio(tw.start);
+      setMetaSemanalFim(tw.end);
+    } else if (preset === 'proxima_semana') {
+      const nw = getNextWeekRange();
+      setMetaSemanalInicio(nw.start);
+      setMetaSemanalFim(nw.end);
+    }
+  };
+
+  const handleMonthlyPresetChange = (preset: 'este_mes' | 'proximo_mes' | 'custom') => {
+    setMonthlyPreset(preset);
+    if (preset === 'este_mes') {
+      const tm = getThisMonthRange();
+      setMetaMensalInicio(tm.start);
+      setMetaMensalFim(tm.end);
+    } else if (preset === 'proximo_mes') {
+      const nm = getNextMonthRange();
+      setMetaMensalInicio(nm.start);
+      setMetaMensalFim(nm.end);
+    }
+  };
+
+  // Individual Save Handlers
   const handleSaveDaily = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingDaily(true);
@@ -144,7 +303,8 @@ export default function MetasView() {
     try {
       await updateProfile({
         metaDiaria: goalDailyVal,
-        periodoDiaria: periodoDiaria
+        metaDiariaInicio,
+        metaDiariaFim
       });
       setSuccessDaily(true);
       setTimeout(() => setSuccessDaily(false), 3000);
@@ -162,7 +322,8 @@ export default function MetasView() {
     try {
       await updateProfile({
         metaSemanal: goalWeeklyVal,
-        periodoSemanal: periodoSemanal
+        metaSemanalInicio,
+        metaSemanalFim
       });
       setSuccessWeekly(true);
       setTimeout(() => setSuccessWeekly(false), 3000);
@@ -180,7 +341,8 @@ export default function MetasView() {
     try {
       await updateProfile({
         metaMensal: goalMonthlyVal,
-        periodoMensal: periodoMensal
+        metaMensalInicio,
+        metaMensalFim
       });
       setSuccessMonthly(true);
       setTimeout(() => setSuccessMonthly(false), 3000);
@@ -191,22 +353,110 @@ export default function MetasView() {
     }
   };
 
+  // Custom Goal Creation
+  const handleCreateCustomGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!goalName || !goalTargetVal) return;
+
+    await addMetaItem({
+      nome: goalName,
+      valor_alvo: parseFloat(goalTargetVal) || 0,
+      valor_atual: parseFloat(goalInitialVal) || 0,
+      categoria: goalCategory,
+      icone: goalIcon,
+      data_limite: goalDataLimite || undefined
+    });
+
+    setGoalName('');
+    setGoalTargetVal('');
+    setGoalInitialVal('');
+    setGoalDataLimite('');
+    setShowAddGoalModal(false);
+  };
+
+  // Custom Goal Edit
+  const handleStartEditGoal = (m: MetaItem) => {
+    setEditingMeta(m);
+    setEditGoalName(m.nome);
+    setEditGoalTargetVal(m.valor_alvo.toString());
+    setEditGoalCurrentVal(m.valor_atual.toString());
+    setEditGoalCategory(m.categoria || 'Sonho');
+    setEditGoalIcon(m.icone || 'smartphone');
+    setEditGoalDataLimite(m.data_limite || '');
+  };
+
+  const handleSaveEditGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMeta || !editGoalName || !editGoalTargetVal) return;
+
+    await editMetaItem(editingMeta.id, {
+      nome: editGoalName,
+      valor_alvo: parseFloat(editGoalTargetVal) || 0,
+      valor_atual: parseFloat(editGoalCurrentVal) || 0,
+      categoria: editGoalCategory,
+      icone: editGoalIcon,
+      data_limite: editGoalDataLimite || undefined
+    });
+
+    setEditingMeta(null);
+  };
+
+  // Deposit Handler
+  const handleDepositSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositMetaId || !depositAmount) return;
+
+    await alocarParaMetaItem(depositMetaId, parseFloat(depositAmount) || 0);
+    setDepositMetaId(null);
+    setDepositAmount('');
+  };
+
+  // History Actions
+  const handleClearHistoryItem = async (histId: string) => {
+    if (!profile) return;
+    const currentHist = profile.historicoMetas || [];
+    const updated = currentHist.filter(h => h.id !== histId);
+    await updateProfile({ historicoMetas: updated });
+  };
+
+  const handleClearAllHistory = async () => {
+    if (!profile || !confirm('Deseja realmente limpar todo o histórico de metas?')) return;
+    await updateProfile({ historicoMetas: [] });
+  };
+
+  const renderIcon = (iconName?: string) => {
+    switch (iconName) {
+      case 'car': return <Car className="w-5 h-5" />;
+      case 'laptop': return <Laptop className="w-5 h-5" />;
+      case 'home': return <Home className="w-5 h-5" />;
+      case 'gift': return <Gift className="w-5 h-5" />;
+      case 'briefcase': return <Briefcase className="w-5 h-5" />;
+      case 'plane': return <Plane className="w-5 h-5" />;
+      case 'shopping-bag': return <ShoppingBag className="w-5 h-5" />;
+      default: return <Smartphone className="w-5 h-5" />;
+    }
+  };
+
+  const historicoList = profile?.historicoMetas || [];
+
   return (
-    <div className="space-y-6 animate-fade-in" id="metas_view_container">
+    <div className="space-y-8 animate-fade-in" id="metas_view_container">
       
       {/* Title section */}
       <div>
-        <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 font-display">Controlo de Metas</h2>
-        <p className="text-[10px] text-slate-500 dark:text-slate-400">Defina os seus objetivos de vendas personalizados, escolha o período exato e acompanhe o progresso de cada um.</p>
+        <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 font-display">Controlo de Metas Inteligente</h2>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          Configure metas para hoje, próximas semanas ou períodos futuros. Ao expirar o período, o sistema guarda o histórico automaticamente e reinicia a meta para o novo ciclo!
+        </p>
       </div>
 
-      {/* Individual, Modular Grid of Cards */}
+      {/* Grid of Sales Goal Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="metas_individual_cards_grid">
         
         {/* CARD 1: META DIÁRIA */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-5 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md" id="card_meta_diaria_individual">
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-5 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md" id="card_meta_diaria">
           <div className="space-y-4">
-            {/* Header / Title */}
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 p-2.5 rounded-2xl" id="meta_diaria_icon">
@@ -214,11 +464,17 @@ export default function MetasView() {
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-50 font-display">Meta Diária</h3>
-                  <span className="text-[9px] text-slate-400 font-bold block">Progresso em Tempo Real</span>
+                  <span className="text-[9px] text-slate-400 font-bold block">
+                    {formatDateToBR(metaDiariaInicio)} {metaDiariaInicio !== metaDiariaFim ? `a ${formatDateToBR(metaDiariaFim)}` : ''}
+                  </span>
                 </div>
               </div>
               
-              {progressDaily >= 100 ? (
+              {todayStr < metaDiariaInicio ? (
+                <span className="bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Futura ⏳
+                </span>
+              ) : progressDaily >= 100 ? (
                 <span className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Batida! 🎉
                 </span>
@@ -230,44 +486,87 @@ export default function MetasView() {
             </div>
 
             {/* Inputs / Settings Section */}
-            <form onSubmit={handleSaveDaily} className="space-y-3 pt-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Período</label>
-                  <select
-                    value={periodoDiaria}
-                    onChange={e => setPeriodoDiaria(parseInt(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2.5 py-2.5 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
+            <form onSubmit={handleSaveDaily} className="space-y-3 pt-1">
+              
+              {/* Preset Selector */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Selecione o Período</label>
+                <div className="grid grid-cols-3 gap-1 bg-slate-50 dark:bg-slate-950 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleDailyPresetChange('hoje')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      dailyPreset === 'hoje' 
+                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
                   >
-                    <option value={1}>Hoje (1 dia)</option>
-                    <option value={2}>2 dias</option>
-                    <option value={3}>3 dias</option>
-                    <option value={4}>4 dias</option>
-                    <option value={5}>5 dias</option>
-                    <option value={6}>6 dias</option>
-                    <option value={7}>7 dias (1 semana)</option>
-                    <option value={10}>10 dias</option>
-                    <option value={15}>15 dias</option>
-                    <option value={30}>30 dias</option>
-                  </select>
+                    Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDailyPresetChange('amanha')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      dailyPreset === 'amanha' 
+                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Amanhã
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDailyPresetChange('custom')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      dailyPreset === 'custom' 
+                        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Outro Dia
+                  </button>
                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Valor Alvo ({currency})</label>
-                  <input
-                    type="number"
-                    placeholder="Ex: 5000"
-                    value={metaDiaria}
-                    onChange={e => setMetaDiaria(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2.5 py-2 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/10"
-                  />
+              {/* Date Inputs if Custom */}
+              {dailyPreset === 'custom' && (
+                <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase">Data Início</label>
+                    <input
+                      type="date"
+                      value={metaDiariaInicio}
+                      onChange={e => setMetaDiariaInicio(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase">Data Fim</label>
+                    <input
+                      type="date"
+                      value={metaDiariaFim}
+                      onChange={e => setMetaDiariaFim(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Valor Alvo ({currency})</label>
+                <input
+                  type="number"
+                  placeholder="Ex: 5000"
+                  value={metaDiariaVal}
+                  onChange={e => setMetaDiariaVal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-3 py-2 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
               </div>
 
               {/* Progress Display */}
               <div className="bg-slate-50/50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Acumulado</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Vendas Acumuladas</span>
                   <span className="text-sm font-black text-slate-900 dark:text-slate-50">
                     {salesDaily.toLocaleString()} <span className="text-slate-400 text-xs font-semibold">/ {goalDailyVal > 0 ? goalDailyVal.toLocaleString() : '---'} {currency}</span>
                   </span>
@@ -283,30 +582,34 @@ export default function MetasView() {
                 <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold">
                   <span>{progressDaily}% alcançado</span>
                   <span className="text-slate-500 dark:text-slate-300">
-                    {goalDailyVal > salesDaily 
-                      ? `Faltam ${(goalDailyVal - salesDaily).toLocaleString()} ${currency}` 
-                      : 'Meta superada!'}
+                    {todayStr < metaDiariaInicio ? (
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold">Inicia em {formatDateToBR(metaDiariaInicio)}</span>
+                    ) : goalDailyVal > salesDaily ? (
+                      `Faltam ${(goalDailyVal - salesDaily).toLocaleString()} ${currency}`
+                    ) : (
+                      'Meta superada!'
+                    )}
                   </span>
                 </div>
               </div>
 
               {successDaily && (
                 <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-1.5 rounded-xl text-center animate-fade-in">
-                  Meta diária guardada com sucesso!
+                  Meta diária atualizada com sucesso!
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={savingDaily}
-                className="w-full mt-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 {savingDaily ? (
                   <span>A guardar...</span>
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Guardar Diária</span>
+                    <span>Guardar Meta Diária</span>
                   </>
                 )}
               </button>
@@ -315,9 +618,9 @@ export default function MetasView() {
         </div>
 
         {/* CARD 2: META SEMANAL */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-5 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md" id="card_meta_semanal_individual">
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-5 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md" id="card_meta_semanal">
           <div className="space-y-4">
-            {/* Header / Title */}
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 p-2.5 rounded-2xl" id="meta_semanal_icon">
@@ -325,11 +628,17 @@ export default function MetasView() {
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-50 font-display">Meta Semanal</h3>
-                  <span className="text-[9px] text-slate-400 font-bold block">Objetivo de Médio Prazo</span>
+                  <span className="text-[9px] text-slate-400 font-bold block">
+                    {formatDateToBR(metaSemanalInicio)} até {formatDateToBR(metaSemanalFim)}
+                  </span>
                 </div>
               </div>
               
-              {progressWeekly >= 100 ? (
+              {todayStr < metaSemanalInicio ? (
+                <span className="bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Futura ⏳
+                </span>
+              ) : progressWeekly >= 100 ? (
                 <span className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Batida! 🎉
                 </span>
@@ -341,40 +650,87 @@ export default function MetasView() {
             </div>
 
             {/* Inputs / Settings Section */}
-            <form onSubmit={handleSaveWeekly} className="space-y-3 pt-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Período</label>
-                  <select
-                    value={periodoSemanal}
-                    onChange={e => setPeriodoSemanal(parseInt(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2.5 py-2.5 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 cursor-pointer"
+            <form onSubmit={handleSaveWeekly} className="space-y-3 pt-1">
+              
+              {/* Preset Selector */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Selecione o Período</label>
+                <div className="grid grid-cols-3 gap-1 bg-slate-50 dark:bg-slate-950 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleWeeklyPresetChange('esta_semana')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      weeklyPreset === 'esta_semana' 
+                        ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
                   >
-                    <option value={1}>Esta semana (1 semana)</option>
-                    <option value={2}>2 semanas</option>
-                    <option value={3}>3 semanas</option>
-                    <option value={4}>4 semanas</option>
-                    <option value={6}>6 semanas</option>
-                    <option value={8}>8 semanas</option>
-                  </select>
+                    Esta Semana
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleWeeklyPresetChange('proxima_semana')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      weeklyPreset === 'proxima_semana' 
+                        ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Próx. Semana 🚀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleWeeklyPresetChange('custom')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      weeklyPreset === 'custom' 
+                        ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Personalizada
+                  </button>
                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Valor Alvo ({currency})</label>
-                  <input
-                    type="number"
-                    placeholder="Ex: 30000"
-                    value={metaSemanal}
-                    onChange={e => setMetaSemanal(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2.5 py-2 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
-                  />
+              {/* Date Inputs if Custom */}
+              {weeklyPreset === 'custom' && (
+                <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase">Data Início</label>
+                    <input
+                      type="date"
+                      value={metaSemanalInicio}
+                      onChange={e => setMetaSemanalInicio(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase">Data Fim</label>
+                    <input
+                      type="date"
+                      value={metaSemanalFim}
+                      onChange={e => setMetaSemanalFim(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Valor Alvo ({currency})</label>
+                <input
+                  type="number"
+                  placeholder="Ex: 30000"
+                  value={metaSemanalVal}
+                  onChange={e => setMetaSemanalVal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-3 py-2 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
               </div>
 
               {/* Progress Display */}
               <div className="bg-slate-50/50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Acumulado</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Vendas Acumuladas</span>
                   <span className="text-sm font-black text-slate-900 dark:text-slate-50">
                     {salesWeekly.toLocaleString()} <span className="text-slate-400 text-xs font-semibold">/ {goalWeeklyVal > 0 ? goalWeeklyVal.toLocaleString() : '---'} {currency}</span>
                   </span>
@@ -382,7 +738,7 @@ export default function MetasView() {
 
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full transition-all duration-500 rounded-full ${progressWeekly >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
+                    className={`h-full transition-all duration-500 rounded-full ${progressWeekly >= 100 ? 'bg-emerald-500' : 'bg-emerald-600'}`}
                     style={{ width: `${progressWeekly}%` }}
                   ></div>
                 </div>
@@ -390,30 +746,34 @@ export default function MetasView() {
                 <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold">
                   <span>{progressWeekly}% alcançado</span>
                   <span className="text-slate-500 dark:text-slate-300">
-                    {goalWeeklyVal > salesWeekly 
-                      ? `Faltam ${(goalWeeklyVal - salesWeekly).toLocaleString()} ${currency}` 
-                      : 'Meta superada!'}
+                    {todayStr < metaSemanalInicio ? (
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold">Inicia em {formatDateToBR(metaSemanalInicio)}</span>
+                    ) : goalWeeklyVal > salesWeekly ? (
+                      `Faltam ${(goalWeeklyVal - salesWeekly).toLocaleString()} ${currency}`
+                    ) : (
+                      'Meta superada!'
+                    )}
                   </span>
                 </div>
               </div>
 
               {successWeekly && (
                 <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-1.5 rounded-xl text-center animate-fade-in">
-                  Meta semanal guardada com sucesso!
+                  Meta semanal atualizada com sucesso!
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={savingWeekly}
-                className="w-full mt-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 {savingWeekly ? (
                   <span>A guardar...</span>
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Guardar Semanal</span>
+                    <span>Guardar Meta Semanal</span>
                   </>
                 )}
               </button>
@@ -422,9 +782,9 @@ export default function MetasView() {
         </div>
 
         {/* CARD 3: META MENSAL */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-5 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md" id="card_meta_mensal_individual">
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-5 flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md" id="card_meta_mensal">
           <div className="space-y-4">
-            {/* Header / Title */}
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 p-2.5 rounded-2xl" id="meta_mensal_icon">
@@ -432,11 +792,17 @@ export default function MetasView() {
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-50 font-display">Meta Mensal</h3>
-                  <span className="text-[9px] text-slate-400 font-bold block">Faturamento e Escala</span>
+                  <span className="text-[9px] text-slate-400 font-bold block">
+                    {formatDateToBR(metaMensalInicio)} até {formatDateToBR(metaMensalFim)}
+                  </span>
                 </div>
               </div>
               
-              {progressMonthly >= 100 ? (
+              {todayStr < metaMensalInicio ? (
+                <span className="bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Futura ⏳
+                </span>
+              ) : progressMonthly >= 100 ? (
                 <span className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Batida! 🎉
                 </span>
@@ -448,41 +814,87 @@ export default function MetasView() {
             </div>
 
             {/* Inputs / Settings Section */}
-            <form onSubmit={handleSaveMonthly} className="space-y-3 pt-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Período</label>
-                  <select
-                    value={periodoMensal}
-                    onChange={e => setPeriodoMensal(parseInt(e.target.value))}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2.5 py-2.5 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 cursor-pointer"
+            <form onSubmit={handleSaveMonthly} className="space-y-3 pt-1">
+              
+              {/* Preset Selector */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Selecione o Período</label>
+                <div className="grid grid-cols-3 gap-1 bg-slate-50 dark:bg-slate-950 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleMonthlyPresetChange('este_mes')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      monthlyPreset === 'este_mes' 
+                        ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
                   >
-                    <option value={1}>Este mês (1 mês)</option>
-                    <option value={2}>2 meses</option>
-                    <option value={3}>3 meses</option>
-                    <option value={4}>4 meses</option>
-                    <option value={5}>5 meses</option>
-                    <option value={6}>6 meses</option>
-                    <option value={12}>12 meses (1 ano)</option>
-                  </select>
+                    Este Mês
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMonthlyPresetChange('proximo_mes')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      monthlyPreset === 'proximo_mes' 
+                        ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Próx. Mês 📅
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMonthlyPresetChange('custom')}
+                    className={`py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      monthlyPreset === 'custom' 
+                        ? 'bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Personalizada
+                  </button>
                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Valor Alvo ({currency})</label>
-                  <input
-                    type="number"
-                    placeholder="Ex: 120000"
-                    value={metaMensal}
-                    onChange={e => setMetaMensal(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2.5 py-2 rounded-xl text-[11px] font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/10"
-                  />
+              {/* Date Inputs if Custom */}
+              {monthlyPreset === 'custom' && (
+                <div className="grid grid-cols-2 gap-2 animate-fade-in">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase">Data Início</label>
+                    <input
+                      type="date"
+                      value={metaMensalInicio}
+                      onChange={e => setMetaMensalInicio(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase">Data Fim</label>
+                    <input
+                      type="date"
+                      value={metaMensalFim}
+                      onChange={e => setMetaMensalFim(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-2 py-1.5 rounded-lg text-[10px] font-bold text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
                 </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Valor Alvo ({currency})</label>
+                <input
+                  type="number"
+                  placeholder="Ex: 120000"
+                  value={metaMensalVal}
+                  onChange={e => setMetaMensalVal(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 px-3 py-2 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-purple-500"
+                />
               </div>
 
               {/* Progress Display */}
               <div className="bg-slate-50/50 dark:bg-slate-950/40 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
                 <div className="flex justify-between items-baseline">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Acumulado</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Vendas Acumuladas</span>
                   <span className="text-sm font-black text-slate-900 dark:text-slate-50">
                     {salesMonthly.toLocaleString()} <span className="text-slate-400 text-xs font-semibold">/ {goalMonthlyVal > 0 ? goalMonthlyVal.toLocaleString() : '---'} {currency}</span>
                   </span>
@@ -490,7 +902,7 @@ export default function MetasView() {
 
                 <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full transition-all duration-500 rounded-full ${progressMonthly >= 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`}
+                    className={`h-full transition-all duration-500 rounded-full ${progressMonthly >= 100 ? 'bg-emerald-500' : 'bg-purple-600'}`}
                     style={{ width: `${progressMonthly}%` }}
                   ></div>
                 </div>
@@ -498,30 +910,34 @@ export default function MetasView() {
                 <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold">
                   <span>{progressMonthly}% alcançado</span>
                   <span className="text-slate-500 dark:text-slate-300">
-                    {goalMonthlyVal > salesMonthly 
-                      ? `Faltam ${(goalMonthlyVal - salesMonthly).toLocaleString()} ${currency}` 
-                      : 'Meta superada!'}
+                    {todayStr < metaMensalInicio ? (
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold">Inicia em {formatDateToBR(metaMensalInicio)}</span>
+                    ) : goalMonthlyVal > salesMonthly ? (
+                      `Faltam ${(goalMonthlyVal - salesMonthly).toLocaleString()} ${currency}`
+                    ) : (
+                      'Meta superada!'
+                    )}
                   </span>
                 </div>
               </div>
 
               {successMonthly && (
                 <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-1.5 rounded-xl text-center animate-fade-in">
-                  Meta mensal guardada com sucesso!
+                  Meta mensal atualizada com sucesso!
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={savingMonthly}
-                className="w-full mt-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-extrabold text-[10px] py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
               >
                 {savingMonthly ? (
                   <span>A guardar...</span>
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Guardar Mensal</span>
+                    <span>Guardar Meta Mensal</span>
                   </>
                 )}
               </button>
@@ -533,24 +949,24 @@ export default function MetasView() {
 
       {/* --- SECTION: Custom Personal Goals / Sonhos & Objetivos --- */}
       <div className="pt-6 border-t border-slate-200/60 dark:border-slate-800 space-y-4" id="custom_goals_section">
-        <div className="flex justify-between items-center" id="custom_goals_header">
+        <div className="flex flex-wrap justify-between items-center gap-2" id="custom_goals_header">
           <div>
             <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-50 font-display flex items-center gap-2">
               <Award className="w-5 h-5 text-amber-500" />
-              <span>Objetivos & Compras (Sonhos)</span>
+              <span>Objetivos & Compras (Metas de Carro, Celular, Sonhos)</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Crie metas para aquisição de equipamentos, bens pessoais ou investimentos do negócio.
+              Crie e edite metas para aquisição de veículos, computadores, bens pessoais ou investimentos. Aloque fundos diretamente de vendas!
             </p>
           </div>
 
           <button
             onClick={() => setShowAddGoalModal(true)}
-            className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+            className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
             id="btn_add_custom_goal"
           >
             <Plus className="w-4 h-4" />
-            <span>Criar Nova Meta</span>
+            <span>Criar Nova Meta de Compra</span>
           </button>
         </div>
 
@@ -571,25 +987,37 @@ export default function MetasView() {
                     <div className="flex justify-between items-start">
                       <div className="flex items-center space-x-2.5">
                         <div className="bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-2xl text-amber-600 dark:text-amber-400 shrink-0">
-                          {m.icone === 'car' ? <Car className="w-5 h-5" /> :
-                           m.icone === 'laptop' ? <Laptop className="w-5 h-5" /> :
-                           m.icone === 'home' ? <Home className="w-5 h-5" /> :
-                           m.icone === 'gift' ? <Gift className="w-5 h-5" /> :
-                           <Smartphone className="w-5 h-5" />}
+                          {renderIcon(m.icone)}
                         </div>
                         <div>
                           <h4 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm font-display">{m.nome}</h4>
-                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{m.categoria || 'Geral'}</span>
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{m.categoria || 'Sonho'}</span>
+                          {m.data_limite && (
+                            <span className="text-[9px] text-amber-600 dark:text-amber-400 block font-semibold">
+                              Meta: {formatDateToBR(m.data_limite)}
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => deleteMetaItem(m.id)}
-                        className="text-slate-300 hover:text-rose-500 dark:text-slate-700 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                        title="Eliminar esta meta"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditGoal(m)}
+                          className="text-slate-400 hover:text-emerald-600 dark:text-slate-500 dark:hover:text-emerald-400 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          title="Editar esta meta"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteMetaItem(m.id)}
+                          className="text-slate-300 hover:text-rose-500 dark:text-slate-700 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                          title="Eliminar esta meta"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-1.5 pt-1">
@@ -611,7 +1039,7 @@ export default function MetasView() {
                         <span>{pct}% concluído</span>
                         {isCompleted ? (
                           <span className="text-emerald-600 dark:text-emerald-400 font-black uppercase flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Meta Alcançada!
+                            <CheckCircle2 className="w-3 h-3" /> Concluído!
                           </span>
                         ) : (
                           <span>Faltam {(m.valor_alvo - m.valor_atual).toLocaleString()} {currency}</span>
@@ -638,13 +1066,92 @@ export default function MetasView() {
             <Target className="w-8 h-8 text-amber-500/40 mx-auto" />
             <h4 className="text-xs font-extrabold text-slate-700 dark:text-slate-300">Nenhuma meta de compra registada</h4>
             <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-              Defina metas como "Comprar Celular" ou "Comprar Carro". Ao registar vendas, você poderá alocar percentagens do lucro diretamente para estas metas!
+              Defina metas como "Comprar Carro", "Comprar Celular" ou "Comprar Computador". Pode editá-las a qualquer momento e alocar lucros de vendas diretamente para elas!
             </p>
           </div>
         )}
       </div>
 
-      {/* Modal: Create Goal */}
+      {/* --- SECTION: HISTÓRICO DE METAS POR BAIXO --- */}
+      <div className="pt-6 border-t border-slate-200/60 dark:border-slate-800 space-y-4" id="history_goals_section">
+        <div className="flex justify-between items-center" id="history_goals_header">
+          <div>
+            <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-50 font-display flex items-center gap-2">
+              <History className="w-5 h-5 text-indigo-500" />
+              <span>Histórico de Ciclos de Metas Concluídos</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Ao terminar o período de cada meta (dia, semana ou mês), os resultados anteriores ficam gravados aqui automaticamente.
+            </p>
+          </div>
+
+          {historicoList.length > 0 && (
+            <button
+              onClick={handleClearAllHistory}
+              className="text-slate-400 hover:text-rose-500 text-xs font-bold transition-colors cursor-pointer"
+            >
+              Limpar Histórico
+            </button>
+          )}
+        </div>
+
+        {historicoList.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="history_goals_grid">
+            {historicoList.map(h => (
+              <div 
+                key={h.id}
+                className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-2.5 relative"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                      {h.tipo === 'diaria' ? 'Meta Diária' : h.tipo === 'semanal' ? 'Meta Semanal' : h.tipo === 'mensal' ? 'Meta Mensal' : 'Meta Personalizada'}
+                    </span>
+                    <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">{h.titulo}</h4>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {h.status === 'batida' ? (
+                      <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Batida! ({h.porcentagem}%)
+                      </span>
+                    ) : (
+                      <span className="bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[9px] font-black px-2 py-0.5 rounded-full">
+                        Incompleta ({h.porcentagem}%)
+                      </span>
+                    )}
+
+                    <button
+                      onClick={() => handleClearHistoryItem(h.id)}
+                      className="text-slate-300 hover:text-rose-500 dark:text-slate-700 dark:hover:text-rose-400 p-1"
+                      title="Remover este registo"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center text-xs font-bold pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-slate-400 font-medium text-[10px]">Alvo: {h.valor_alvo.toLocaleString()} {currency}</span>
+                  <span className="text-slate-900 dark:text-slate-100 font-black">
+                    Atingido: <strong className={h.status === 'batida' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}>
+                      {h.valor_atingido.toLocaleString()} {currency}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-slate-50/60 dark:bg-slate-900/30 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-6 text-center space-y-1">
+            <History className="w-6 h-6 text-slate-300 dark:text-slate-700 mx-auto" />
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Nenhum histórico acumulado até ao momento.</p>
+            <p className="text-[10px] text-slate-400">Assim que o período da sua meta atual terminar, os totais serão guardados aqui automaticamente.</p>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL: CREATE CUSTOM GOAL */}
       {showAddGoalModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -652,11 +1159,11 @@ export default function MetasView() {
             
             <form onSubmit={handleCreateCustomGoal} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">Nome do Objetivo</label>
+                <label className="text-xs font-bold text-slate-500">Nome do Objetivo / Produto</label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Comprar Celular Novo, Carro, etc."
+                  placeholder="Ex: Comprar Carro Novo, Celular, Laptop..."
                   value={goalName}
                   onChange={e => setGoalName(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
@@ -670,7 +1177,7 @@ export default function MetasView() {
                     type="number"
                     step="any"
                     required
-                    placeholder="Ex: 25000"
+                    placeholder="Ex: 250000"
                     value={goalTargetVal}
                     onChange={e => setGoalTargetVal(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
@@ -699,9 +1206,10 @@ export default function MetasView() {
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
                   >
                     <option value="Sonho">Sonho Pessoal</option>
+                    <option value="Veículo">Veículo / Carro</option>
                     <option value="Equipamento">Equipamento Negócio</option>
-                    <option value="Veículo">Veículo / Transporte</option>
-                    <option value="Imóvel">Imóvel / Instalações</option>
+                    <option value="Imóvel">Imóvel / Loja</option>
+                    <option value="Viagem">Viagem / Férias</option>
                   </select>
                 </div>
 
@@ -712,26 +1220,37 @@ export default function MetasView() {
                     onChange={e => setGoalIcon(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
                   >
-                    <option value="smartphone">📱 Celular</option>
                     <option value="car">🚗 Carro / Veículo</option>
+                    <option value="smartphone">📱 Celular</option>
                     <option value="laptop">💻 Computador</option>
                     <option value="home">🏠 Casa / Loja</option>
-                    <option value="gift">🎁 Outro Presente</option>
+                    <option value="plane">✈️ Viagem</option>
+                    <option value="gift">🎁 Presente / Sonho</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">Data Limite Desejada (Opcional)</label>
+                <input
+                  type="date"
+                  value={goalDataLimite}
+                  onChange={e => setGoalDataLimite(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddGoalModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold shadow-sm cursor-pointer"
                 >
                   Criar Meta
                 </button>
@@ -741,7 +1260,113 @@ export default function MetasView() {
         </div>
       )}
 
-      {/* Modal: Manual Deposit into Goal */}
+      {/* MODAL: EDIT CUSTOM GOAL */}
+      {editingMeta && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Editar Meta de Compra</h3>
+            
+            <form onSubmit={handleSaveEditGoal} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">Nome do Objetivo / Produto</label>
+                <input
+                  type="text"
+                  required
+                  value={editGoalName}
+                  onChange={e => setEditGoalName(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Valor Alvo ({currency})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={editGoalTargetVal}
+                    onChange={e => setEditGoalTargetVal(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Valor Atual Salvo ({currency})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editGoalCurrentVal}
+                    onChange={e => setEditGoalCurrentVal(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Categoria</label>
+                  <select
+                    value={editGoalCategory}
+                    onChange={e => setEditGoalCategory(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                  >
+                    <option value="Sonho">Sonho Pessoal</option>
+                    <option value="Veículo">Veículo / Carro</option>
+                    <option value="Equipamento">Equipamento Negócio</option>
+                    <option value="Imóvel">Imóvel / Loja</option>
+                    <option value="Viagem">Viagem / Férias</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Ícone</label>
+                  <select
+                    value={editGoalIcon}
+                    onChange={e => setEditGoalIcon(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                  >
+                    <option value="car">🚗 Carro / Veículo</option>
+                    <option value="smartphone">📱 Celular</option>
+                    <option value="laptop">💻 Computador</option>
+                    <option value="home">🏠 Casa / Loja</option>
+                    <option value="plane">✈️ Viagem</option>
+                    <option value="gift">🎁 Presente / Sonho</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500">Data Limite Desejada (Opcional)</label>
+                <input
+                  type="date"
+                  value={editGoalDataLimite}
+                  onChange={e => setEditGoalDataLimite(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingMeta(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm cursor-pointer"
+                >
+                  Guardar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MANUAL DEPOSIT */}
       {depositMetaId && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
@@ -765,13 +1390,13 @@ export default function MetasView() {
                 <button
                   type="button"
                   onClick={() => setDepositMetaId(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm cursor-pointer"
                 >
                   Confirmar Depósito
                 </button>

@@ -3,6 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export interface HistoricoMeta {
+  id: string;
+  user_id?: string;
+  tipo: 'diaria' | 'semanal' | 'mensal' | 'personalizada';
+  titulo: string;
+  data_inicio: string; // YYYY-MM-DD
+  data_fim: string;    // YYYY-MM-DD
+  valor_alvo: number;
+  valor_atingido: number;
+  status: 'batida' | 'nao_atingida';
+  porcentagem: number;
+  criado_em: string;
+}
+
 export interface Profile {
   id: string; // matches user auth id
   nome: string;
@@ -19,6 +33,13 @@ export interface Profile {
   periodoDiaria?: number; // number of days, default: 1
   periodoSemanal?: number; // number of weeks, default: 1
   periodoMensal?: number; // number of months, default: 1
+  metaDiariaInicio?: string;  // YYYY-MM-DD
+  metaDiariaFim?: string;     // YYYY-MM-DD
+  metaSemanalInicio?: string; // YYYY-MM-DD
+  metaSemanalFim?: string;    // YYYY-MM-DD
+  metaMensalInicio?: string;  // YYYY-MM-DD
+  metaMensalFim?: string;     // YYYY-MM-DD
+  historicoMetas?: HistoricoMeta[];
   metaDiariaBatidaEm?: string;
   metaSemanalBatidaEm?: string;
   metaMensalBatidaEm?: string;
