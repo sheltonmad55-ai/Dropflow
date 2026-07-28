@@ -48,6 +48,7 @@
         "forma_pagamento": { "type": "string" },
         "observacao": { "type": "string" },
         "data_venda": { "type": "string" },
+        "conta_id": { "type": "string" },
         "distribuicao": { "type": "object" },
         "custom_anuncios_percent": { "type": "integer" },
         "criado_em": { "type": "string" }
@@ -64,6 +65,7 @@
         "valor": { "type": "number" },
         "categoria": { "type": "string" },
         "caixinha_id": { "type": "string" },
+        "conta_id": { "type": "string" },
         "descricao": { "type": "string" },
         "data": { "type": "string" },
         "criado_em": { "type": "string" }
@@ -98,9 +100,26 @@
         "nome": { "type": "string" },
         "telefone": { "type": "string" },
         "valor_pendente": { "type": "number" },
+        "tipo_origem": { "type": "string" },
         "criado_em": { "type": "string" }
       },
       "required": ["id", "user_id", "nome", "telefone", "valor_pendente", "criado_em"]
+    },
+    "ContaBancaria": {
+      "title": "ContaBancaria",
+      "description": "Bank account or mobile money wallet.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "nome": { "type": "string" },
+        "tipo": { "type": "string" },
+        "saldo_atual": { "type": "number" },
+        "cor": { "type": "string" },
+        "editavel": { "type": "boolean" },
+        "criado_em": { "type": "string" }
+      },
+      "required": ["id", "user_id", "nome", "tipo", "saldo_atual", "criado_em"]
     },
     "ZonaEntrega": {
       "title": "ZonaEntrega",
@@ -191,6 +210,10 @@
     "/meta_items/{metaId}": {
       "schema": "MetaItem",
       "description": "Custom personal goal target allocations"
+    },
+    "/contas_bancarias/{contaId}": {
+      "schema": "ContaBancaria",
+      "description": "Bank and Mobile Money accounts"
     }
   }
 }

@@ -90,6 +90,19 @@ export interface Caixinha {
   valor_distribuicao?: number; // valor fixo ou percentual dependendo do modo
 }
 
+export type ContaTipo = 'carteira_movel' | 'banco' | 'caixa';
+
+export interface ContaBancaria {
+  id: string;
+  user_id: string;
+  nome: string;          // ex: "EMPRESA", "e-Mola", "M-Pesa", "BIM", "BCI", "Standard Bank"
+  tipo: ContaTipo;
+  saldo_atual: number;
+  cor?: string;
+  editavel?: boolean;    // false para contas móveis fixas, true para bancos customizáveis
+  criado_em: string;
+}
+
 export interface DespesaRecorrente {
   id: string;
   user_id: string;
@@ -136,6 +149,7 @@ export interface Venda {
   custom_anuncios_taxa_cambio?: number; // ex: 64 MT por 1 USD
   meta_id?: string;             // ID da Meta (Sonho/Objetivo) para alocação direta
   meta_valor_alocado?: number;  // Valor em MT alocado para a meta
+  conta_id?: string;            // ID da Conta Bancária / Carteira onde o valor foi depositado
   quantidade?: number;
   preco_unitario?: number;
   desconto?: number;
@@ -150,6 +164,7 @@ export interface Despesa {
   valor: number;
   categoria: string;
   caixinha_id: string;
+  conta_id?: string;           // ID da Conta Bancária / Carteira de onde saiu o valor
   descricao: string;
   data: string; // YYYY-MM-DD
   sync_status: 'synced' | 'pending';
@@ -166,6 +181,7 @@ export interface Produto {
   preco_venda: number;
   margem: number; // calculated field (preco_venda - preco_compra) / preco_venda * 100
   quantidade: number;
+  lote_reposicao?: number; // default batch size for restocking (e.g. 100 units)
   kits?: { qtd: number; preco: number }[];
   criado_em: string;
 }
@@ -176,6 +192,7 @@ export interface Fornecedor {
   nome: string;
   telefone: string;
   valor_pendente: number;
+  tipo_origem?: 'importado' | 'local'; // 'importado' (acumula no caixa de fornecedor/estoque) ou 'local' (compra local em Maputo, retorno direto ao caixa principal)
   criado_em: string;
 }
 
@@ -250,7 +267,7 @@ export interface Campanha {
 
 export interface SyncQueueItem {
   id: string;
-  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente' | 'meta_item';
+  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente' | 'meta_item' | 'conta_bancaria';
   action: 'create' | 'update' | 'delete';
   data: any;
   timestamp: number;

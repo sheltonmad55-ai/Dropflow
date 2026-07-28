@@ -71,6 +71,7 @@ service cloud.firestore {
         && (!('produto_id' in data) || data.produto_id is string)
         && (!('fornecedor_id' in data) || data.fornecedor_id is string)
         && (!('zona_entrega_id' in data) || data.zona_entrega_id is string)
+        && (!('conta_id' in data) || data.conta_id is string)
         && (!('forma_pagamento' in data) || data.forma_pagamento is string)
         && (!('data_venda' in data) || data.data_venda is string)
         && (!('distribuicao' in data) || data.distribuicao is map)
@@ -91,6 +92,7 @@ service cloud.firestore {
         && (!('valor' in data) || data.valor is number)
         && (!('categoria' in data) || data.categoria is string)
         && (!('caixinha_id' in data) || data.caixinha_id is string)
+        && (!('conta_id' in data) || data.conta_id is string)
         && (!('descricao' in data) || data.descricao is string)
         && (!('data' in data) || data.data is string)
         && (!('criado_em' in data) || data.criado_em is string)
@@ -118,6 +120,19 @@ service cloud.firestore {
         && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
         && (!('telefone' in data) || data.telefone is string)
         && (!('valor_pendente' in data) || data.valor_pendente is number)
+        && (!('tipo_origem' in data) || data.tipo_origem is string)
+        && (!('criado_em' in data) || data.criado_em is string);
+    }
+
+    // ContasBancarias validation helper
+    function isValidContaBancaria(data) {
+      return data.id is string
+        && data.user_id == request.auth.uid
+        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
+        && (!('tipo' in data) || data.tipo is string)
+        && (!('saldo_atual' in data) || data.saldo_atual is number)
+        && (!('cor' in data) || data.cor is string)
+        && (!('editavel' in data) || data.editavel is bool)
         && (!('criado_em' in data) || data.criado_em is string);
     }
 
@@ -333,6 +348,22 @@ service cloud.firestore {
         && isOwner(request.resource.data.user_id)
         && isValidMetaItem(request.resource.data);
       allow delete: if isAuth() && isValidId(metaId) && isOwner(resource.data.user_id);
+    }
+
+    // ContasBancarias Rules
+    match /contas_bancarias/{contaId} {
+      allow get: if isAuth() && isValidId(contaId) && resource != null && isOwner(resource.data.user_id);
+      allow list: if isAuth() && isOwner(resource.data.user_id);
+      allow create: if isAuth() 
+        && isValidId(contaId) 
+        && isOwner(request.resource.data.user_id)
+        && isValidContaBancaria(request.resource.data);
+      allow update: if isAuth() 
+        && isValidId(contaId)
+        && isOwner(resource.data.user_id) 
+        && isOwner(request.resource.data.user_id)
+        && isValidContaBancaria(request.resource.data);
+      allow delete: if isAuth() && isValidId(contaId) && isOwner(resource.data.user_id);
     }
 
     // Admin Logs Rules

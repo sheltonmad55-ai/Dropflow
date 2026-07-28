@@ -24,7 +24,12 @@ import {
   HelpCircle,
   X,
   Percent,
-  Calculator
+  Calculator,
+  Landmark,
+  Wallet,
+  Edit,
+  Check,
+  Building2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -46,6 +51,8 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   const { 
     profile, 
     caixinhas, 
+    contasBancarias,
+    editContaBancaria,
     vendas, 
     despesas,
     produtos,
@@ -132,6 +139,12 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
 
   // State to control Financial Transparency & Real Net Profit Breakdown Modal
   const [showTransparenciaModal, setShowTransparenciaModal] = React.useState(false);
+
+  // State to control Dashboard Accounts (Início / Contas Bancárias)
+  const [selectedAccountFilter, setSelectedAccountFilter] = React.useState<string>('todas');
+  const [showContasModal, setShowContasModal] = React.useState(false);
+  const [editingContaId, setEditingContaId] = React.useState<string | null>(null);
+  const [editContaSaldo, setEditContaSaldo] = React.useState<string>('');
 
   // Stable days array centered on or ending at the pivotDateStr
   const getDaysArray = (pivotStr: string) => {
@@ -477,20 +490,41 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   return (
     <div className="space-y-6" id="dashboard_view">
       
-      {/* Greetings / Sync Indicator */}
+      {/* Greetings / Top Header Section with Accounts Button */}
       <div className="space-y-3" id="dash_header_section">
         <div className="flex justify-between items-center" id="dash_welcome_group">
           <div>
-            <h2 className="text-xl font-extrabold text-slate-900">Olá, {profile?.nome || 'Empreendedor'}!</h2>
-            <p className="text-[11px] text-slate-500">
+            <div className="flex items-center space-x-2">
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 font-display">
+                Olá, {profile?.nome || 'Empreendedor'}!
+              </h2>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               {profile?.plano === 'trial' ? 'Período experimental grátis' : 'Plano DroopFlow Pro Ativo'}
             </p>
           </div>
-          {profile?.plano === 'trial' && (
-            <div className="bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full text-[10px] font-bold text-emerald-700" id="trial_countdown">
-              7 dias grátis
-            </div>
-          )}
+
+          <div className="flex items-center space-x-2.5" id="top_accounts_button_group">
+            {/* Top Right Accounts Icon Button */}
+            <button
+              id="btn_top_accounts_icon"
+              onClick={() => setShowContasModal(true)}
+              className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-2xl text-xs font-extrabold shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-95"
+              title="Clique para ver todas as Contas Bancárias & Carteiras"
+            >
+              <Landmark className="w-4 h-4 stroke-[2.5]" />
+              <span className="hidden sm:inline">Contas</span>
+              <span className="bg-indigo-800/90 text-indigo-100 text-[10px] px-2 py-0.5 rounded-full font-black">
+                {contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0).toLocaleString()} {currency}
+              </span>
+            </button>
+
+            {profile?.plano === 'trial' && (
+              <div className="bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full text-[10px] font-bold text-emerald-700 hidden md:block" id="trial_countdown">
+                7 dias grátis
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1871,6 +1905,191 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                 id="btn_close_transparencia_modal_bottom"
               >
                 Entendido & Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= CONTAS BANCÁRIAS / CARTEIRAS DASHBOARD MODAL ================= */}
+      {showContasModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="dashboard_contas_modal">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-2xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto" id="dashboard_contas_content">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800" id="dashboard_contas_header">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-2xl">
+                  <Landmark className="w-6 h-6 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-lg font-display">
+                    Saldos de Contas Bancárias & Carteiras
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Visão unificada do saldo real em todas as suas contas bancárias
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowContasModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Total Balance Hero Banner */}
+            <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-5 rounded-3xl shadow-lg space-y-2 border border-indigo-800/40" id="dash_contas_total_hero">
+              <span className="text-[10px] font-black uppercase text-indigo-300 tracking-wider block">
+                Saldo Total Combinado (Todas as Contas)
+              </span>
+              <div className="flex items-baseline space-x-2">
+                <h2 className="text-3xl font-black text-white font-display">
+                  {contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0).toLocaleString()}
+                </h2>
+                <span className="text-emerald-400 font-extrabold text-lg">{currency}</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-tight pt-1">
+                Este valor representa a soma real de dinheiro disponível nas suas contas e carteiras (Empresa, eMola, BIM, BCE, etc.).
+              </p>
+            </div>
+
+            {/* Notice Badge */}
+            <div className="bg-indigo-50/80 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl p-3 text-xs text-indigo-900 dark:text-indigo-300 flex items-start space-x-2.5">
+              <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] leading-relaxed">
+                <strong>Sem impacto no faturamento:</strong> Consultar ou ajustar o saldo real das contas aqui não altera os seus relatórios de vendas, faturamento ou lucro. Serve para manter os saldos sincronizados com o seu extrato bancário.
+              </p>
+            </div>
+
+            {/* List of Accounts */}
+            <div className="space-y-3" id="dash_contas_grid">
+              <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                Contas Individuais ({contasBancarias.length})
+              </h4>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {contasBancarias.map(cb => {
+                  const isEditingThis = editingContaId === cb.id;
+                  return (
+                    <div
+                      key={cb.id}
+                      className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-4 space-y-3 transition-all hover:border-indigo-400"
+                      id={`dash_conta_card_${cb.id}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-0.5">
+                          <span className="text-[9px] uppercase font-black text-indigo-600 dark:text-indigo-400 block tracking-wider">
+                            {cb.banco ? cb.banco : 'Carteira / Banco'}
+                          </span>
+                          <h5 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm">
+                            {cb.nome}
+                          </h5>
+                          {cb.tipo_conta && (
+                            <span className="text-[10px] text-slate-400 capitalize block">
+                              {cb.tipo_conta}
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (isEditingThis) {
+                              setEditingContaId(null);
+                            } else {
+                              setEditingContaId(cb.id);
+                              setEditContaSaldo(cb.saldo_atual.toString());
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
+                          title="Ajustar saldo desta conta"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {isEditingThis ? (
+                        <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-indigo-200 dark:border-indigo-800 space-y-2">
+                          <label className="text-[10px] font-bold text-slate-600 dark:text-slate-300 block">
+                            Novo Saldo Real ({currency})
+                          </label>
+                          <div className="flex space-x-2">
+                            <input
+                              type="number"
+                              step="any"
+                              value={editContaSaldo}
+                              onChange={(e) => setEditContaSaldo(e.target.value)}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:border-indigo-500"
+                            />
+                            <button
+                              onClick={() => setEditContaSaldo('0')}
+                              className="bg-rose-50 text-rose-700 text-[10px] font-bold px-2 py-1 rounded-lg border border-rose-200 shrink-0 cursor-pointer"
+                            >
+                              Zerar
+                            </button>
+                          </div>
+                          <div className="flex justify-end space-x-1.5 pt-1">
+                            <button
+                              onClick={() => setEditingContaId(null)}
+                              className="px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:text-slate-700 cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const val = parseFloat(editContaSaldo);
+                                if (!isNaN(val) && val >= 0) {
+                                  await editContaBancaria(cb.id, { saldo_atual: val });
+                                  setEditingContaId(null);
+                                }
+                              }}
+                              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded-lg cursor-pointer"
+                            >
+                              Salvar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-baseline justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/50">
+                          <span className="text-[10px] text-slate-400 font-semibold">Saldo Atual:</span>
+                          <span className="text-base font-black text-slate-900 dark:text-slate-100">
+                            {cb.saldo_atual.toLocaleString()} <span className="text-xs text-indigo-600 font-bold">{currency}</span>
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          onClick={async () => {
+                            if (confirm(`Deseja zerar o saldo da conta "${cb.nome}"? O valor passará para 0 ${currency}.`)) {
+                              await editContaBancaria(cb.id, { saldo_atual: 0 });
+                            }
+                          }}
+                          className="text-[10px] text-rose-600 hover:underline font-extrabold cursor-pointer"
+                        >
+                          Zerar Saldo (0 {currency})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+              <button
+                onClick={() => {
+                  setShowContasModal(false);
+                  setActiveTab('definicoes');
+                }}
+                className="text-xs text-indigo-600 font-extrabold hover:underline cursor-pointer"
+              >
+                ⚙️ Gerir Contas em Definições
+              </button>
+              <button
+                onClick={() => setShowContasModal(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl cursor-pointer"
+              >
+                Concluído
               </button>
             </div>
           </div>

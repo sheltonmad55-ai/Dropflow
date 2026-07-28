@@ -50,37 +50,37 @@
   /* Core Colors */
   --bg-app: #020617; /* bg-slate-950 */
   --bg-card: #0f172a; /* bg-slate-900 */
-  --bg-panel: #0f172a; /* bg-slate-900 */
+  --bg-panel: #1e293b; /* bg-slate-800 */
   --bg-input: #020617; /* bg-slate-950 */
-  --placeholder-color: #64748b; /* slate-500 */
+  --placeholder-color: #94a3b8; /* slate-400 */
   
   /* Borders */
   --border-primary: #1e293b; /* border-slate-800 */
-  --border-secondary: #1e293b; /* border-slate-800 */
-  --border-secondary-rgb: 30, 41, 59;
+  --border-secondary: #334155; /* border-slate-700 */
+  --border-secondary-rgb: 51, 65, 85;
   
-  /* Text */
-  --text-900: #f8fafc; /* text-slate-50 */
-  --text-800: #f1f5f9; /* text-slate-100 */
-  --text-700: #e2e8f0; /* text-slate-200 */
-  --text-600: #cbd5e1; /* text-slate-300 */
-  --text-500: #94a3b8; /* text-slate-400 */
-  --text-400: #64748b; /* text-slate-500 */
+  /* Text with boosted high-contrast values for ultra readability */
+  --text-900: #ffffff; /* pure white */
+  --text-800: #f8fafc; /* text-slate-50 */
+  --text-700: #f1f5f9; /* text-slate-100 */
+  --text-600: #e2e8f0; /* text-slate-200 */
+  --text-500: #cbd5e1; /* text-slate-300 */
+  --text-400: #94a3b8; /* text-slate-400 */
   
   /* Interactive Backgrounds */
-  --hover-bg-100: #1e293b;
-  --hover-bg-50: #0f172a;
+  --hover-bg-100: #334155;
+  --hover-bg-50: #1e293b;
   
   /* Shadows and Special Backgrounds */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
-  --bg-slate-900-40: rgba(2, 6, 23, 0.7);
+  --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.85);
+  --bg-slate-900-40: rgba(2, 6, 23, 0.85);
   
   /* Semitransparent Colors */
-  --bg-slate-50-70: rgba(15, 23, 42, 0.7);
-  --bg-slate-50-60: rgba(15, 23, 42, 0.6);
-  --bg-slate-50-50: rgba(2, 6, 23, 0.5);
-  --bg-slate-50-20: rgba(15, 23, 42, 0.2);
+  --bg-slate-50-70: rgba(30, 41, 59, 0.8);
+  --bg-slate-50-60: rgba(30, 41, 59, 0.7);
+  --bg-slate-50-50: rgba(15, 23, 42, 0.6);
+  --bg-slate-50-20: rgba(30, 41, 59, 0.3);
   
   color-scheme: dark;
 }
@@ -117,6 +117,11 @@
   border-color: var(--border-secondary) !important;
 }
 
+.dark select option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+
 .dark input::placeholder, 
 .dark textarea::placeholder {
   color: var(--placeholder-color) !important;
@@ -135,6 +140,7 @@
 
 .dark .bg-slate-100 {
   background-color: var(--bg-panel) !important;
+  color: var(--text-800) !important;
 }
 
 .dark .bg-slate-50\/70,
@@ -147,25 +153,23 @@
   background-color: var(--bg-slate-50-20) !important;
 }
 
-.dark .bg-slate-50\/50 {
-  background-color: var(--bg-slate-50-50) !important;
-}
-
 .dark .bg-slate-850 {
   background-color: var(--bg-app) !important;
 }
 
-/* Standard borders mapping */
+/* Standard borders and dividers mapping */
 .dark .border-slate-100 {
   border-color: var(--border-primary) !important;
 }
 
-.dark .border-slate-200 {
+.dark .border-slate-200,
+.dark .border-slate-200\/60 {
   border-color: var(--border-secondary) !important;
 }
 
-.dark .border-slate-200\/60 {
-  border-color: rgba(var(--border-secondary-rgb), 0.6) !important;
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-primary) !important;
 }
 
 /* Typography elements mapping */
@@ -193,6 +197,80 @@
   color: var(--text-400) !important;
 }
 
+/* Dark mode colored badge / banner background contrast fixes */
+.dark .bg-rose-50,
+.dark .bg-rose-50\/90 {
+  background-color: rgba(159, 18, 57, 0.25) !important;
+  border-color: rgba(225, 29, 72, 0.4) !important;
+}
+
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/90 {
+  background-color: rgba(6, 78, 59, 0.3) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-50\/90 {
+  background-color: rgba(120, 53, 15, 0.3) !important;
+  border-color: rgba(245, 158, 11, 0.4) !important;
+}
+
+.dark .bg-indigo-50,
+.dark .bg-indigo-50\/70 {
+  background-color: rgba(49, 46, 129, 0.35) !important;
+  border-color: rgba(99, 102, 241, 0.4) !important;
+}
+
+.dark .bg-sky-50,
+.dark .bg-sky-50\/70 {
+  background-color: rgba(12, 74, 110, 0.35) !important;
+  border-color: rgba(56, 189, 248, 0.4) !important;
+}
+
+.dark .bg-purple-50,
+.dark .bg-purple-50\/70 {
+  background-color: rgba(88, 28, 135, 0.35) !important;
+  border-color: rgba(168, 85, 247, 0.4) !important;
+}
+
+/* Colored text contrast in dark mode */
+.dark .text-rose-600,
+.dark .text-rose-700,
+.dark .text-rose-800 {
+  color: #fb7185 !important;
+}
+
+.dark .text-emerald-600,
+.dark .text-emerald-700,
+.dark .text-emerald-800 {
+  color: #34d399 !important;
+}
+
+.dark .text-amber-600,
+.dark .text-amber-700,
+.dark .text-amber-800 {
+  color: #fbbf24 !important;
+}
+
+.dark .text-indigo-600,
+.dark .text-indigo-700,
+.dark .text-indigo-800 {
+  color: #818cf8 !important;
+}
+
+.dark .text-sky-600,
+.dark .text-sky-700,
+.dark .text-sky-800 {
+  color: #38bdf8 !important;
+}
+
+.dark .text-purple-600,
+.dark .text-purple-700,
+.dark .text-purple-800 {
+  color: #c084fc !important;
+}
+
 /* Interactive hover elements */
 .dark .hover\:bg-slate-100:hover {
   background-color: var(--hover-bg-100) !important;
@@ -211,6 +289,7 @@
   box-shadow: var(--shadow-2xl) !important;
 }
 
-.dark .bg-slate-900\/40 {
+.dark .bg-slate-900\/40,
+.dark .bg-slate-950\/80 {
   background-color: var(--bg-slate-900-40) !important;
 }

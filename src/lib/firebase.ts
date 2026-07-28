@@ -127,7 +127,8 @@ export async function pullAllUserData(userId: string) {
     zonas_entrega,
     campanhas,
     despesas_recorrentes,
-    meta_items
+    meta_items,
+    contas_bancarias
   ] = await Promise.all([
     fetchCol('caixinhas').then(res => res || []),
     fetchCol('vendas').then(res => res || []),
@@ -137,7 +138,8 @@ export async function pullAllUserData(userId: string) {
     fetchCol('zonas_entrega').then(res => res || []),
     fetchCol('campanhas').then(res => res || []),
     fetchCol('despesas_recorrentes').then(res => res || []),
-    fetchCol('meta_items').then(res => res || [])
+    fetchCol('meta_items').then(res => res || []),
+    fetchCol('contas_bancarias').then(res => res || [])
   ]);
 
   return {
@@ -150,7 +152,8 @@ export async function pullAllUserData(userId: string) {
     zonas_entrega,
     campanhas,
     despesas_recorrentes,
-    meta_items
+    meta_items,
+    contas_bancarias
   };
 }
 
@@ -179,6 +182,8 @@ export async function pushQueueToFirestore(queue: any[]) {
       colName = 'despesas_recorrentes';
     } else if (type === 'meta_item') {
       colName = 'meta_items';
+    } else if (type === 'conta_bancaria') {
+      colName = 'contas_bancarias';
     }
     const docId = data.id;
     if (!docId) continue;

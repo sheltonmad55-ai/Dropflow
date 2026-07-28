@@ -33,12 +33,16 @@ import {
   Lock,
   Compass,
   Award,
-  RefreshCw
+  RefreshCw,
+  MinusCircle,
+  ArrowDownRight,
+  Wallet
 } from 'lucide-react';
 
 export default function CaixinhasView() {
   const { 
     caixinhas, 
+    contasBancarias,
     vendas,
     zonasEntrega, 
     profile, 
@@ -47,6 +51,8 @@ export default function CaixinhasView() {
     addZonaEntrega, 
     editZonaEntrega,
     editCaixinha,
+    retirarDaCaixinha,
+    ajustarSaldoCaixinha,
     updateProfile,
     despesasRecorrentes,
     addDespesaRecorrente,
@@ -64,6 +70,92 @@ export default function CaixinhasView() {
   const [showAddCx, setShowAddCx] = useState(false);
   const [showAddZone, setShowAddZone] = useState(false);
   const [showAddDR, setShowAddDR] = useState(false);
+
+  // Retirada / Subtração modal state
+  const [showRetiradaModal, setShowRetiradaModal] = useState(false);
+  const [retiradaCaixinhaId, setRetiradaCaixinhaId] = useState<string>('todas');
+  const [retiradaValor, setRetiradaValor] = useState<string>('');
+  const [retiradaMotivo, setRetiradaMotivo] = useState<string>('');
+  const [retiradaContaId, setRetiradaContaId] = useState<string>('');
+
+  // Ajuste Direto de Saldo modal state
+  const [showAjusteModal, setShowAjusteModal] = useState(false);
+  const [ajusteCaixinhaId, setAjusteCaixinhaId] = useState<string>('');
+  const [ajusteNovoSaldo, setAjusteNovoSaldo] = useState<string>('');
+
+  const handleExecuteRetirada = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const valor = parseFloat(retiradaValor);
+    if (!valor || valor <= 0) {
+      alert('Introduza um valor válido para a retirada!');
+      return;
+    }
+
+    if (!retiradaContaId) {
+      alert('Por favor, selecione a conta bancária/carteira de onde o valor foi retirado.');
+      return;
+    }
+
+    try {
+      if (retiradaCaixinhaId === 'todas') {
+        // Distribute subtraction across all caixinhas proportionally to their current balance
+        const total = caixinhas.reduce((acc, c) => acc + c.saldo_atual, 0);
+        if (total > 0) {
+          for (const c of caixinhas) {
+            if (c.saldo_atual > 0) {
+              const valorProporcional = Math.round((c.saldo_atual / total) * valor * 100) / 100;
+              if (valorProporcional > 0) {
+                await retirarDaCaixinha(c.id, valorProporcional, retiradaMotivo || 'Retirada Global');
+              }
+            }
+          }
+        }
+      } else {
+        await retirarDaCaixinha(retiradaCaixinhaId, valor, retiradaMotivo, retiradaContaId !== 'todas' ? retiradaContaId : undefined);
+      }
+
+      // Bank account deduction
+      if (retiradaContaId === 'todas') {
+        const totalBank = contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0);
+        for (const cb of contasBancarias) {
+          if (cb.saldo_atual > 0 && totalBank > 0) {
+            const propBank = Math.round((cb.saldo_atual / totalBank) * valor * 100) / 100;
+            if (propBank > 0) {
+              await retirarDaConta(cb.id, propBank, retiradaMotivo || 'Retirada Global');
+            }
+          }
+        }
+      } else if (retiradaCaixinhaId === 'todas') {
+        await retirarDaConta(retiradaContaId, valor, retiradaMotivo || 'Retirada Global');
+      }
+
+      setRetiradaValor('');
+      setRetiradaMotivo('');
+      setRetiradaContaId('');
+      setShowRetiradaModal(false);
+    } catch (err) {
+      alert('Erro ao processar a retirada.');
+    }
+  };
+
+  const handleExecuteAjuste = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ajusteCaixinhaId) return;
+    const novoSaldo = parseFloat(ajusteNovoSaldo);
+    if (isNaN(novoSaldo) || novoSaldo < 0) {
+      alert('Introduza um saldo válido (maior ou igual a 0).');
+      return;
+    }
+
+    try {
+      await ajustarSaldoCaixinha(ajusteCaixinhaId, novoSaldo);
+      setAjusteCaixinhaId('');
+      setAjusteNovoSaldo('');
+      setShowAjusteModal(false);
+    } catch (err) {
+      alert('Erro ao ajustar o saldo da caixinha.');
+    }
+  };
 
   // New despesa recorrente form
   const [drDescricao, setDrDescricao] = useState('');
@@ -96,6 +188,7 @@ export default function CaixinhasView() {
   const [editCxPercentualPersonalizado, setEditCxPercentualPersonalizado] = useState<number>(0);
   const [editCxModo, setEditCxModo] = useState<'percentual' | 'fixo'>('percentual');
   const [editCxValorDistribuição, setEditCxValorDistribuição] = useState<string>('0');
+  const [editCxSaldoAtual, setEditCxSaldoAtual] = useState<string>('');
 
   const [editingZone, setEditingZone] = useState<any>(null);
   const [editZoneNome, setEditZoneNome] = useState('');
@@ -166,6 +259,11 @@ export default function CaixinhasView() {
       }
 
       await editCaixinha(editingCx.id, updates);
+
+      const newSal = parseFloat(editCxSaldoAtual);
+      if (!isNaN(newSal) && newSal !== editingCx.saldo_atual) {
+        await ajustarSaldoCaixinha(editingCx.id, newSal);
+      }
 
       if (editingCx.tipo === 'lucro') {
         if (editCxModo === 'percentual') {
@@ -364,14 +462,27 @@ export default function CaixinhasView() {
               <h3 className="text-sm font-bold text-slate-900 font-display">Caixinhas Financeiras</h3>
               <p className="text-[10px] text-slate-500">Divisão do caixa do negócio</p>
             </div>
-            <button
-              id="btn_open_add_cx"
-              onClick={() => setShowAddCx(true)}
-              className="bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded-xl hover:bg-emerald-500 transition-colors flex items-center text-xs space-x-1 shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Personalizar</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                id="btn_open_retirada"
+                onClick={() => {
+                  setRetiradaCaixinhaId('todas');
+                  setShowRetiradaModal(true);
+                }}
+                className="bg-rose-50 text-rose-700 border border-rose-200/80 font-extrabold px-3 py-1.5 rounded-xl hover:bg-rose-100 transition-colors flex items-center text-xs space-x-1 shadow-sm cursor-pointer"
+              >
+                <ArrowDownRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Fazer Retirada</span>
+              </button>
+              <button
+                id="btn_open_add_cx"
+                onClick={() => setShowAddCx(true)}
+                className="bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded-xl hover:bg-emerald-500 transition-colors flex items-center text-xs space-x-1 shadow-sm cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Personalizar</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3" id="caixas_list_cards">
@@ -428,12 +539,35 @@ export default function CaixinhasView() {
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3" id="cx_view_right">
-                    <div className="text-right" id="cx_view_balance">
+                  <div className="flex items-center space-x-2" id="cx_view_right">
+                    <div className="text-right mr-1" id="cx_view_balance">
                       <span className="text-sm font-black text-slate-900 block">
                         {cx.saldo_atual.toLocaleString()} {currency}
                       </span>
                     </div>
+                    <button
+                      id={`btn_zerar_cx_${cx.id}`}
+                      onClick={() => {
+                        if (confirm(`Deseja zerar o saldo da caixinha "${cx.nome}"? O valor passará para 0 ${currency}.`)) {
+                          ajustarSaldoCaixinha(cx.id, 0);
+                        }
+                      }}
+                      className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold rounded-lg border border-rose-200/60 transition-colors cursor-pointer"
+                      title="Zerar saldo desta caixinha"
+                    >
+                      Zerar (0 MT)
+                    </button>
+                    <button
+                      id={`btn_retirar_cx_${cx.id}`}
+                      onClick={() => {
+                        setRetiradaCaixinhaId(cx.id);
+                        setShowRetiradaModal(true);
+                      }}
+                      className="p-1.5 text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                      title="Fazer retirada desta caixinha"
+                    >
+                      <MinusCircle className="w-4 h-4" />
+                    </button>
                     <button
                       id={`btn_edit_cx_${cx.id}`}
                       onClick={() => {
@@ -441,6 +575,7 @@ export default function CaixinhasView() {
                         setEditCxNome(cx.nome);
                         setEditCxIcon(cx.icone);
                         setEditCxCor(cx.cor);
+                        setEditCxSaldoAtual(cx.saldo_atual.toString());
                         setEditCxAutoDistribuir(cx.auto_distribuir || false);
                         setEditCxPercentualPersonalizado(cx.percentual_padrao || 0);
                         setEditCxModo(cx.distribuicao_modo || 'percentual');
@@ -453,7 +588,7 @@ export default function CaixinhasView() {
                           setEditCxPercent(0);
                         }
                       }}
-                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
                       title="Editar caixinha"
                     >
                       <Edit className="w-4 h-4" />
@@ -1028,6 +1163,29 @@ export default function CaixinhasView() {
                 />
               </div>
 
+              {/* Edit Saldo Atual */}
+              <div className="space-y-1" id="edit_cx_saldo_group">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-slate-600 font-semibold">Saldo Atual ({currency})</label>
+                  <button
+                    type="button"
+                    onClick={() => setEditCxSaldoAtual('0')}
+                    className="text-[10px] text-rose-600 hover:underline font-extrabold cursor-pointer"
+                  >
+                    Zerar Saldo (0 {currency})
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={editCxSaldoAtual}
+                  onChange={(e) => setEditCxSaldoAtual(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-bold"
+                />
+                <p className="text-[10px] text-slate-400">Pode alterar diretamente para alinhar com o saldo real da sua conta.</p>
+              </div>
+
               {/* Color selectors */}
               <div className="space-y-1.5" id="edit_cx_colors_group">
                 <label className="text-xs text-slate-600 font-semibold block">Cor Visual</label>
@@ -1225,6 +1383,110 @@ export default function CaixinhasView() {
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs"
                 >
                   Salvar Zona
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= RETIRADA / SUBTRAÇÃO MODAL ================= */}
+      {showRetiradaModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="retirada_cx_modal">
+          <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="retirada_cx_content">
+            <div className="flex justify-between items-center" id="retirada_header">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 bg-rose-100 text-rose-600 rounded-xl">
+                  <ArrowDownRight className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base font-display">Fazer Retirada / Subtração</h3>
+                  <p className="text-[10px] text-slate-500">Subtrai o valor para alinhar com o saldo real da conta</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRetiradaModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteRetirada} className="space-y-4" id="retirada_cx_form">
+              <div className="space-y-1" id="field_retirada_caixinha">
+                <label className="text-xs text-slate-600 font-semibold">Origem da Retirada (Caixinha / Pocket)</label>
+                <select
+                  value={retiradaCaixinhaId}
+                  onChange={(e) => setRetiradaCaixinhaId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-rose-500"
+                >
+                  <option value="todas">✨ Todas as Caixinhas (Subtração Proporcional ao Saldo)</option>
+                  {caixinhas.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome} (Saldo Atual: {c.saldo_atual.toLocaleString()} {currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1" id="field_retirada_valor">
+                <label className="text-xs text-slate-600 font-semibold">Valor a Retirar ({currency})</label>
+                <input
+                  type="number"
+                  required
+                  step="any"
+                  min="0.01"
+                  placeholder="Ex: 5000"
+                  value={retiradaValor}
+                  onChange={(e) => setRetiradaValor(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-rose-500 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1" id="field_retirada_conta">
+                <label className="text-xs text-slate-600 font-semibold">
+                  Conta Bancária / Carteira (Obrigatório) <span className="text-rose-600 font-bold">*</span>
+                </label>
+                <select
+                  required
+                  value={retiradaContaId}
+                  onChange={(e) => setRetiradaContaId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-rose-500 font-medium"
+                >
+                  <option value="">Selecionar Conta / Carteira...</option>
+                  <option value="todas">✨ Geral (Todas as Contas Bancárias / Proporcional)</option>
+                  {contasBancarias.map(cb => (
+                    <option key={cb.id} value={cb.id}>
+                      {cb.nome} (Saldo Banco: {cb.saldo_atual.toLocaleString()} {currency})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1" id="field_retirada_motivo">
+                <label className="text-xs text-slate-600 font-semibold">Motivo / Descrição</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Ajuste para bater com extrato M-Pesa / Levantamento"
+                  value={retiradaMotivo}
+                  onChange={(e) => setRetiradaMotivo(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-2" id="retirada_modal_actions">
+                <button
+                  type="button"
+                  onClick={() => setShowRetiradaModal(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-rose-600/20"
+                >
+                  Confirmar Retirada
                 </button>
               </div>
             </form>

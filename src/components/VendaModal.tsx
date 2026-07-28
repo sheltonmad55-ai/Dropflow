@@ -13,13 +13,14 @@ interface VendaModalProps {
 }
 
 export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
-  const { produtos, fornecedores, zonasEntrega, addVenda, profile, addProduto, addZonaEntrega, addFornecedor, metaItems } = useApp();
+  const { produtos, fornecedores, zonasEntrega, addVenda, profile, addProduto, addZonaEntrega, addFornecedor, metaItems, contasBancarias } = useApp();
   
   // Form fields
   const [valorRecebido, setValorRecebido] = useState<string>('');
   const [produtoId, setProdutoId] = useState<string>('');
   const [fornecedorId, setFornecedorId] = useState<string>('');
   const [zonaEntregaId, setZonaEntregaId] = useState<string>('');
+  const [contaId, setContaId] = useState<string>('');
   const [formaPagamento, setFormaPagamento] = useState<string>('M-Pesa');
   const [observacao, setObservacao] = useState<string>('');
   const [dataVenda, setDataVenda] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -204,6 +205,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
         produto_id: produtoId,
         fornecedor_id: fornecedorId,
         zona_entrega_id: zonaEntregaId,
+        conta_id: contaId || undefined,
         forma_pagamento: formaPagamento,
         observacao: observacao,
         data_venda: dataVenda,
@@ -223,6 +225,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setProdutoId('');
       setFornecedorId('');
       setZonaEntregaId('');
+      setContaId('');
       setObservacao('');
       setQuantidade('1');
       setPrecoUnitario('');
@@ -527,6 +530,24 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
             )}
           </div>
 
+          {/* Conta de Destino e Forma de Pagamento */}
+          <div className="space-y-1.5" id="field_venda_conta">
+            <label className="text-xs font-semibold text-slate-500">Conta / Carteira onde o valor foi depositado</label>
+            <select
+              id="venda_conta_select"
+              value={contaId}
+              onChange={(e) => setContaId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
+            >
+              <option value="">Selecionar Conta (ou Geral)...</option>
+              {contasBancarias.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.nome} - Saldo: {c.saldo_atual} {currency} {c.banco ? `(${c.banco})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Outros Detalhes (Forma Pagamento e Data) */}
           <div className="grid grid-cols-2 gap-3" id="venda_metadata_grid">
             <div className="space-y-1" id="field_venda_pagamento">
@@ -540,6 +561,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                 <option value="M-Pesa">M-Pesa</option>
                 <option value="e-Mola">e-Mola</option>
                 <option value="M-Kesh">M-Kesh</option>
+                <option value="A Prazo / Prestações">A Prazo / Prestações</option>
                 <option value="Cash/Dinheiro">Cash/Dinheiro</option>
                 <option value="Transferência">Transferência</option>
                 <option value="Outro">Outro</option>
@@ -558,6 +580,18 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               />
             </div>
           </div>
+
+          {formaPagamento === 'A Prazo / Prestações' && (
+            <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 text-[11px] text-amber-900 space-y-1" id="venda_aprazo_info">
+              <p className="font-extrabold flex items-center">
+                <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-600" />
+                Venda Registada A Prazo (Em Prestações)
+              </p>
+              <p className="text-[10px] text-amber-800 leading-tight">
+                Esta venda será contabilizada nas estatísticas de faturamento. Pode indicar os detalhes das parcelas ou vencimento no campo de observações abaixo.
+              </p>
+            </div>
+          )}
 
           {/* Observação */}
           <div className="space-y-1" id="field_venda_obs">

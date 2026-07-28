@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import * as db from './db.ts';
-import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem } from '../types.ts';
+import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem, ContaBancaria } from '../types.ts';
 import { checkCampaignBudget, startNotificationScheduler, sendNotification } from './notifications.ts';
 import { 
   auth, 
@@ -54,6 +54,7 @@ interface AppContextType {
 
   // Data State
   caixinhas: Caixinha[];
+  contasBancarias: ContaBancaria[];
   vendas: Venda[];
   despesas: Despesa[];
   produtos: Produto[];
@@ -95,6 +96,15 @@ interface AppContextType {
   addCaixinha: (nome: string, icone: string, cor: string, percentual?: number, auto_distribuir?: boolean) => Promise<void>;
   editCaixinha: (id: string, updates: Partial<Caixinha>) => Promise<void>;
   deleteCaixinha: (id: string) => Promise<void>;
+  retirarDaCaixinha: (caixinhaId: string, valor: number, motivo?: string, contaId?: string) => Promise<void>;
+  ajustarSaldoCaixinha: (caixinhaId: string, novoSaldo: number) => Promise<void>;
+
+  // Contas Bancarias & Carteiras management
+  addContaBancaria: (contaData: Omit<ContaBancaria, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
+  editContaBancaria: (id: string, updates: Partial<ContaBancaria>) => Promise<void>;
+  deleteContaBancaria: (id: string) => Promise<void>;
+  retirarDaConta: (contaId: string, valor: number, motivo?: string) => Promise<void>;
+  transferirEntreContas: (deContaId: string, paraContaId: string, valor: number) => Promise<void>;
 
   // Campanhas management
   addCampanha: (campanhaData: Omit<Campanha, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
@@ -125,6 +135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // App data state
   const [caixinhas, setCaixinhas] = useState<Caixinha[]>([]);
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([]);
   const [vendas, setVendas] = useState<Venda[]>([]);
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -350,6 +361,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
             (error) => console.error("MetaItems real-time listener error:", error)
           );
           unsubscribesRef.current.push(unsubMetaItems);
+
+          // 7.8. Listen to user contas_bancarias collection
+          const unsubContasBancarias = onSnapshot(
+            query(collection(fDb, 'contas_bancarias'), where('user_id', '==', user.uid)),
+            (snapshot) => {
+              const data = snapshot.docs.map(doc => doc.data() as ContaBancaria);
+              if (data.length === 0) {
+                seedDefaultContas(user.uid);
+              } else {
+                setContasBancarias(data);
+                db.clearStore('contas_bancarias').then(() => {
+                  data.forEach(item => db.putItem('contas_bancarias', item));
+                });
+              }
+            },
+            (error) => console.error("ContasBancarias real-time listener error:", error)
+          );
+          unsubscribesRef.current.push(unsubContasBancarias);
 
           // 8. Listen to broadcasts collection
           const unsubBroadcasts = onSnapshot(
@@ -626,6 +655,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dbCampanhas,
         dbDespesasRecorrentes,
         dbMetaItems,
+        dbContas,
         queue
       ] = await Promise.all([
         db.getAll<Profile>('profiles'),
@@ -638,6 +668,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         db.getAll<Campanha>('campanhas'),
         db.getAll<DespesaRecorrente>('despesas_recorrentes'),
         db.getAll<MetaItem>('meta_items'),
+        db.getAll<ContaBancaria>('contas_bancarias'),
         db.getAll<SyncQueueItem>('sync_queue')
       ]);
 
@@ -647,6 +678,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
+      const userContas = dbContas.filter(c => c.user_id === userId);
+      if (userContas.length > 0) {
+        setContasBancarias(userContas);
+      } else {
+        seedDefaultContas(userId);
+      }
       setVendas(dbVendas.filter(v => v.user_id === userId).sort((a,b) => b.data_venda.localeCompare(a.data_venda)));
       setDespesas(dbDespesas.filter(d => d.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
       setProdutos(dbProdutos.filter(p => p.user_id === userId));
@@ -661,6 +698,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error('Error loading local offline database:', e);
+    }
+  }
+
+  async function seedDefaultContas(userId: string) {
+    const defaults: ContaBancaria[] = [
+      {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        nome: 'Empresa (Caixa Principal)',
+        tipo: 'caixa',
+        saldo_atual: 0,
+        cor: 'bg-emerald-600',
+        editavel: false,
+        criado_em: new Date().toISOString()
+      },
+      {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        nome: 'e-Mola',
+        tipo: 'carteira_movel',
+        saldo_atual: 0,
+        cor: 'bg-amber-500',
+        editavel: false,
+        criado_em: new Date().toISOString()
+      },
+      {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        nome: 'M-Pesa / mKesh',
+        tipo: 'carteira_movel',
+        saldo_atual: 0,
+        cor: 'bg-rose-500',
+        editavel: false,
+        criado_em: new Date().toISOString()
+      },
+      {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        nome: 'BIM (Millennium bim)',
+        tipo: 'banco',
+        saldo_atual: 0,
+        cor: 'bg-blue-600',
+        editavel: true,
+        criado_em: new Date().toISOString()
+      },
+      {
+        id: crypto.randomUUID(),
+        user_id: userId,
+        nome: 'BCI (Comercial)',
+        tipo: 'banco',
+        saldo_atual: 0,
+        cor: 'bg-purple-600',
+        editavel: true,
+        criado_em: new Date().toISOString()
+      }
+    ];
+
+    setContasBancarias(defaults);
+    for (const c of defaults) {
+      await db.putItem('contas_bancarias', c);
+      await db.addToSyncQueue({ type: 'conta_bancaria', action: 'create', data: c });
     }
   }
 
@@ -992,6 +1090,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const zone = zonasEntrega.find(z => z.id === vendaData.zona_entrega_id);
     const shippingCost = zone ? zone.custo : 0;
 
+    // Check supplier type (imported vs local)
+    const supplierId = vendaData.fornecedor_id || (product ? product.fornecedor_id : '');
+    const supplier = fornecedores.find(f => f.id === supplierId);
+    const isLocalSupplier = supplier?.tipo_origem === 'local';
+
     // Find relevant standard pockets (Caixinhas)
     const lucrosCx = caixinhas.find(c => c.tipo === 'lucro');
     const anunciosCx = caixinhas.find(c => c.tipo === 'anuncios');
@@ -1000,9 +1103,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const distribution: { [id: string]: number } = {};
 
-    // 1. Reserve product purchase price for Suppliers pocket
-    if (fornecedoresCx) {
+    // 1. Reserve product purchase price for Suppliers pocket (ONLY for imported items, local items return directly to main account)
+    if (fornecedoresCx && !isLocalSupplier) {
       distribution[fornecedoresCx.id] = purchaseCost;
+    } else if (fornecedoresCx && isLocalSupplier) {
+      distribution[fornecedoresCx.id] = 0;
     }
 
     // 2. Reserve shipping cost for Delivery pocket
@@ -1010,8 +1115,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       distribution[deliveryCx.id] = shippingCost;
     }
 
-    // 3. Distribute remainder: first to fixed-mode pockets, then divide the rest among percentage-mode pockets
-    const remainder = value - purchaseCost - shippingCost;
+    // 3. Distribute remainder: local purchases do not subtract cost from distribution remainder
+    const remainder = isLocalSupplier 
+      ? (value - shippingCost) 
+      : (value - purchaseCost - shippingCost);
     let availableRemainder = remainder;
 
     if (remainder > 0) {
@@ -1108,15 +1215,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return cx;
     });
 
-    // Update supplier outstanding value (valor_pendente) if there is any supplier
-    if (vendaData.fornecedor_id) {
-      const supplier = fornecedores.find(f => f.id === vendaData.fornecedor_id);
-      if (supplier) {
-        const newPending = Math.round((supplier.valor_pendente + purchaseCost) * 100) / 100;
-        const updatedSupplier = { ...supplier, valor_pendente: newPending };
-        await db.putItem('fornecedores', updatedSupplier);
-        await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
-        setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
+    // Update supplier outstanding value (valor_pendente) ONLY if imported supplier
+    if (supplier && !isLocalSupplier) {
+      const newPending = Math.round((supplier.valor_pendente + purchaseCost) * 100) / 100;
+      const updatedSupplier = { ...supplier, valor_pendente: newPending };
+      await db.putItem('fornecedores', updatedSupplier);
+      await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
+      setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
+    }
+
+    // Update target Bank/Mobile Wallet Account balance if specified
+    if (vendaData.conta_id) {
+      const targetAcc = contasBancarias.find(c => c.id === vendaData.conta_id);
+      if (targetAcc) {
+        const newAccBal = Math.round((targetAcc.saldo_atual + value) * 100) / 100;
+        await editContaBancaria(targetAcc.id, { saldo_atual: newAccBal });
       }
     }
 
@@ -1231,16 +1344,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     // Subtract expense value from selected Caixinha balance
-    const updatedCaixinhas = caixinhas.map(cx => {
-      if (cx.id === despesaData.caixinha_id) {
-        const newBalance = Math.round((cx.saldo_atual - despesaData.valor) * 100) / 100;
+    let updatedCaixinhas = caixinhas;
+    if (despesaData.caixinha_id === 'todas') {
+      const totalBal = caixinhas.reduce((acc, c) => acc + c.saldo_atual, 0);
+      updatedCaixinhas = caixinhas.map(cx => {
+        let deduct = 0;
+        if (totalBal > 0) {
+          deduct = (cx.saldo_atual / totalBal) * despesaData.valor;
+        } else {
+          deduct = despesaData.valor / (caixinhas.length || 1);
+        }
+        const newBalance = Math.round((cx.saldo_atual - deduct) * 100) / 100;
         const updatedCx = { ...cx, saldo_atual: newBalance };
         db.putItem('caixinhas', updatedCx);
         db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
         return updatedCx;
-      }
-      return cx;
-    });
+      });
+    } else {
+      updatedCaixinhas = caixinhas.map(cx => {
+        if (cx.id === despesaData.caixinha_id) {
+          const newBalance = Math.round((cx.saldo_atual - despesaData.valor) * 100) / 100;
+          const updatedCx = { ...cx, saldo_atual: newBalance };
+          db.putItem('caixinhas', updatedCx);
+          db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+          return updatedCx;
+        }
+        return cx;
+      });
+    }
 
     // If source pocket is Suppliers and there is a supplier, check if we want to deduct from pending supplier balance?
     // Let's assume expenses can also be recorded to pay suppliers. If category is "Pagamento Fornecedor", deduct their pending balance!
@@ -1254,6 +1385,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await db.putItem('fornecedores', updatedSupplier);
         await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
         setFornecedores(prev => prev.map(f => f.id === s.id ? updatedSupplier : f));
+      }
+    }
+
+    // If source account (Bank/Wallet) is selected, deduct from account balance
+    if (despesaData.conta_id) {
+      if (despesaData.conta_id === 'todas') {
+        const totalBankBal = contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0);
+        for (const targetAcc of contasBancarias) {
+          let deduct = 0;
+          if (totalBankBal > 0) {
+            deduct = (targetAcc.saldo_atual / totalBankBal) * despesaData.valor;
+          } else {
+            deduct = despesaData.valor / (contasBancarias.length || 1);
+          }
+          const newAccBal = Math.max(0, Math.round((targetAcc.saldo_atual - deduct) * 100) / 100);
+          await editContaBancaria(targetAcc.id, { saldo_atual: newAccBal });
+        }
+      } else {
+        const targetAcc = contasBancarias.find(c => c.id === despesaData.conta_id);
+        if (targetAcc) {
+          const newAccBal = Math.max(0, Math.round((targetAcc.saldo_atual - despesaData.valor) * 100) / 100);
+          await editContaBancaria(targetAcc.id, { saldo_atual: newAccBal });
+        }
       }
     }
 
@@ -1515,6 +1669,132 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncWithServer();
   }
 
+  async function retirarDaCaixinha(caixinhaId: string, valor: number, motivo?: string, contaId?: string) {
+    if (!profile || valor <= 0) return;
+
+    let updatedList = [...caixinhas];
+
+    if (caixinhaId === 'todas') {
+      const totalActual = caixinhas.reduce((acc, c) => acc + c.saldo_atual, 0);
+      if (totalActual > 0) {
+        updatedList = await Promise.all(caixinhas.map(async (cx) => {
+          const ratio = cx.saldo_atual / totalActual;
+          const portionToDeduct = Math.min(cx.saldo_atual, Math.round(valor * ratio * 100) / 100);
+          const newBal = Math.max(0, Math.round((cx.saldo_atual - portionToDeduct) * 100) / 100);
+          const updatedCx = { ...cx, saldo_atual: newBal };
+          await db.putItem('caixinhas', updatedCx);
+          await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+          return updatedCx;
+        }));
+      }
+    } else {
+      const cx = caixinhas.find(c => c.id === caixinhaId);
+      if (cx) {
+        const newBal = Math.max(0, Math.round((cx.saldo_atual - valor) * 100) / 100);
+        const updatedCx = { ...cx, saldo_atual: newBal };
+        await db.putItem('caixinhas', updatedCx);
+        await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+        updatedList = caixinhas.map(c => c.id === caixinhaId ? updatedCx : c);
+      }
+    }
+
+    setCaixinhas(updatedList);
+
+    if (contaId) {
+      await retirarDaConta(contaId, valor, motivo);
+    }
+
+    const curr = profile.moeda || 'MT';
+    triggerToast(
+      'Levantamento Realizado! 💸',
+      `Subtraído ${valor.toLocaleString()} ${curr}${motivo ? ` (${motivo})` : ''}`,
+      'info'
+    );
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function ajustarSaldoCaixinha(caixinhaId: string, novoSaldo: number) {
+    if (!profile) return;
+    const cx = caixinhas.find(c => c.id === caixinhaId);
+    if (!cx) return;
+    const val = Math.max(0, Math.round(novoSaldo * 100) / 100);
+    const updatedCx = { ...cx, saldo_atual: val };
+    await db.putItem('caixinhas', updatedCx);
+    await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+    setCaixinhas(prev => prev.map(c => c.id === caixinhaId ? updatedCx : c));
+    
+    const curr = profile.moeda || 'MT';
+    triggerToast('Saldo Atualizado! ✏️', `${cx.nome}: ${val.toLocaleString()} ${curr}`, 'success');
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  // Contas Bancárias Actions
+  async function addContaBancaria(contaData: Omit<ContaBancaria, 'id' | 'user_id' | 'criado_em'>) {
+    if (!profile) return;
+    const newConta: ContaBancaria = {
+      ...contaData,
+      id: crypto.randomUUID(),
+      user_id: profile.id,
+      editavel: true,
+      criado_em: new Date().toISOString()
+    };
+    await db.putItem('contas_bancarias', newConta);
+    await db.addToSyncQueue({ type: 'conta_bancaria', action: 'create', data: newConta });
+    setContasBancarias(prev => [...prev, newConta]);
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function editContaBancaria(id: string, updates: Partial<ContaBancaria>) {
+    if (!profile) return;
+    const conta = contasBancarias.find(c => c.id === id);
+    if (!conta) return;
+    const updated = { ...conta, ...updates };
+    await db.putItem('contas_bancarias', updated);
+    await db.addToSyncQueue({ type: 'conta_bancaria', action: 'update', data: updated });
+    setContasBancarias(prev => prev.map(c => c.id === id ? updated : c));
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function deleteContaBancaria(id: string) {
+    if (!profile) return;
+    const conta = contasBancarias.find(c => c.id === id);
+    if (!conta || conta.editavel === false) return;
+    await db.deleteItem('contas_bancarias', id);
+    await db.addToSyncQueue({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: profile.id } });
+    setContasBancarias(prev => prev.filter(c => c.id !== id));
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
+  async function retirarDaConta(contaId: string, valor: number, motivo?: string) {
+    if (!profile || valor <= 0) return;
+    const conta = contasBancarias.find(c => c.id === contaId);
+    if (!conta) return;
+    const novoSaldo = Math.max(0, Math.round((conta.saldo_atual - valor) * 100) / 100);
+    await editContaBancaria(contaId, { saldo_atual: novoSaldo });
+    const curr = profile.moeda || 'MT';
+    triggerToast('Levantamento de Conta! 💸', `Retirado ${valor.toLocaleString()} ${curr} de ${conta.nome}${motivo ? ` (${motivo})` : ''}`, 'info');
+  }
+
+  async function transferirEntreContas(deContaId: string, paraContaId: string, valor: number) {
+    if (!profile || valor <= 0) return;
+    const deConta = contasBancarias.find(c => c.id === deContaId);
+    const paraConta = contasBancarias.find(c => c.id === paraContaId);
+    if (!deConta || !paraConta) return;
+
+    const deNovoSaldo = Math.max(0, Math.round((deConta.saldo_atual - valor) * 100) / 100);
+    const paraNovoSaldo = Math.round((paraConta.saldo_atual + valor) * 100) / 100;
+
+    await editContaBancaria(deContaId, { saldo_atual: deNovoSaldo });
+    await editContaBancaria(paraContaId, { saldo_atual: paraNovoSaldo });
+    const curr = profile.moeda || 'MT';
+    triggerToast('Transferência Concluída! 🔄', `Transferido ${valor.toLocaleString()} ${curr} de ${deConta.nome} para ${paraConta.nome}`, 'success');
+  }
+
   // Campanhas management
   async function addCampanha(campanhaData: Omit<Campanha, 'id' | 'user_id' | 'criado_em'>) {
     if (!profile) return;
@@ -1650,6 +1930,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateUserProfileByAdmin,
 
       caixinhas,
+      contasBancarias,
       vendas,
       despesas,
       produtos,
@@ -1686,6 +1967,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addCaixinha,
       editCaixinha,
       deleteCaixinha,
+      retirarDaCaixinha,
+      ajustarSaldoCaixinha,
+
+      addContaBancaria,
+      editContaBancaria,
+      deleteContaBancaria,
+      retirarDaConta,
+      transferirEntreContas,
 
       addCampanha,
       editCampanha,

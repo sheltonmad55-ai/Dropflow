@@ -13,11 +13,12 @@ interface DespesaModalProps {
 }
 
 export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
-  const { caixinhas, addDespesa, profile } = useApp();
+  const { caixinhas, contasBancarias, addDespesa, profile } = useApp();
 
   // Form states
   const [valor, setValor] = useState<string>('');
   const [caixinhaId, setCaixinhaId] = useState<string>('');
+  const [contaId, setContaId] = useState<string>('');
   const [categoria, setCategoria] = useState<string>('Anúncios');
   const [descricao, setDescricao] = useState<string>('');
   const [data, setData] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -34,6 +35,7 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
       await addDespesa({
         valor: parseFloat(valor),
         caixinha_id: caixinhaId,
+        conta_id: contaId || undefined,
         categoria: categoria,
         descricao: descricao,
         data: data
@@ -42,6 +44,7 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
       // Reset & close
       setValor('');
       setCaixinhaId('');
+      setContaId('');
       setCategoria('Anúncios');
       setDescricao('');
       onClose();
@@ -99,9 +102,29 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
               className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-rose-500 transition-colors"
             >
               <option value="">Selecionar Pocket...</option>
+              <option value="todas">✨ Geral (Todas as Caixinhas / Proporcional)</option>
               {caixinhas.map(cx => (
                 <option key={cx.id} value={cx.id}>
                   {cx.nome} (Saldo Atual: {cx.saldo_atual} {currency})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Conta de Onde Saiu o Saldo Real */}
+          <div className="space-y-1.5" id="field_despesa_conta">
+            <label className="text-xs font-semibold text-slate-500">Conta / Carteira de Onde Saiu o Valor (Opcional)</label>
+            <select
+              id="despesa_conta_select"
+              value={contaId}
+              onChange={(e) => setContaId(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-rose-500 transition-colors"
+            >
+              <option value="">Nenhuma / Sem Dedução de Banco</option>
+              <option value="todas">✨ Geral (Todas as Contas Bancárias / Proporcional)</option>
+              {contasBancarias.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.nome} - Saldo: {c.saldo_atual} {currency} {c.banco ? `(${c.banco})` : ''}
                 </option>
               ))}
             </select>
