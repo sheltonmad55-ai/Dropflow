@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { 
   TrendingUp, 
   TrendingDown,
@@ -57,10 +58,15 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     despesas,
     produtos,
     broadcasts,
-    zonasEntrega
+    zonasEntrega,
+    modoFoco,
+    formatMoney,
+    maskValue
   } = useApp();
 
   const currency = profile?.moeda || 'MT';
+
+  const [zerandoContaBancaria, setZerandoContaBancaria] = useState<any>(null);
 
   // Date utilities (local-safe to avoid timezone mismatches)
   const getLocalDateStr = (date: Date = new Date()) => {
@@ -621,7 +627,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             
             <div className="flex items-baseline space-x-2" id="faturamento_card_amount_group">
               <h1 className="text-4xl font-black text-slate-950 dark:text-slate-50 tracking-tight font-display">
-                {selectedSoldTotal.toLocaleString()}
+                {maskValue(selectedSoldTotal.toLocaleString())}
               </h1>
               <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-lg">{currency}</span>
             </div>
@@ -641,7 +647,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             <div className="bg-white/75 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/80 rounded-xl p-2.5 text-center flex flex-col justify-center">
               <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 block uppercase mb-0.5">Balanço no Período</span>
               <span className={`text-xs font-extrabold ${selectedNetTotal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {selectedNetTotal >= 0 ? '+' : ''}{selectedNetTotal.toLocaleString()} {currency}
+                {selectedNetTotal >= 0 ? '+' : ''}{formatMoney(selectedNetTotal, currency)}
               </span>
             </div>
           </div>
@@ -670,7 +676,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
             
             <div className="flex items-baseline space-x-2" id="balance_amount_group">
               <h1 className={`text-4xl font-black tracking-tight font-display ${selectedNetTotal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                {selectedNetTotal.toLocaleString()}
+                {maskValue(selectedNetTotal.toLocaleString())}
               </h1>
               <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-lg">{currency}</span>
             </div>
@@ -1244,7 +1250,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                 <div className="space-y-1" id="caixinha_values">
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">{cx.nome}</span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-slate-100">
-                    {cx.saldo_atual.toLocaleString()} <span className="text-slate-400 text-xs font-normal">{currency}</span>
+                    {formatMoney(cx.saldo_atual, currency)}
                   </span>
                 </div>
               </div>
@@ -1949,7 +1955,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                 <span className="text-emerald-400 font-extrabold text-lg">{currency}</span>
               </div>
               <p className="text-[11px] text-slate-300 leading-tight pt-1">
-                Este valor representa a soma real de dinheiro disponível nas suas contas e carteiras (Empresa, eMola, BIM, BCE, etc.).
+                Este valor representa a soma real de dinheiro disponível nas suas contas e carteiras (e-Mola, M-Pesa e contas adicionadas).
               </p>
             </div>
 
@@ -2052,17 +2058,15 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                         <div className="flex items-baseline justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/50">
                           <span className="text-[10px] text-slate-400 font-semibold">Saldo Atual:</span>
                           <span className="text-base font-black text-slate-900 dark:text-slate-100">
-                            {cb.saldo_atual.toLocaleString()} <span className="text-xs text-indigo-600 font-bold">{currency}</span>
+                            {formatMoney(cb.saldo_atual, currency)}
                           </span>
                         </div>
                       )}
 
                       <div className="flex justify-end pt-1">
                         <button
-                          onClick={async () => {
-                            if (confirm(`Deseja zerar o saldo da conta "${cb.nome}"? O valor passará para 0 ${currency}.`)) {
-                              await editContaBancaria(cb.id, { saldo_atual: 0 });
-                            }
+                          onClick={() => {
+                            setZerandoContaBancaria(cb);
                           }}
                           className="text-[10px] text-rose-600 hover:underline font-extrabold cursor-pointer"
                         >
@@ -2095,6 +2099,22 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Zerar Conta Bancaria */}
+      <ConfirmDeleteModal
+        isOpen={!!zerandoContaBancaria}
+        title="Zerar Saldo da Conta"
+        itemName={zerandoContaBancaria?.nome}
+        description={`Tem certeza que deseja zerar o saldo da conta "${zerandoContaBancaria?.nome}"? O valor passará para 0 ${currency}.`}
+        confirmText="Zerar Saldo"
+        onConfirm={async () => {
+          if (zerandoContaBancaria) {
+            await editContaBancaria(zerandoContaBancaria.id, { saldo_atual: 0 });
+            setZerandoContaBancaria(null);
+          }
+        }}
+        onClose={() => setZerandoContaBancaria(null)}
+      />
 
     </div>
   );

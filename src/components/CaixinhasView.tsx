@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { 
   Layers, 
   MapPin, 
@@ -59,8 +60,14 @@ export default function CaixinhasView() {
     addDespesaRecorrente,
     editDespesaRecorrente,
     deleteDespesaRecorrente,
-    processarDespesaRecorrente
+    processarDespesaRecorrente,
+    formatMoney
   } = useApp();
+
+  // Delete/Zerar modal states
+  const [deletingCaixinha, setDeletingCaixinha] = useState<any>(null);
+  const [zerandoCaixinha, setZerandoCaixinha] = useState<any>(null);
+  const [deletingDr, setDeletingDr] = useState<any>(null);
 
   const totalBalance = caixinhas.reduce((acc, curr) => acc + curr.saldo_atual, 0);
   const totalFaturamento = (vendas || []).reduce((acc, curr) => acc + curr.valor_recebido, 0);
@@ -543,15 +550,13 @@ export default function CaixinhasView() {
                   <div className="flex items-center space-x-2" id="cx_view_right">
                     <div className="text-right mr-1" id="cx_view_balance">
                       <span className="text-sm font-black text-slate-900 block">
-                        {cx.saldo_atual.toLocaleString()} {currency}
+                        {formatMoney(cx.saldo_atual, currency)}
                       </span>
                     </div>
                     <button
                       id={`btn_zerar_cx_${cx.id}`}
                       onClick={() => {
-                        if (confirm(`Deseja zerar o saldo da caixinha "${cx.nome}"? O valor passará para 0 ${currency}.`)) {
-                          ajustarSaldoCaixinha(cx.id, 0);
-                        }
+                        setZerandoCaixinha(cx);
                       }}
                       className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold rounded-lg border border-rose-200/60 transition-colors cursor-pointer"
                       title="Zerar saldo desta caixinha"
@@ -597,8 +602,8 @@ export default function CaixinhasView() {
                     {cx.tipo === 'personalizado' && (
                       <button
                         id={`btn_delete_cx_${cx.id}`}
-                        onClick={() => deleteCaixinha(cx.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
+                        onClick={() => setDeletingCaixinha(cx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                         title="Eliminar caixinha"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -790,14 +795,8 @@ export default function CaixinhasView() {
                       <button
                         type="button"
                         id={`btn_dr_delete_${dr.id}`}
-                        onClick={async () => {
-                          if (confirm('Tem certeza que deseja apagar esta saída recorrente?')) {
-                            try {
-                              await deleteDespesaRecorrente(dr.id);
-                            } catch (e) {
-                              alert('Erro ao apagar despesa.');
-                            }
-                          }
+                        onClick={() => {
+                          setDeletingDr(dr);
                         }}
                         className="p-2 border border-slate-200 text-slate-400 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 rounded-xl transition-all cursor-pointer"
                         title="Eliminar programação"
@@ -1493,6 +1492,52 @@ export default function CaixinhasView() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Caixinha Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingCaixinha}
+        title="Eliminar Caixinha"
+        itemName={deletingCaixinha?.nome}
+        description={`Tem certeza que deseja eliminar a caixinha "${deletingCaixinha?.nome}"? Os saldos ou distribuições futuras serão interrompidos.`}
+        onConfirm={async () => {
+          if (deletingCaixinha) {
+            await deleteCaixinha(deletingCaixinha.id);
+            setDeletingCaixinha(null);
+          }
+        }}
+        onClose={() => setDeletingCaixinha(null)}
+      />
+
+      {/* Confirmation Modal for Despesa Recorrente Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingDr}
+        title="Eliminar Saída Recorrente"
+        itemName={deletingDr?.descricao}
+        description={`Tem certeza que deseja apagar a programação de saída "${deletingDr?.descricao}"?`}
+        onConfirm={async () => {
+          if (deletingDr) {
+            await deleteDespesaRecorrente(deletingDr.id);
+            setDeletingDr(null);
+          }
+        }}
+        onClose={() => setDeletingDr(null)}
+      />
+
+      {/* Confirmation Modal for Zerar Caixinha */}
+      <ConfirmDeleteModal
+        isOpen={!!zerandoCaixinha}
+        title="Zerar Saldo da Caixinha"
+        itemName={zerandoCaixinha?.nome}
+        description={`Tem certeza que deseja zerar o saldo da caixinha "${zerandoCaixinha?.nome}"? O valor passará para 0 ${currency}.`}
+        confirmText="Zerar Saldo"
+        onConfirm={async () => {
+          if (zerandoCaixinha) {
+            await ajustarSaldoCaixinha(zerandoCaixinha.id, 0);
+            setZerandoCaixinha(null);
+          }
+        }}
+        onClose={() => setZerandoCaixinha(null)}
+      />
 
     </div>
   );

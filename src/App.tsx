@@ -34,11 +34,24 @@ import {
   Target,
   Shield,
   ChevronRight,
-  CheckCircle2
+  CheckCircle2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 function AppContent() {
-  const { isAuthenticated, isLoadingAuth, isAdmin, profile, triggerMockUpgrade, logout, activeToast, dismissToast } = useApp();
+  const { 
+    isAuthenticated, 
+    isLoadingAuth, 
+    isAdmin, 
+    profile, 
+    triggerMockUpgrade, 
+    logout, 
+    activeToast, 
+    dismissToast,
+    modoFoco,
+    toggleModoFoco
+  } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'metas' | 'admin' | 'definicoes'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -232,6 +245,22 @@ function AppContent() {
           </div>
 
           <div className="flex items-center space-x-2" id="header_actions">
+            {/* Modo Foco / Privacidade Quick Toggle */}
+            <button
+              type="button"
+              id="btn_header_toggle_modo_foco"
+              onClick={toggleModoFoco}
+              className={`p-1.5 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer ${
+                modoFoco 
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50' 
+                  : 'bg-slate-50 text-slate-500 border-slate-200/60 dark:bg-slate-800/80 dark:text-slate-400 dark:border-slate-700/60 hover:text-slate-800'
+              }`}
+              title={modoFoco ? 'Modo Foco Ativo (Valores Ocultos). Clique para mostrar.' : 'Ativar Modo Foco (Ocultar Saldos em Locais Públicos)'}
+            >
+              {modoFoco ? <EyeOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <Eye className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline text-[10px] uppercase tracking-wider font-extrabold">{modoFoco ? 'Foco ON' : 'Foco'}</span>
+            </button>
+
             {/* Active indicator */}
             <span className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-100 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700 px-2.5 py-1 rounded-full uppercase tracking-wider">
               {activeTab === 'dashboard' ? 'Início' :

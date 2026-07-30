@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { 
   DollarSign, 
   ShoppingBag, 
@@ -33,11 +34,17 @@ export default function VendasView() {
     editProduto,
     editFornecedor,
     editVenda,
-    deleteVenda
+    deleteVenda,
+    modoFoco,
+    formatMoney
   } = useApp();
 
   const [subTab, setSubTab] = useState<'historico' | 'produtos' | 'fornecedores'>('historico');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Delete modal state
+  const [deletingVenda, setDeletingVenda] = useState<any>(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<'tudo' | 'hoje' | '7dias' | '30dias'>('tudo');
   
   // Selection state for bulk operations
@@ -142,16 +149,21 @@ export default function VendasView() {
     );
   };
 
-  const handleBulkDelete = async () => {
-    if (confirm(`Tem certeza que deseja excluir as ${selectedVendaIds.length} vendas selecionadas? Isso irá estornar a distribuição de caixinhas e atualizar o estoque dos produtos.`)) {
-      try {
-        for (const id of selectedVendaIds) {
-          await deleteVenda(id);
-        }
-        setSelectedVendaIds([]);
-      } catch (err) {
-        alert("Erro ao excluir vendas em massa.");
+  const handleBulkDelete = () => {
+    if (selectedVendaIds.length > 0) {
+      setIsBulkDeleteOpen(true);
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    try {
+      for (const id of selectedVendaIds) {
+        await deleteVenda(id);
       }
+      setSelectedVendaIds([]);
+      setIsBulkDeleteOpen(false);
+    } catch (err) {
+      alert("Erro ao excluir vendas em massa.");
     }
   };
 
@@ -467,8 +479,8 @@ export default function VendasView() {
                         <td className="p-4 font-medium text-slate-600">
                           {v.forma_pagamento}
                         </td>
-                        <td className="p-4 font-black text-slate-900">
-                          {v.valor_recebido} {currency}
+                        <td className="p-4 font-black text-slate-900 dark:text-slate-100">
+                          {formatMoney(v.valor_recebido, currency)}
                         </td>
                         <td className="p-4">
                           <span className={`font-semibold ${margin > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -519,9 +531,7 @@ export default function VendasView() {
                             <button
                               type="button"
                               onClick={() => {
-                                if (confirm("Tem certeza que deseja excluir esta venda? Isso irá estornar a distribuição de caixinhas e atualizar o estoque dos produtos.")) {
-                                  deleteVenda(v.id);
-                                }
+                                setDeletingVenda(v);
                               }}
                               className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                               title="Excluir venda"
@@ -1280,6 +1290,30 @@ export default function VendasView() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Single Sale Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingVenda}
+        title="Eliminar Registo de Venda"
+        description="Tem certeza que deseja eliminar esta venda? Isso irá estornar a distribuição pelas caixinhas e atualizar o estoque dos produtos."
+        onConfirm={async () => {
+          if (deletingVenda) {
+            await deleteVenda(deletingVenda.id);
+            setDeletingVenda(null);
+          }
+        }}
+        onClose={() => setDeletingVenda(null)}
+      />
+
+      {/* Confirmation Modal for Bulk Sales Deletion */}
+      <ConfirmDeleteModal
+        isOpen={isBulkDeleteOpen}
+        title="Eliminar Vendas Selecionadas"
+        description={`Tem certeza que deseja eliminar as ${selectedVendaIds.length} vendas selecionadas? Esta ação irá estornar a distribuição de caixinhas e reajustar os estoques.`}
+        confirmText={`Eliminar ${selectedVendaIds.length} Vendas`}
+        onConfirm={confirmBulkDelete}
+        onClose={() => setIsBulkDeleteOpen(false)}
+      />
 
     </div>
   );

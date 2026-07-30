@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../lib/appContext.tsx';
+import ModalPortal from './ModalPortal.tsx';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { 
   Target, Calendar, Award, Save, CheckCircle2, Clock, Plus, Trash2, Edit, 
   Smartphone, Car, Laptop, Home, Gift, DollarSign, Briefcase, Plane, ShoppingBag, 
@@ -71,10 +73,14 @@ const getNextMonthRange = () => {
 };
 
 export default function MetasView() {
-  const { profile, updateProfile, vendas, metaItems, addMetaItem, editMetaItem, deleteMetaItem, alocarParaMetaItem } = useApp();
+  const { profile, updateProfile, vendas, metaItems, addMetaItem, editMetaItem, deleteMetaItem, alocarParaMetaItem, formatMoney } = useApp();
 
   const currency = profile?.moeda || 'MT';
   const todayStr = getTodayStr();
+
+  // Delete modal state
+  const [deletingMeta, setDeletingMeta] = useState<any>(null);
+  const [isClearingHistoryOpen, setIsClearingHistoryOpen] = useState(false);
 
   // Custom Goal Creation State
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
@@ -419,9 +425,15 @@ export default function MetasView() {
     await updateProfile({ historicoMetas: updated });
   };
 
-  const handleClearAllHistory = async () => {
-    if (!profile || !confirm('Deseja realmente limpar todo o histórico de metas?')) return;
+  const handleClearAllHistory = () => {
+    if (!profile) return;
+    setIsClearingHistoryOpen(true);
+  };
+
+  const confirmClearAllHistory = async () => {
+    if (!profile) return;
     await updateProfile({ historicoMetas: [] });
+    setIsClearingHistoryOpen(false);
   };
 
   const renderIcon = (iconName?: string) => {
@@ -1011,7 +1023,7 @@ export default function MetasView() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => deleteMetaItem(m.id)}
+                          onClick={() => setDeletingMeta(m)}
                           className="text-slate-300 hover:text-rose-500 dark:text-slate-700 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
                           title="Eliminar esta meta"
                         >
@@ -1153,258 +1165,289 @@ export default function MetasView() {
 
       {/* MODAL: CREATE CUSTOM GOAL */}
       {showAddGoalModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Nova Meta de Compra / Sonho</h3>
-            
-            <form onSubmit={handleCreateCustomGoal} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">Nome do Objetivo / Produto</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Comprar Carro Novo, Celular, Laptop..."
-                  value={goalName}
-                  onChange={e => setGoalName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Nova Meta de Compra / Sonho</h3>
+              
+              <form onSubmit={handleCreateCustomGoal} className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Valor Alvo ({currency})</label>
+                  <label className="text-xs font-bold text-slate-500">Nome do Objetivo / Produto</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
                     required
-                    placeholder="Ex: 250000"
-                    value={goalTargetVal}
-                    onChange={e => setGoalTargetVal(e.target.value)}
+                    placeholder="Ex: Comprar Carro Novo, Celular, Laptop..."
+                    value={goalName}
+                    onChange={e => setGoalName(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Valor Alvo ({currency})</label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      placeholder="Ex: 250000"
+                      value={goalTargetVal}
+                      onChange={e => setGoalTargetVal(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Valor Inicial ({currency})</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="Ex: 0"
+                      value={goalInitialVal}
+                      onChange={e => setGoalInitialVal(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Categoria</label>
+                    <select
+                      value={goalCategory}
+                      onChange={e => setGoalCategory(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    >
+                      <option value="Sonho">Sonho Pessoal</option>
+                      <option value="Veículo">Veículo / Carro</option>
+                      <option value="Equipamento">Equipamento Negócio</option>
+                      <option value="Imóvel">Imóvel / Loja</option>
+                      <option value="Viagem">Viagem / Férias</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Ícone</label>
+                    <select
+                      value={goalIcon}
+                      onChange={e => setGoalIcon(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    >
+                      <option value="car">🚗 Carro / Veículo</option>
+                      <option value="smartphone">📱 Celular</option>
+                      <option value="laptop">💻 Computador</option>
+                      <option value="home">🏠 Casa / Loja</option>
+                      <option value="plane">✈️ Viagem</option>
+                      <option value="gift">🎁 Presente / Sonho</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Valor Inicial ({currency})</label>
+                  <label className="text-xs font-bold text-slate-500">Data Limite Desejada (Opcional)</label>
                   <input
-                    type="number"
-                    step="any"
-                    placeholder="Ex: 0"
-                    value={goalInitialVal}
-                    onChange={e => setGoalInitialVal(e.target.value)}
+                    type="date"
+                    value={goalDataLimite}
+                    onChange={e => setGoalDataLimite(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Categoria</label>
-                  <select
-                    value={goalCategory}
-                    onChange={e => setGoalCategory(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                <div className="flex justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddGoalModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
                   >
-                    <option value="Sonho">Sonho Pessoal</option>
-                    <option value="Veículo">Veículo / Carro</option>
-                    <option value="Equipamento">Equipamento Negócio</option>
-                    <option value="Imóvel">Imóvel / Loja</option>
-                    <option value="Viagem">Viagem / Férias</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Ícone</label>
-                  <select
-                    value={goalIcon}
-                    onChange={e => setGoalIcon(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold shadow-sm cursor-pointer"
                   >
-                    <option value="car">🚗 Carro / Veículo</option>
-                    <option value="smartphone">📱 Celular</option>
-                    <option value="laptop">💻 Computador</option>
-                    <option value="home">🏠 Casa / Loja</option>
-                    <option value="plane">✈️ Viagem</option>
-                    <option value="gift">🎁 Presente / Sonho</option>
-                  </select>
+                    Criar Meta
+                  </button>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">Data Limite Desejada (Opcional)</label>
-                <input
-                  type="date"
-                  value={goalDataLimite}
-                  onChange={e => setGoalDataLimite(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddGoalModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold shadow-sm cursor-pointer"
-                >
-                  Criar Meta
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* MODAL: EDIT CUSTOM GOAL */}
       {editingMeta && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Editar Meta de Compra</h3>
-            
-            <form onSubmit={handleSaveEditGoal} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">Nome do Objetivo / Produto</label>
-                <input
-                  type="text"
-                  required
-                  value={editGoalName}
-                  onChange={e => setEditGoalName(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Editar Meta de Compra</h3>
+              
+              <form onSubmit={handleSaveEditGoal} className="space-y-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Valor Alvo ({currency})</label>
+                  <label className="text-xs font-bold text-slate-500">Nome do Objetivo / Produto</label>
                   <input
-                    type="number"
-                    step="any"
+                    type="text"
                     required
-                    value={editGoalTargetVal}
-                    onChange={e => setEditGoalTargetVal(e.target.value)}
+                    value={editGoalName}
+                    onChange={e => setEditGoalName(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Valor Alvo ({currency})</label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={editGoalTargetVal}
+                      onChange={e => setEditGoalTargetVal(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Valor Atual Salvo ({currency})</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editGoalCurrentVal}
+                      onChange={e => setEditGoalCurrentVal(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Categoria</label>
+                    <select
+                      value={editGoalCategory}
+                      onChange={e => setEditGoalCategory(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    >
+                      <option value="Sonho">Sonho Pessoal</option>
+                      <option value="Veículo">Veículo / Carro</option>
+                      <option value="Equipamento">Equipamento Negócio</option>
+                      <option value="Imóvel">Imóvel / Loja</option>
+                      <option value="Viagem">Viagem / Férias</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500">Ícone</label>
+                    <select
+                      value={editGoalIcon}
+                      onChange={e => setEditGoalIcon(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    >
+                      <option value="car">🚗 Carro / Veículo</option>
+                      <option value="smartphone">📱 Celular</option>
+                      <option value="laptop">💻 Computador</option>
+                      <option value="home">🏠 Casa / Loja</option>
+                      <option value="plane">✈️ Viagem</option>
+                      <option value="gift">🎁 Presente / Sonho</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Valor Atual Salvo ({currency})</label>
+                  <label className="text-xs font-bold text-slate-500">Data Limite Desejada (Opcional)</label>
                   <input
-                    type="number"
-                    step="any"
-                    value={editGoalCurrentVal}
-                    onChange={e => setEditGoalCurrentVal(e.target.value)}
+                    type="date"
+                    value={editGoalDataLimite}
+                    onChange={e => setEditGoalDataLimite(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Categoria</label>
-                  <select
-                    value={editGoalCategory}
-                    onChange={e => setEditGoalCategory(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                <div className="flex justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingMeta(null)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
                   >
-                    <option value="Sonho">Sonho Pessoal</option>
-                    <option value="Veículo">Veículo / Carro</option>
-                    <option value="Equipamento">Equipamento Negócio</option>
-                    <option value="Imóvel">Imóvel / Loja</option>
-                    <option value="Viagem">Viagem / Férias</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500">Ícone</label>
-                  <select
-                    value={editGoalIcon}
-                    onChange={e => setEditGoalIcon(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm cursor-pointer"
                   >
-                    <option value="car">🚗 Carro / Veículo</option>
-                    <option value="smartphone">📱 Celular</option>
-                    <option value="laptop">💻 Computador</option>
-                    <option value="home">🏠 Casa / Loja</option>
-                    <option value="plane">✈️ Viagem</option>
-                    <option value="gift">🎁 Presente / Sonho</option>
-                  </select>
+                    Guardar Alterações
+                  </button>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">Data Limite Desejada (Opcional)</label>
-                <input
-                  type="date"
-                  value={editGoalDataLimite}
-                  onChange={e => setEditGoalDataLimite(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingMeta(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm cursor-pointer"
-                >
-                  Guardar Alterações
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* MODAL: MANUAL DEPOSIT */}
       {depositMetaId && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Depositar Fundos na Meta</h3>
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-50 font-display">Depositar Fundos na Meta</h3>
 
-            <form onSubmit={handleDepositSubmit} className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">Valor a Depositar ({currency})</label>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  placeholder="Ex: 1000"
-                  value={depositAmount}
-                  onChange={e => setDepositAmount(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+              <form onSubmit={handleDepositSubmit} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Valor a Depositar ({currency})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    placeholder="Ex: 1000"
+                    value={depositAmount}
+                    onChange={e => setDepositAmount(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
 
-              <div className="flex justify-end space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDepositMetaId(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm cursor-pointer"
-                >
-                  Confirmar Depósito
-                </button>
-              </div>
-            </form>
+                <div className="flex justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDepositMetaId(null)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm cursor-pointer"
+                  >
+                    Confirmar Depósito
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
+
+      {/* Confirmation Modal for Goal Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingMeta}
+        title="Eliminar Meta / Objetivo"
+        itemName={deletingMeta?.nome}
+        description={`Tem certeza que deseja eliminar a meta "${deletingMeta?.nome}"? Os valores já poupados para esta meta não serão perdidos.`}
+        onConfirm={async () => {
+          if (deletingMeta) {
+            await deleteMetaItem(deletingMeta.id);
+            setDeletingMeta(null);
+          }
+        }}
+        onClose={() => setDeletingMeta(null)}
+      />
+
+      {/* Confirmation Modal for Goal History Clearing */}
+      <ConfirmDeleteModal
+        isOpen={isClearingHistoryOpen}
+        title="Limpar Histórico de Metas"
+        description="Tem certeza que deseja limpar todo o histórico de metas concluídas? Esta ação é irreversível."
+        confirmText="Limpar Histórico"
+        onConfirm={confirmClearAllHistory}
+        onClose={() => setIsClearingHistoryOpen(false)}
+      />
 
     </div>
   );

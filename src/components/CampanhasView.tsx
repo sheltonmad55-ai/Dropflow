@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { useApp } from '../lib/appContext.tsx';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { Campanha, MetricaDiaria } from '../types.ts';
 import { 
   Megaphone, 
@@ -34,6 +35,10 @@ export default function CampanhasView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCampanha, setEditingCampanha] = useState<Campanha | null>(null);
   const [filterPlataforma, setFilterPlataforma] = useState<string>('todas');
+  
+  // Delete modal state
+  const [deletingCampanhaId, setDeletingCampanhaId] = useState<string | null>(null);
+  const [deletingMetricaId, setDeletingMetricaId] = useState<string | null>(null);
   
   // Form State
   const [nome, setNome] = useState('');
@@ -133,12 +138,16 @@ export default function CampanhasView() {
   };
 
   // Delete Daily Metric Handler
-  const handleDeleteMetricaDiaria = async (metricaId: string) => {
+  const handleDeleteMetricaDiaria = (metricaId: string) => {
     if (!selectedCampanhaForMetrics) return;
-    if (!confirm('Tens a certeza que desejas excluir este registro diário?')) return;
+    setDeletingMetricaId(metricaId);
+  };
+
+  const confirmDeleteMetricaDiaria = async () => {
+    if (!selectedCampanhaForMetrics || !deletingMetricaId) return;
 
     const currentMetrics = selectedCampanhaForMetrics.metricas_diarias || [];
-    const updatedMetrics = currentMetrics.filter(m => m.id !== metricaId);
+    const updatedMetrics = currentMetrics.filter(m => m.id !== deletingMetricaId);
 
     // Recalculate campaign totals
     const totalG = updatedMetrics.reduce((sum, m) => sum + m.gasto, 0);
@@ -159,6 +168,7 @@ export default function CampanhasView() {
 
     await editCampanha(selectedCampanhaForMetrics.id, updatedCampanha);
     setSelectedCampanhaForMetrics(updatedCampanha);
+    setDeletingMetricaId(null);
   };
 
   // Open modal for adding
@@ -501,10 +511,8 @@ export default function CampanhasView() {
   };
 
   // Delete handler
-  const handleDelete = async (id: string) => {
-    if (confirm('Tens a certeza que desejas excluir esta campanha?')) {
-      await deleteCampanha(id);
-    }
+  const handleDelete = (id: string) => {
+    setDeletingCampanhaId(id);
   };
 
   // Platform Filter options
@@ -1667,6 +1675,30 @@ export default function CampanhasView() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal for Campaign Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingCampanhaId}
+        title="Eliminar Campanha de Anúncios"
+        description="Tem certeza que deseja eliminar esta campanha de anúncios e todas as suas métricas registradas?"
+        onConfirm={async () => {
+          if (deletingCampanhaId) {
+            await deleteCampanha(deletingCampanhaId);
+            setDeletingCampanhaId(null);
+          }
+        }}
+        onClose={() => setDeletingCampanhaId(null)}
+      />
+
+      {/* Confirmation Modal for Daily Metric Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingMetricaId}
+        title="Eliminar Registro Diário de Métrica"
+        description="Tem certeza que deseja excluir este registro diário de métrica?"
+        onConfirm={confirmDeleteMetricaDiaria}
+        onClose={() => setDeletingMetricaId(null)}
+      />
+
     </div>
   );
 }

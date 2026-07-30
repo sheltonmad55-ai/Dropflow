@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { ModalPortal } from './ModalPortal.tsx';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { useApp } from '../lib/appContext.tsx';
 import { auth } from '../lib/firebase.ts';
 import { playCashRegister, playNotificationPing } from '../lib/audio.ts';
@@ -46,7 +48,9 @@ import {
   MinusCircle,
   X,
   ArrowDownRight,
-  History
+  History,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface DefinicoesViewProps {
@@ -71,8 +75,14 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     produtos,
     fornecedores,
     zonasEntrega,
-    isAdmin
+    isAdmin,
+    modoFoco,
+    toggleModoFoco,
+    formatMoney
   } = useApp();
+
+  // Delete modal state
+  const [deletingConta, setDeletingConta] = useState<any>(null);
 
   // Profile forms
   const [nome, setNome] = useState(profile?.nome || '');
@@ -670,7 +680,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
               <CreditCard className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> Contas Bancárias & Carteiras Móveis
             </h3>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400">Gira as contas reais (Empresa, e-Mola, M-Pesa, BIM, BCE, BCI) onde os pagamentos entram e saem</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">Gira as contas reais (e-Mola, M-Pesa e contas personalizadas) onde os pagamentos entram e saem</p>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -707,7 +717,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
           </div>
           <div className="text-right">
             <span className="text-lg font-black text-white block">
-              {totalSaldoBancos.toLocaleString()} {moeda}
+              {formatMoney(totalSaldoBancos, moeda)}
             </span>
           </div>
         </div>
@@ -773,9 +783,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                     <button
                       id={`btn_delete_conta_${conta.id}`}
                       onClick={() => {
-                        if (confirm(`Tem certeza que deseja apagar a conta "${conta.nome}"?`)) {
-                          deleteContaBancaria(conta.id);
-                        }
+                        setDeletingConta(conta);
                       }}
                       className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                       title="Apagar conta"
@@ -789,7 +797,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   <div>
                     <span className="text-[9px] text-slate-400 uppercase font-semibold block">Saldo Atual</span>
                     <span className="text-sm font-black text-slate-900 dark:text-slate-100 block">
-                      {conta.saldo_atual.toLocaleString()} {moeda}
+                      {formatMoney(conta.saldo_atual, moeda)}
                     </span>
                   </div>
 
@@ -1275,6 +1283,35 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         </div>
       </div>
 
+      {/* Modo Foco & Privacidade */}
+      <div className="bg-white dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_modo_foco_panel">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-2xl border border-amber-200/80 dark:border-amber-900/40 shrink-0">
+              {modoFoco ? <EyeOff className="w-5 h-5 stroke-[2.5]" /> : <Eye className="w-5 h-5 stroke-[2.5]" />}
+            </div>
+            <div className="space-y-0.5">
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 font-display">Modo Foco (Privacidade)</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Esconde saldos e valores monetários sensíveis no painel principal para proteger a privacidade em locais públicos.</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            id="btn_toggle_modo_foco_definicoes"
+            onClick={toggleModoFoco}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2 cursor-pointer shrink-0 ${
+              modoFoco 
+                ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-md shadow-amber-600/20 font-extrabold' 
+                : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
+            }`}
+          >
+            {modoFoco ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            <span>{modoFoco ? 'Modo Foco Ativo' : 'Ativar Modo Foco'}</span>
+          </button>
+        </div>
+      </div>
+
       {/* 4. Logout / Reset */}
       <div className="pt-2" id="definicoes_system_panel">
         <button
@@ -1289,451 +1326,476 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
 
       {/* ================= MODAL: ADICIONAR CONTA BANCÁRIA ================= */}
       {showAddConta && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="modal_add_conta">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="modal_add_conta_content">
-            <div className="flex justify-between items-center" id="modal_add_conta_header">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                  <CreditCard className="w-5 h-5 stroke-[2.5]" />
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in" id="modal_add_conta">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" id="modal_add_conta_content">
+              <div className="flex justify-between items-center" id="modal_add_conta_header">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                    <CreditCard className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Adicionar Conta ou Carteira</h3>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Registe uma nova conta bancária ou serviço financeiro</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Adicionar Conta ou Carteira</h3>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Registe uma nova conta bancária ou serviço financeiro</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAddConta(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateConta} className="space-y-3.5" id="form_add_conta">
-              <div className="space-y-1" id="field_add_conta_nome">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta / Carteira</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: BCE, Standard Bank, e-Mola, M-Pesa"
-                  value={contaNome}
-                  onChange={(e) => setContaNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
-                />
+                <button
+                  onClick={() => setShowAddConta(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3" id="grid_add_conta_tipo_banco">
-                <div className="space-y-1" id="field_add_conta_tipo">
-                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Tipo de Conta</label>
-                  <select
-                    value={contaTipo}
-                    onChange={(e: any) => setContaTipo(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                  >
-                    <option value="banco">Banco Comercial</option>
-                    <option value="carteira_movel">Carteira Móvel</option>
-                    <option value="caixa_fisico">Caixa Físico</option>
-                    <option value="outros">Outros</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1" id="field_add_conta_banco">
-                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Instituição (Opcional)</label>
+              <form onSubmit={handleCreateConta} className="space-y-3.5" id="form_add_conta">
+                <div className="space-y-1" id="field_add_conta_nome">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta / Carteira</label>
                   <input
                     type="text"
-                    placeholder="Ex: BIM, BCI, BCE"
-                    value={contaBanco}
-                    onChange={(e) => setContaBanco(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                    required
+                    placeholder="Ex: BCE, Standard Bank, e-Mola, M-Pesa"
+                    value={contaNome}
+                    onChange={(e) => setContaNome(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1" id="field_add_conta_saldo">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Saldo Inicial ({moeda})</label>
-                <input
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
-                  value={contaSaldo}
-                  onChange={(e) => setContaSaldo(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-3" id="grid_add_conta_tipo_banco">
+                  <div className="space-y-1" id="field_add_conta_tipo">
+                    <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Tipo de Conta</label>
+                    <select
+                      value={contaTipo}
+                      onChange={(e: any) => setContaTipo(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                    >
+                      <option value="banco">Banco Comercial</option>
+                      <option value="carteira_movel">Carteira Móvel</option>
+                      <option value="caixa_fisico">Caixa Físico</option>
+                      <option value="outros">Outros</option>
+                    </select>
+                  </div>
 
-              <div className="space-y-1" id="field_add_conta_status">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
-                  Status de Liberdade do Saldo
-                </label>
-                <select
-                  value={contaStatusLiberdade}
-                  onChange={(e: any) => setContaStatusLiberdade(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                >
-                  <option value="livre">🟢 Livre Movimentação (Uso Diário / Saídas Gerais)</option>
-                  <option value="emergencia">🔴 Não Mexer (Reserva de Emergência / Excluir de Saídas Gerais)</option>
-                </select>
-                <p className="text-[10px] text-slate-400">
-                  Contas &quot;Não Mexer&quot; são excluídas de saídas automáticas e exigem motivo ao retirar.
-                </p>
-              </div>
+                  <div className="space-y-1" id="field_add_conta_banco">
+                    <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Instituição (Opcional)</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: BIM, BCI, BCE"
+                      value={contaBanco}
+                      onChange={(e) => setContaBanco(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                    />
+                  </div>
+                </div>
 
-              <div className="flex space-x-2 pt-2" id="add_conta_modal_actions">
-                <button
-                  type="button"
-                  onClick={() => setShowAddConta(false)}
-                  className="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-emerald-600/20"
-                >
-                  Criar Conta
-                </button>
-              </div>
-            </form>
+                <div className="space-y-1" id="field_add_conta_saldo">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Saldo Inicial ({moeda})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="0.00"
+                    value={contaSaldo}
+                    onChange={(e) => setContaSaldo(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1" id="field_add_conta_status">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                    Status de Liberdade do Saldo
+                  </label>
+                  <select
+                    value={contaStatusLiberdade}
+                    onChange={(e: any) => setContaStatusLiberdade(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  >
+                    <option value="livre">🟢 Livre Movimentação (Uso Diário / Saídas Gerais)</option>
+                    <option value="emergencia">🔴 Não Mexer (Reserva de Emergência / Excluir de Saídas Gerais)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400">
+                    Contas &quot;Não Mexer&quot; são excluídas de saídas automáticas e exigem motivo ao retirar.
+                  </p>
+                </div>
+
+                <div className="flex space-x-2 pt-2" id="add_conta_modal_actions">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddConta(false)}
+                    className="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-emerald-600/20"
+                  >
+                    Criar Conta
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* ================= MODAL: EDITAR CONTA ================= */}
       {editingConta && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="modal_edit_conta">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="modal_edit_conta_content">
-            <div className="flex justify-between items-center" id="modal_edit_conta_header">
-              <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Editar Conta: {editingConta.nome}</h3>
-              <button
-                onClick={() => setEditingConta(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditConta} className="space-y-3.5" id="form_edit_conta">
-              <div className="space-y-1" id="field_edit_conta_nome">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta / Carteira</label>
-                <input
-                  type="text"
-                  required
-                  value={editContaNome}
-                  onChange={(e) => setEditContaNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1" id="field_edit_conta_saldo">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Ajustar Saldo Atual ({moeda})</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={editContaSaldo}
-                  onChange={(e) => setEditContaSaldo(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1" id="field_edit_conta_status">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
-                  Status de Liberdade do Saldo
-                </label>
-                <select
-                  value={editContaStatusLiberdade}
-                  onChange={(e: any) => setEditContaStatusLiberdade(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                >
-                  <option value="livre">🟢 Livre Movimentação (Uso Diário / Saídas Gerais)</option>
-                  <option value="emergencia">🔴 Não Mexer (Reserva de Emergência / Excluir de Saídas Gerais)</option>
-                </select>
-                <p className="text-[10px] text-slate-400">
-                  Contas &quot;Não Mexer&quot; são protegidas. Ao retirar valor delas, é pedido o motivo em popup.
-                </p>
-              </div>
-
-              <div className="flex space-x-2 pt-2" id="edit_conta_modal_actions">
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in" id="modal_edit_conta">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" id="modal_edit_conta_content">
+              <div className="flex justify-between items-center" id="modal_edit_conta_header">
+                <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Editar Conta: {editingConta.nome}</h3>
                 <button
-                  type="button"
                   onClick={() => setEditingConta(null)}
-                  className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-indigo-600/20"
-                >
-                  Salvar Alterações
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleSaveEditConta} className="space-y-3.5" id="form_edit_conta">
+                <div className="space-y-1" id="field_edit_conta_nome">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta / Carteira</label>
+                  <input
+                    type="text"
+                    required
+                    value={editContaNome}
+                    onChange={(e) => setEditContaNome(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1" id="field_edit_conta_saldo">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Ajustar Saldo Atual ({moeda})</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editContaSaldo}
+                    onChange={(e) => setEditContaSaldo(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1" id="field_edit_conta_status">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                    Status de Liberdade do Saldo
+                  </label>
+                  <select
+                    value={editContaStatusLiberdade}
+                    onChange={(e: any) => setEditContaStatusLiberdade(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  >
+                    <option value="livre">🟢 Livre Movimentação (Uso Diário / Saídas Gerais)</option>
+                    <option value="emergencia">🔴 Não Mexer (Reserva de Emergência / Excluir de Saídas Gerais)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-400">
+                    Contas &quot;Não Mexer&quot; são protegidas. Ao retirar valor delas, é pedido o motivo em popup.
+                  </p>
+                </div>
+
+                <div className="flex space-x-2 pt-2" id="edit_conta_modal_actions">
+                  <button
+                    type="button"
+                    onClick={() => setEditingConta(null)}
+                    className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-indigo-600/20"
+                  >
+                    Salvar Alterações
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* ================= MODAL: TRANSFERÊNCIA ENTRE CONTAS ================= */}
       {showTransferModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="modal_transfer">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="modal_transfer_content">
-            <div className="flex justify-between items-center" id="modal_transfer_header">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl">
-                  <ArrowLeftRight className="w-5 h-5 stroke-[2.5]" />
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in" id="modal_transfer">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" id="modal_transfer_content">
+              <div className="flex justify-between items-center" id="modal_transfer_header">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                    <ArrowLeftRight className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Transferência entre Contas</h3>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Mova fundos entre e-Mola, M-Pesa e as suas contas bancárias personalizadas</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Transferência entre Contas</h3>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Mova fundos entre e-Mola, BIM, M-Pesa, BCE e a Conta da Empresa</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowTransferModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleExecuteTransfer} className="space-y-3.5" id="form_transfer">
-              <div className="space-y-1" id="field_transf_origem">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Conta de Origem (Debitar)</label>
-                <select
-                  value={transfDeConta}
-                  onChange={(e) => setTransfDeConta(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                >
-                  <option value="">Selecionar Origem...</option>
-                  {contasBancarias.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome} (Saldo: {c.saldo_atual.toLocaleString()} {moeda})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1" id="field_transf_destino">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Conta de Destino (Creditar)</label>
-                <select
-                  value={transfParaConta}
-                  onChange={(e) => setTransfParaConta(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                >
-                  <option value="">Selecionar Destino...</option>
-                  {contasBancarias.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome} (Saldo: {c.saldo_atual.toLocaleString()} {moeda})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1" id="field_transf_valor">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Valor a Transferir ({moeda})</label>
-                <input
-                  type="number"
-                  required
-                  step="any"
-                  min="0.01"
-                  placeholder="Ex: 2500"
-                  value={transfValor}
-                  onChange={(e) => setTransfValor(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-2" id="transfer_modal_actions">
                 <button
-                  type="button"
                   onClick={() => setShowTransferModal(false)}
-                  className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-indigo-600/20"
-                >
-                  Executar Transferência
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleExecuteTransfer} className="space-y-3.5" id="form_transfer">
+                <div className="space-y-1" id="field_transf_origem">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Conta de Origem (Debitar)</label>
+                  <select
+                    value={transfDeConta}
+                    onChange={(e) => setTransfDeConta(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  >
+                    <option value="">Selecionar Origem...</option>
+                    {contasBancarias.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome} (Saldo: {c.saldo_atual.toLocaleString()} {moeda})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1" id="field_transf_destino">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Conta de Destino (Creditar)</label>
+                  <select
+                    value={transfParaConta}
+                    onChange={(e) => setTransfParaConta(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  >
+                    <option value="">Selecionar Destino...</option>
+                    {contasBancarias.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome} (Saldo: {c.saldo_atual.toLocaleString()} {moeda})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1" id="field_transf_valor">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Valor a Transferir ({moeda})</label>
+                  <input
+                    type="number"
+                    required
+                    step="any"
+                    min="0.01"
+                    placeholder="Ex: 2500"
+                    value={transfValor}
+                    onChange={(e) => setTransfValor(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex space-x-2 pt-2" id="transfer_modal_actions">
+                  <button
+                    type="button"
+                    onClick={() => setShowTransferModal(false)}
+                    className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-indigo-600/20"
+                  >
+                    Executar Transferência
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* ================= MODAL: RETIRADA DA CONTA ================= */}
       {showRetiradaContaModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="modal_retirada_conta">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="modal_retirada_conta_content">
-            <div className="flex justify-between items-center" id="modal_retirada_conta_header">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 rounded-xl">
-                  <ArrowDownRight className="w-5 h-5 stroke-[2.5]" />
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in" id="modal_retirada_conta">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" id="modal_retirada_conta_content">
+              <div className="flex justify-between items-center" id="modal_retirada_conta_header">
+                <div className="flex items-center space-x-2">
+                  <div className="p-2 bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 rounded-xl">
+                    <ArrowDownRight className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Levantamento de Saldo Bancário</h3>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Subtrai o valor diretamente da conta bancária ou carteira</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Levantamento de Saldo Bancário</h3>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Subtrai o valor diretamente da conta bancária ou carteira</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowRetiradaContaModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleExecuteRetiradaConta} className="space-y-3.5" id="form_retirada_conta">
-              <div className="space-y-1" id="field_retirada_conta_sel">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Conta / Carteira</label>
-                <select
-                  value={retiradaContaIdSelected}
-                  onChange={(e) => setRetiradaContaIdSelected(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                >
-                  {contasBancarias.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome} (Saldo Banco: {c.saldo_atual.toLocaleString()} {moeda}) {c.status_liberdade === 'emergencia' ? ' (🔴 NÃO MEXER)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {(() => {
-                const selAcc = contasBancarias.find(c => c.id === retiradaContaIdSelected);
-                if (selAcc?.status_liberdade === 'emergencia') {
-                  return (
-                    <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-3 rounded-2xl text-xs text-rose-900 dark:text-rose-200 space-y-1" id="emergencia_retirada_warning">
-                      <p className="font-bold flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
-                        <ShieldAlert className="w-4 h-4" /> Conta de Emergência (Não Mexer)
-                      </p>
-                      <p className="text-[11px] leading-relaxed">
-                        O motivo digitado abaixo ficará registrado permanentemente no histórico da conta.
-                      </p>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              <div className="space-y-1" id="field_retirada_conta_val">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Valor a Levantado ({moeda})</label>
-                <input
-                  type="number"
-                  required
-                  step="any"
-                  min="0.01"
-                  placeholder="Ex: 1000"
-                  value={retiradaContaValor}
-                  onChange={(e) => setRetiradaContaValor(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1" id="field_retirada_conta_motivo">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
-                  Motivo {contasBancarias.find(c => c.id === retiradaContaIdSelected)?.status_liberdade === 'emergencia' ? '(Obrigatório) *' : '(Opcional)'}
-                </label>
-                <input
-                  type="text"
-                  required={contasBancarias.find(c => c.id === retiradaContaIdSelected)?.status_liberdade === 'emergencia'}
-                  placeholder="Ex: Taxa bancária / Levantamento pessoal / Emergência"
-                  value={retiradaContaMotivo}
-                  onChange={(e) => setRetiradaContaMotivo(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-2" id="retirada_conta_actions">
                 <button
-                  type="button"
                   onClick={() => setShowRetiradaContaModal(false)}
-                  className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-rose-600/20"
-                >
-                  Confirmar Levantamento
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleExecuteRetiradaConta} className="space-y-3.5" id="form_retirada_conta">
+                <div className="space-y-1" id="field_retirada_conta_sel">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Conta / Carteira</label>
+                  <select
+                    value={retiradaContaIdSelected}
+                    onChange={(e) => setRetiradaContaIdSelected(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  >
+                    {contasBancarias.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome} (Saldo Banco: {c.saldo_atual.toLocaleString()} {moeda}) {c.status_liberdade === 'emergencia' ? ' (🔴 NÃO MEXER)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {(() => {
+                  const selAcc = contasBancarias.find(c => c.id === retiradaContaIdSelected);
+                  if (selAcc?.status_liberdade === 'emergencia') {
+                    return (
+                      <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-3 rounded-2xl text-xs text-rose-900 dark:text-rose-200 space-y-1" id="emergencia_retirada_warning">
+                        <p className="font-bold flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                          <ShieldAlert className="w-4 h-4" /> Conta de Emergência (Não Mexer)
+                        </p>
+                        <p className="text-[11px] leading-relaxed">
+                          O motivo digitado abaixo ficará registrado permanentemente no histórico da conta.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                <div className="space-y-1" id="field_retirada_conta_val">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Valor a Levantado ({moeda})</label>
+                  <input
+                    type="number"
+                    required
+                    step="any"
+                    min="0.01"
+                    placeholder="Ex: 1000"
+                    value={retiradaContaValor}
+                    onChange={(e) => setRetiradaContaValor(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1" id="field_retirada_conta_motivo">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                    Motivo {contasBancarias.find(c => c.id === retiradaContaIdSelected)?.status_liberdade === 'emergencia' ? '(Obrigatório) *' : '(Opcional)'}
+                  </label>
+                  <input
+                    type="text"
+                    required={contasBancarias.find(c => c.id === retiradaContaIdSelected)?.status_liberdade === 'emergencia'}
+                    placeholder="Ex: Taxa bancária / Levantamento pessoal / Emergência"
+                    value={retiradaContaMotivo}
+                    onChange={(e) => setRetiradaContaMotivo(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex space-x-2 pt-2" id="retirada_conta_actions">
+                  <button
+                    type="button"
+                    onClick={() => setShowRetiradaContaModal(false)}
+                    className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-extrabold py-2.5 rounded-xl text-xs cursor-pointer shadow-md shadow-rose-600/20"
+                  >
+                    Confirmar Levantamento
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* ================= MODAL: HISTÓRICO DE RETIRADAS ================= */}
       {showHistoricoContaModal && historicoContaSelected && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="modal_hist_conta">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative max-h-[85vh] flex flex-col" id="modal_hist_conta_content">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
-              <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-xl">
-                  <History className="w-5 h-5 stroke-[2.5]" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base font-display">
-                    Histórico da Conta: {historicoContaSelected.nome}
-                  </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Registro permanente de retiradas e motivos de emergência
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowHistoricoContaModal(false);
-                  setHistoricoContaSelected(null);
-                }}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 space-y-2.5 pr-1">
-              {(!historicoContaSelected.historico_retiradas || historicoContaSelected.historico_retiradas.length === 0) ? (
-                <p className="text-xs text-slate-400 text-center py-6">Nenhum registro de retirada até o momento.</p>
-              ) : (
-                historicoContaSelected.historico_retiradas.map((item: any) => (
-                  <div key={item.id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 p-3.5 rounded-2xl space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">
-                        -{item.valor.toLocaleString()} {moeda}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(item.data).toLocaleString('pt-MZ', { dateStyle: 'short', timeStyle: 'short' })}
-                      </span>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/60 mt-1">
-                      💬 <strong>Motivo:</strong> {item.motivo}
-                    </p>
-                    {item.despesa_descricao && (
-                      <p className="text-[10px] text-slate-400 italic">
-                        Descrição: {item.despesa_descricao}
-                      </p>
-                    )}
+        <ModalPortal>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in" id="modal_hist_conta">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative max-h-[85vh] flex flex-col" id="modal_hist_conta_content">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-xl">
+                    <History className="w-5 h-5 stroke-[2.5]" />
                   </div>
-                ))
-              )}
-            </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-white text-base font-display">
+                      Histórico da Conta: {historicoContaSelected.nome}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Registro permanente de retiradas e motivos de emergência
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowHistoricoContaModal(false);
+                    setHistoricoContaSelected(null);
+                  }}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  setShowHistoricoContaModal(false);
-                  setHistoricoContaSelected(null);
-                }}
-                className="w-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                Fechar
-              </button>
+              <div className="overflow-y-auto flex-1 space-y-2.5 pr-1">
+                {(!historicoContaSelected.historico_retiradas || historicoContaSelected.historico_retiradas.length === 0) ? (
+                  <p className="text-xs text-slate-400 text-center py-6">Nenhum registro de retirada até o momento.</p>
+                ) : (
+                  historicoContaSelected.historico_retiradas.map((item: any) => (
+                    <div key={item.id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 p-3.5 rounded-2xl space-y-1">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">
+                          -{item.valor.toLocaleString()} {moeda}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {new Date(item.data).toLocaleString('pt-MZ', { dateStyle: 'short', timeStyle: 'short' })}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/60 mt-1">
+                        💬 <strong>Motivo:</strong> {item.motivo}
+                      </p>
+                      {item.despesa_descricao && (
+                        <p className="text-[10px] text-slate-400 italic">
+                          Descrição: {item.despesa_descricao}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    setShowHistoricoContaModal(false);
+                    setHistoricoContaSelected(null);
+                  }}
+                  className="w-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
+
+      {/* Confirmation Modal for Deleting Account */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingConta}
+        title="Eliminar Conta Bancária"
+        itemName={deletingConta?.nome}
+        description={`Tem certeza que deseja eliminar a conta "${deletingConta?.nome}"? Ela deixará de constar na sua lista de carteiras e saldos.`}
+        onConfirm={async () => {
+          if (deletingConta) {
+            await deleteContaBancaria(deletingConta.id);
+            setDeletingConta(null);
+          }
+        }}
+        onClose={() => setDeletingConta(null)}
+      />
 
     </div>
   );

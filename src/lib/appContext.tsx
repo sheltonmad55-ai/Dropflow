@@ -64,6 +64,13 @@ interface AppContextType {
   despesasRecorrentes: DespesaRecorrente[];
   metaItems: MetaItem[];
 
+  // Modo Foco / Privacy State
+  modoFoco: boolean;
+  setModoFoco: (val: boolean) => void;
+  toggleModoFoco: () => void;
+  formatMoney: (val: number, customMoeda?: string) => string;
+  maskValue: (valStr: string) => string;
+
   // Toast / Notification Popup State
   activeToast: { title: string; body: string; type?: 'success' | 'info' | 'warning' } | null;
   triggerToast: (title: string, body: string, type?: 'success' | 'info' | 'warning') => void;
@@ -79,6 +86,7 @@ interface AppContextType {
   editVenda: (id: string, updates: Partial<Venda>) => Promise<void>;
   deleteVenda: (id: string) => Promise<void>;
   addDespesa: (despesaData: Omit<Despesa, 'id' | 'user_id' | 'sync_status' | 'criado_em'>) => Promise<void>;
+  deleteDespesa: (id: string) => Promise<void>;
   addProduto: (produtoData: Omit<Produto, 'id' | 'user_id' | 'margem' | 'criado_em'>) => Promise<void>;
   editProduto: (id: string, updates: Partial<Produto>) => Promise<void>;
   addFornecedor: (fornecedorData: Omit<Fornecedor, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
@@ -144,6 +152,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [despesasRecorrentes, setDespesasRecorrentes] = useState<DespesaRecorrente[]>([]);
   const [metaItems, setMetaItems] = useState<MetaItem[]>([]);
+
+  // Modo Foco / Privacy State
+  const [modoFoco, setModoFocoState] = useState<boolean>(() => {
+    return localStorage.getItem('dropflow_modo_foco') === 'true';
+  });
+
+  const setModoFoco = (val: boolean) => {
+    setModoFocoState(val);
+    localStorage.setItem('dropflow_modo_foco', val ? 'true' : 'false');
+  };
+
+  const toggleModoFoco = () => {
+    setModoFoco(!modoFoco);
+  };
+
+  const formatMoney = (val: number, customMoeda?: string) => {
+    const m = customMoeda || profile?.moeda || 'MT';
+    if (modoFoco) {
+      return `•••••• ${m}`;
+    }
+    return `${val.toLocaleString()} ${m}`;
+  };
+
+  const maskValue = (valStr: string) => {
+    if (modoFoco) {
+      return '••••••';
+    }
+    return valStr;
+  };
 
   // Toast / Notification Popup State for Mobile & Desktop
   const [activeToast, setActiveToast] = useState<{ title: string; body: string; type?: 'success' | 'info' | 'warning' } | null>(null);
@@ -367,9 +404,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'contas_bancarias'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as ContaBancaria);
-              if (data.length === 0) {
+              const seededKey = `dropflow_contas_seeded_${user.uid}`;
+              const hasSeeded = localStorage.getItem(seededKey) === 'true';
+
+              if (data.length === 0 && !hasSeeded) {
+                localStorage.setItem(seededKey, 'true');
                 seedDefaultContas(user.uid);
               } else {
+                if (data.length > 0) {
+                  localStorage.setItem(seededKey, 'true');
+                }
                 setContasBancarias(data);
                 db.clearStore('contas_bancarias').then(() => {
                   data.forEach(item => db.putItem('contas_bancarias', item));
@@ -679,10 +723,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
       const userContas = dbContas.filter(c => c.user_id === userId);
+      const seededKey = `dropflow_contas_seeded_${userId}`;
+      const hasSeeded = localStorage.getItem(seededKey) === 'true';
+
       if (userContas.length > 0) {
+        localStorage.setItem(seededKey, 'true');
         setContasBancarias(userContas);
-      } else {
+      } else if (!hasSeeded) {
+        localStorage.setItem(seededKey, 'true');
         seedDefaultContas(userId);
+      } else {
+        setContasBancarias([]);
       }
       setVendas(dbVendas.filter(v => v.user_id === userId).sort((a,b) => b.data_venda.localeCompare(a.data_venda)));
       setDespesas(dbDespesas.filter(d => d.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
@@ -706,17 +757,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {
         id: crypto.randomUUID(),
         user_id: userId,
-        nome: 'Empresa (Caixa Principal)',
-        tipo: 'caixa',
-        saldo_atual: 0,
-        cor: 'bg-emerald-600',
-        editavel: true,
-        status_liberdade: 'livre',
-        criado_em: new Date().toISOString()
-      },
-      {
-        id: crypto.randomUUID(),
-        user_id: userId,
         nome: 'e-Mola',
         tipo: 'carteira_movel',
         saldo_atual: 0,
@@ -728,32 +768,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {
         id: crypto.randomUUID(),
         user_id: userId,
-        nome: 'M-Pesa / mKesh',
+        nome: 'M-Pesa',
         tipo: 'carteira_movel',
         saldo_atual: 0,
         cor: 'bg-rose-500',
-        editavel: true,
-        status_liberdade: 'livre',
-        criado_em: new Date().toISOString()
-      },
-      {
-        id: crypto.randomUUID(),
-        user_id: userId,
-        nome: 'BIM (Millennium bim)',
-        tipo: 'banco',
-        saldo_atual: 0,
-        cor: 'bg-blue-600',
-        editavel: true,
-        status_liberdade: 'livre',
-        criado_em: new Date().toISOString()
-      },
-      {
-        id: crypto.randomUUID(),
-        user_id: userId,
-        nome: 'BCI (Comercial)',
-        tipo: 'banco',
-        saldo_atual: 0,
-        cor: 'bg-purple-600',
         editavel: true,
         status_liberdade: 'livre',
         criado_em: new Date().toISOString()
@@ -1454,6 +1472,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     syncWithServer();
   }
 
+  async function deleteDespesa(id: string) {
+    const original = despesas.find(d => d.id === id);
+    if (!original) return;
+    setDespesas(prev => prev.filter(d => d.id !== id));
+    await db.deleteItem('despesas', id);
+    await db.addToSyncQueue({ type: 'despesa', action: 'delete', data: original });
+    setSyncStatus('pending');
+    syncWithServer();
+  }
+
   // Custom Goals (Metas de Objetivos / Compras) Management
   async function addMetaItem(metaData: Omit<MetaItem, 'id' | 'user_id' | 'criado_em'>) {
     if (!profile) return;
@@ -1978,6 +2006,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       despesasRecorrentes,
       metaItems,
 
+      modoFoco,
+      setModoFoco,
+      toggleModoFoco,
+      formatMoney,
+      maskValue,
+
       activeToast,
       triggerToast,
       dismissToast,
@@ -1990,6 +2024,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editVenda,
       deleteVenda,
       addDespesa,
+      deleteDespesa,
       addProduto,
       editProduto,
       addFornecedor,
