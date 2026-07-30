@@ -90,16 +90,28 @@ export interface Caixinha {
   valor_distribuicao?: number; // valor fixo ou percentual dependendo do modo
 }
 
-export type ContaTipo = 'carteira_movel' | 'banco' | 'caixa';
+export type ContaTipo = 'carteira_movel' | 'banco' | 'caixa_fisico' | 'caixa' | 'outros';
+
+export interface RetiradaHistoricoItem {
+  id: string;
+  data: string; // ISO date string
+  valor: number;
+  motivo: string;
+  despesa_descricao?: string;
+}
 
 export interface ContaBancaria {
   id: string;
   user_id: string;
-  nome: string;          // ex: "EMPRESA", "e-Mola", "M-Pesa", "BIM", "BCI", "Standard Bank"
+  nome: string;          // ex: "EMPRESA", "e-Mola", "M-Pesa", "BIM", "BCI", "M-Pesa de Sócio"
   tipo: ContaTipo;
   saldo_atual: number;
   cor?: string;
-  editavel?: boolean;    // false para contas móveis fixas, true para bancos customizáveis
+  banco?: string;
+  tipo_conta?: string;
+  editavel?: boolean;    // mantido para compatibilidade
+  status_liberdade?: 'livre' | 'emergencia'; // 'livre' (uso geral nas saídas) ou 'emergencia' (não mexer / reserva)
+  historico_retiradas?: RetiradaHistoricoItem[];
   criado_em: string;
 }
 
@@ -165,6 +177,7 @@ export interface Despesa {
   categoria: string;
   caixinha_id: string;
   conta_id?: string;           // ID da Conta Bancária / Carteira de onde saiu o valor
+  motivo_emergencia?: string;  // Motivo caso tenha retirado de conta com status 'emergencia'
   descricao: string;
   data: string; // YYYY-MM-DD
   sync_status: 'synced' | 'pending';

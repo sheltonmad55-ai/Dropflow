@@ -52,6 +52,7 @@ export default function CaixinhasView() {
     editZonaEntrega,
     editCaixinha,
     retirarDaCaixinha,
+    retirarDaConta,
     ajustarSaldoCaixinha,
     updateProfile,
     despesasRecorrentes,
@@ -303,13 +304,13 @@ export default function CaixinhasView() {
 
   const handleCreateDespesaRecorrente = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!drDescricao || !drValor || !drCaixinhaId) {
+    if (!drValor || !drCaixinhaId) {
       alert('Preencha os campos obrigatórios!');
       return;
     }
     try {
       await addDespesaRecorrente({
-        descricao: drDescricao,
+        descricao: drDescricao.trim() || drCategoria || 'Saída Recorrente',
         valor: parseFloat(drValor),
         caixinha_id: drCaixinhaId,
         categoria: drCategoria,
@@ -1020,10 +1021,9 @@ export default function CaixinhasView() {
             <form onSubmit={handleCreateDespesaRecorrente} className="space-y-4" id="add_dr_form">
               
               <div className="space-y-1" id="dr_descricao_group">
-                <label className="text-xs text-slate-600 font-semibold">Descrição da Despesa</label>
+                <label className="text-xs text-slate-600 font-semibold">Descrição da Despesa (Opcional)</label>
                 <input
                   type="text"
-                  required
                   placeholder="Ex: Assinatura Shopify, Aluguel"
                   value={drDescricao}
                   onChange={(e) => setDrDescricao(e.target.value)}

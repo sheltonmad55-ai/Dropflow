@@ -133,111 +133,55 @@ function AppContent() {
  
           {/* Navigation Links */}
           <nav className="space-y-1" id="sidebar_nav">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'dashboard' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4 stroke-[2.5]" />
-              <span>Painel</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('caixinhas')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'caixinhas' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <Layers className="w-4 h-4 stroke-[2.5]" />
-              <span>Pockets</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('vendas')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'vendas' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <DollarSign className="w-4 h-4 stroke-[2.5]" />
-              <span>Vendas</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('campanhas')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'campanhas' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <Megaphone className="w-4 h-4 stroke-[2.5]" />
-              <span>Campanhas</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('relatorios')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'relatorios' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <BarChart2 className="w-4 h-4 stroke-[2.5]" />
-              <span>Relatórios</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('metas')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'metas' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <Target className="w-4 h-4 stroke-[2.5]" />
-              <span>Metas</span>
-            </button>
-
-            {isAdmin && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'admin' 
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/15' 
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-                }`}
-              >
-                <Shield className="w-4 h-4 stroke-[2.5]" />
-                <span>Admin</span>
-              </button>
-            )}
+            {[
+              { id: 'dashboard', label: 'Painel', icon: TrendingUp },
+              { id: 'caixinhas', label: 'Pockets', icon: Layers },
+              { id: 'vendas', label: 'Vendas', icon: DollarSign },
+              { id: 'campanhas', label: 'Campanhas', icon: Megaphone },
+              { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
+              { id: 'metas', label: 'Metas', icon: Target },
+              ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, isIndigo: true }] : []),
+              { id: 'definicoes', label: 'Definições', icon: Settings },
+            ].map(tab => {
+              const isActive = activeTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  id={`sidebar_nav_${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-colors cursor-pointer relative ${
+                    isActive
+                      ? 'text-white font-extrabold'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebarActiveTabPill"
+                      className={`absolute inset-0 rounded-2xl shadow-md ${
+                        tab.isIndigo
+                          ? 'bg-indigo-600 shadow-indigo-600/20'
+                          : 'bg-emerald-600 shadow-emerald-600/20'
+                      }`}
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    />
+                  )}
+                  <span className="relative z-10 flex items-center space-x-3">
+                    <Icon className="w-4 h-4 stroke-[2.5]" />
+                    <span>{tab.label}</span>
+                  </span>
+                </button>
+              );
+            })}
 
             <button
               id="sidebar_btn_tour"
               onClick={() => setIsTourOpen(true)}
-              className="w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 border border-transparent hover:border-amber-100/30 dark:hover:border-amber-900/10"
+              className="w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20 border border-transparent hover:border-amber-100/30 dark:hover:border-amber-900/10 mt-2"
             >
               <Sparkles className="w-4 h-4 stroke-[2.5] text-amber-500 animate-pulse animate-none" />
               <span>Tour Guiado</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('definicoes')}
-              className={`w-full flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'definicoes' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/15' 
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <Settings className="w-4 h-4 stroke-[2.5]" />
-              <span>Definições</span>
             </button>
           </nav>
         </div>
@@ -306,10 +250,10 @@ function AppContent() {
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
+              initial={{ opacity: 0, y: 12, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.985 }}
+              transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
               className="w-full h-full"
             >
               {activeTab === 'dashboard' && (
@@ -376,79 +320,45 @@ function AppContent() {
 
         {/* Bottom PWA Navigation Bar - Mobile Only */}
         <nav className="fixed bottom-0 left-0 right-0 h-20 bg-white/95 dark:bg-slate-900/95 border-t border-slate-100 dark:border-slate-800 px-4 z-40 flex items-center overflow-x-auto scrollbar-none flex-nowrap space-x-2 shadow-lg md:hidden" id="app_navbar">
-          <button
-            id="nav_dashboard"
-            onClick={() => { setActiveTab('dashboard'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'dashboard' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <TrendingUp className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Painel</span>
-          </button>
-
-          <button
-            id="nav_caixinhas"
-            onClick={() => { setActiveTab('caixinhas'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'caixinhas' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <Layers className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Pockets</span>
-          </button>
-
-          <button
-            id="nav_vendas"
-            onClick={() => { setActiveTab('vendas'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'vendas' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <DollarSign className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Vendas</span>
-          </button>
-
-          <button
-            id="nav_campanhas"
-            onClick={() => { setActiveTab('campanhas'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'campanhas' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <Megaphone className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Campanhas</span>
-          </button>
-
-          <button
-            id="nav_relatorios"
-            onClick={() => { setActiveTab('relatorios'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'relatorios' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <BarChart2 className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Relatórios</span>
-          </button>
-
-          <button
-            id="nav_metas"
-            onClick={() => { setActiveTab('metas'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'metas' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <Target className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Metas</span>
-          </button>
-
-          {isAdmin && (
-            <button
-              id="nav_admin"
-              onClick={() => { setActiveTab('admin'); setShowQuickMenu(false); }}
-              className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'admin' ? 'text-indigo-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-            >
-              <Shield className="w-5 h-5" />
-              <span className="text-[10px] font-semibold">Admin</span>
-            </button>
-          )}
-
-          <button
-            id="nav_definicoes"
-            onClick={() => { setActiveTab('definicoes'); setShowQuickMenu(false); }}
-            className={`flex-shrink-0 min-w-[64px] flex flex-col items-center space-y-1 py-1 transition-colors cursor-pointer ${activeTab === 'definicoes' ? 'text-emerald-600 font-bold' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <Settings className="w-5 h-5" />
-            <span className="text-[10px] font-semibold">Definições</span>
-          </button>
+          {[
+            { id: 'dashboard', label: 'Painel', icon: TrendingUp },
+            { id: 'caixinhas', label: 'Pockets', icon: Layers },
+            { id: 'vendas', label: 'Vendas', icon: DollarSign },
+            { id: 'campanhas', label: 'Campanhas', icon: Megaphone },
+            { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
+            { id: 'metas', label: 'Metas', icon: Target },
+            ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, isIndigo: true }] : []),
+            { id: 'definicoes', label: 'Definições', icon: Settings },
+          ].map(tab => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                id={`nav_${tab.id}`}
+                onClick={() => { setActiveTab(tab.id); setShowQuickMenu(false); }}
+                className={`flex-shrink-0 min-w-[64px] flex flex-col items-center justify-center space-y-1 py-1.5 transition-colors cursor-pointer relative ${
+                  isActive
+                    ? tab.isIndigo ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-emerald-600 dark:text-emerald-400 font-bold'
+                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="mobileNavActivePill"
+                    className={`absolute inset-x-1 inset-y-0.5 rounded-xl border ${
+                      tab.isIndigo
+                        ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200/50 dark:border-indigo-800/40'
+                        : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200/50 dark:border-emerald-800/40'
+                    }`}
+                    transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                  />
+                )}
+                <Icon className="w-5 h-5 relative z-10 stroke-[2]" />
+                <span className="text-[10px] font-semibold relative z-10">{tab.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
       </div>

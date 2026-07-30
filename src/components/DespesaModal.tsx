@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
-import { X, ArrowDownRight, Megaphone, TrendingUp, Package, Truck, FolderOpen } from 'lucide-react';
+import { X, ArrowDownRight, ShieldAlert, AlertTriangle } from 'lucide-react';
 
 interface DespesaModalProps {
   isOpen: boolean;
@@ -23,21 +23,23 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
   const [descricao, setDescricao] = useState<string>('');
   const [data, setData] = useState<string>(new Date().toISOString().split('T')[0]);
 
+  // Emergency confirmation popup state
+  const [showEmergencyPopup, setShowEmergencyPopup] = useState<boolean>(false);
+  const [motivoEmergencia, setMotivoEmergencia] = useState<string>('');
+
   if (!isOpen) return null;
 
   const currency = profile?.moeda || 'MT';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valor || !caixinhaId || !categoria) return;
-
+  const processAddDespesa = async (motivo?: string) => {
     try {
       await addDespesa({
         valor: parseFloat(valor),
         caixinha_id: caixinhaId,
         conta_id: contaId || undefined,
+        motivo_emergencia: motivo,
         categoria: categoria,
-        descricao: descricao,
+        descricao: motivo ? `${descricao ? `${descricao} ` : ''}[Motivo Emergência: ${motivo}]` : (descricao.trim() || categoria),
         data: data
       });
 
@@ -47,10 +49,28 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
       setContaId('');
       setCategoria('Anúncios');
       setDescricao('');
+      setMotivoEmergencia('');
+      setShowEmergencyPopup(false);
       onClose();
     } catch (e) {
       alert('Erro ao registar despesa.');
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!valor || !caixinhaId || !categoria) return;
+
+    // Check if selected account is tagged as 'emergencia'
+    if (contaId && contaId !== 'todas') {
+      const selectedAcc = contasBancarias.find(c => c.id === contaId);
+      if (selectedAcc && selectedAcc.status_liberdade === 'emergencia') {
+        setShowEmergencyPopup(true);
+        return;
+      }
+    }
+
+    await processAddDespesa();
   };  return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="despesa_modal">
       <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-6 relative flex flex-col space-y-4" id="despesa_modal_content">
@@ -121,12 +141,15 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
               className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-rose-500 transition-colors"
             >
               <option value="">Nenhuma / Sem Dedução de Banco</option>
-              <option value="todas">✨ Geral (Todas as Contas Bancárias / Proporcional)</option>
-              {contasBancarias.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.nome} - Saldo: {c.saldo_atual} {currency} {c.banco ? `(${c.banco})` : ''}
-                </option>
-              ))}
+              <option value="todas">✨ Geral (Contas de Livre Movimentação)</option>
+              {contasBancarias.map(c => {
+                const isEmergencia = c.status_liberdade === 'emergencia';
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} - Saldo: {c.saldo_atual} {currency} {isEmergencia ? ' (🔴 NÃO MEXER / RESERVA)' : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -152,11 +175,10 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
 
           {/* Descrição */}
           <div className="space-y-1" id="field_despesa_descricao">
-            <label className="text-xs font-semibold text-slate-500">Descrição / Nota</label>
+            <label className="text-xs font-semibold text-slate-500">Descrição / Nota (Opcional)</label>
             <input
               id="despesa_descricao_input"
               type="text"
-              required
               placeholder="Ex: Campanha de criativos do relógio, Apps adicionais"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
@@ -210,6 +232,71 @@ export default function DespesaModal({ isOpen, onClose }: DespesaModalProps) {
             </button>
           </div>
         </form>
+
+        {/* Emergency Account Warning Popup Modal */}
+        {showEmergencyPopup && (() => {
+          const acc = contasBancarias.find(c => c.id === contaId);
+          return (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in" id="emergency_popup_overlay">
+              <div className="bg-white dark:bg-slate-900 border-2 border-rose-500/50 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 relative" id="emergency_popup_card">
+                <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
+                  <div className="p-3 bg-rose-100 dark:bg-rose-950/80 rounded-2xl">
+                    <ShieldAlert className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-base text-slate-900 dark:text-white">Aviso de Segurança!</h4>
+                    <span className="inline-block bg-rose-500 text-white text-[10px] uppercase font-black px-2 py-0.5 rounded-full mt-0.5">
+                      Conta Protegida (Não Mexer)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 rounded-2xl p-3.5 text-xs text-rose-950 dark:text-rose-200 space-y-2">
+                  <p className="font-medium leading-relaxed">
+                    Você está prestes a retirar <strong className="text-rose-600 dark:text-rose-400 font-black">{valor} {currency}</strong> da conta{' '}
+                    <strong className="underline font-bold text-slate-900 dark:text-white">{acc?.nome || 'Selecionada'}</strong> que está configurada como <strong className="font-bold">Reserva de Emergência / Não Mexer</strong>.
+                  </p>
+                  <p className="text-[11px] text-rose-800 dark:text-rose-300">
+                    Para prosseguir, é obrigatório registrar o motivo para que fique salvo no histórico da conta.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                    Motivo Obrigatório da Retirada de Emergência *
+                  </label>
+                  <textarea
+                    id="input_motivo_emergencia"
+                    required
+                    rows={3}
+                    placeholder="Ex: Compra urgente de estoque indisponível, Emergência médica, Alfândega..."
+                    value={motivoEmergencia}
+                    onChange={(e) => setMotivoEmergencia(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+
+                <div className="flex space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEmergencyPopup(false)}
+                    className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-3 px-4 rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!motivoEmergencia.trim()}
+                    onClick={() => processAddDespesa(motivoEmergencia)}
+                    className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-extrabold py-3 px-4 rounded-xl text-xs transition-colors shadow-lg disabled:opacity-50"
+                  >
+                    Confirmar Retirada
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

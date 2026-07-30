@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../lib/appContext.tsx';
 import { 
   TrendingUp, 
@@ -299,28 +300,36 @@ export default function RelatoriosView() {
     <div className="space-y-6 animate-fade-in" id="relatorios_view">
       
       {/* Sub tabs navigation */}
-      <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-xl grid grid-cols-3 gap-1" id="relatorios_subtabs">
-        <button
-          onClick={() => setSubTab('dashboard')}
-          className={`py-2 text-[11px] font-black rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center space-x-1.5 ${subTab === 'dashboard' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow border border-slate-200/40' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}
-        >
-          <BarChart2 className="w-3.5 h-3.5" />
-          <span>Controlo</span>
-        </button>
-        <button
-          onClick={() => setSubTab('gerar')}
-          className={`py-2 text-[11px] font-black rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center space-x-1.5 ${subTab === 'gerar' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow border border-slate-200/40' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Gerar</span>
-        </button>
-        <button
-          onClick={() => setSubTab('historico')}
-          className={`py-2 text-[11px] font-black rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center space-x-1.5 ${subTab === 'historico' ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-50 shadow border border-slate-200/40' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'}`}
-        >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Histórico</span>
-        </button>
+      <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-xl grid grid-cols-3 gap-1 relative" id="relatorios_subtabs">
+        {[
+          { id: 'dashboard', label: 'Controlo', icon: BarChart2 },
+          { id: 'gerar', label: 'Gerar', icon: Plus },
+          { id: 'historico', label: 'Histórico', icon: FileText }
+        ].map(st => {
+          const isActive = subTab === st.id;
+          const Icon = st.icon;
+          return (
+            <button
+              key={st.id}
+              onClick={() => setSubTab(st.id as any)}
+              className={`py-2 text-[11px] font-black rounded-lg transition-colors uppercase tracking-wider flex items-center justify-center space-x-1.5 relative cursor-pointer ${
+                isActive ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="relatoriosSubTabPill"
+                  className="absolute inset-0 bg-white dark:bg-slate-800 rounded-lg shadow border border-slate-200/40"
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                />
+              )}
+              <span className="relative z-10 flex items-center space-x-1.5">
+                <Icon className="w-3.5 h-3.5" />
+                <span>{st.label}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ================= 1. FINANCIAL DASHBOARD TAB ================= */}

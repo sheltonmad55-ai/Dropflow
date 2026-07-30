@@ -710,7 +710,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tipo: 'caixa',
         saldo_atual: 0,
         cor: 'bg-emerald-600',
-        editavel: false,
+        editavel: true,
+        status_liberdade: 'livre',
         criado_em: new Date().toISOString()
       },
       {
@@ -720,7 +721,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tipo: 'carteira_movel',
         saldo_atual: 0,
         cor: 'bg-amber-500',
-        editavel: false,
+        editavel: true,
+        status_liberdade: 'livre',
         criado_em: new Date().toISOString()
       },
       {
@@ -730,7 +732,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         tipo: 'carteira_movel',
         saldo_atual: 0,
         cor: 'bg-rose-500',
-        editavel: false,
+        editavel: true,
+        status_liberdade: 'livre',
         criado_em: new Date().toISOString()
       },
       {
@@ -741,6 +744,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         saldo_atual: 0,
         cor: 'bg-blue-600',
         editavel: true,
+        status_liberdade: 'livre',
         criado_em: new Date().toISOString()
       },
       {
@@ -751,6 +755,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         saldo_atual: 0,
         cor: 'bg-purple-600',
         editavel: true,
+        status_liberdade: 'livre',
         criado_em: new Date().toISOString()
       }
     ];
@@ -1391,13 +1396,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // If source account (Bank/Wallet) is selected, deduct from account balance
     if (despesaData.conta_id) {
       if (despesaData.conta_id === 'todas') {
-        const totalBankBal = contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0);
-        for (const targetAcc of contasBancarias) {
+        // Only include accounts with status_liberdade !== 'emergencia'
+        const livreContas = contasBancarias.filter(c => c.status_liberdade !== 'emergencia');
+        const targetList = livreContas.length > 0 ? livreContas : contasBancarias;
+        const totalBankBal = targetList.reduce((acc, c) => acc + c.saldo_atual, 0);
+        for (const targetAcc of targetList) {
           let deduct = 0;
           if (totalBankBal > 0) {
             deduct = (targetAcc.saldo_atual / totalBankBal) * despesaData.valor;
           } else {
-            deduct = despesaData.valor / (contasBancarias.length || 1);
+            deduct = despesaData.valor / (targetList.length || 1);
           }
           const newAccBal = Math.max(0, Math.round((targetAcc.saldo_atual - deduct) * 100) / 100);
           await editContaBancaria(targetAcc.id, { saldo_atual: newAccBal });
@@ -1406,7 +1414,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const targetAcc = contasBancarias.find(c => c.id === despesaData.conta_id);
         if (targetAcc) {
           const newAccBal = Math.max(0, Math.round((targetAcc.saldo_atual - despesaData.valor) * 100) / 100);
-          await editContaBancaria(targetAcc.id, { saldo_atual: newAccBal });
+          const updates: Partial<ContaBancaria> = { saldo_atual: newAccBal };
+
+          if (targetAcc.status_liberdade === 'emergencia' || despesaData.motivo_emergencia) {
+            const novoHist = [
+              ...(targetAcc.historico_retiradas || []),
+              {
+                id: crypto.randomUUID(),
+                data: new Date().toISOString(),
+                valor: despesaData.valor,
+                motivo: despesaData.motivo_emergencia || 'Retirada de Emergência em Saída',
+                despesa_descricao: despesaData.descricao
+              }
+            ];
+            updates.historico_retiradas = novoHist;
+          }
+
+          await editContaBancaria(targetAcc.id, updates);
         }
       }
     }
@@ -1762,7 +1786,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function deleteContaBancaria(id: string) {
     if (!profile) return;
     const conta = contasBancarias.find(c => c.id === id);
-    if (!conta || conta.editavel === false) return;
+    if (!conta) return;
     await db.deleteItem('contas_bancarias', id);
     await db.addToSyncQueue({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: profile.id } });
     setContasBancarias(prev => prev.filter(c => c.id !== id));
@@ -1775,7 +1799,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const conta = contasBancarias.find(c => c.id === contaId);
     if (!conta) return;
     const novoSaldo = Math.max(0, Math.round((conta.saldo_atual - valor) * 100) / 100);
-    await editContaBancaria(contaId, { saldo_atual: novoSaldo });
+
+    const updates: Partial<ContaBancaria> = { saldo_atual: novoSaldo };
+    if (motivo || conta.status_liberdade === 'emergencia') {
+      updates.historico_retiradas = [
+        ...(conta.historico_retiradas || []),
+        {
+          id: crypto.randomUUID(),
+          data: new Date().toISOString(),
+          valor,
+          motivo: motivo || 'Retirada Direta',
+        }
+      ];
+    }
+
+    await editContaBancaria(contaId, updates);
     const curr = profile.moeda || 'MT';
     triggerToast('Levantamento de Conta! 💸', `Retirado ${valor.toLocaleString()} ${curr} de ${conta.nome}${motivo ? ` (${motivo})` : ''}`, 'info');
   }

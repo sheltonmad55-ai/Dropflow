@@ -45,7 +45,8 @@ import {
   Trash2,
   MinusCircle,
   X,
-  ArrowDownRight
+  ArrowDownRight,
+  History
 } from 'lucide-react';
 
 interface DefinicoesViewProps {
@@ -85,12 +86,17 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const [contaSaldo, setContaSaldo] = useState('0');
   const [contaCor, setContaCor] = useState('bg-indigo-600');
   const [contaBanco, setContaBanco] = useState('');
+  const [contaStatusLiberdade, setContaStatusLiberdade] = useState<'livre' | 'emergencia'>('livre');
 
   const [editingConta, setEditingConta] = useState<any>(null);
   const [editContaNome, setEditContaNome] = useState('');
   const [editContaTipo, setEditContaTipo] = useState<string>('banco');
   const [editContaSaldo, setEditContaSaldo] = useState('0');
   const [editContaCor, setEditContaCor] = useState('bg-indigo-600');
+  const [editContaStatusLiberdade, setEditContaStatusLiberdade] = useState<'livre' | 'emergencia'>('livre');
+
+  const [showHistoricoContaModal, setShowHistoricoContaModal] = useState(false);
+  const [historicoContaSelected, setHistoricoContaSelected] = useState<any>(null);
 
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transfDeConta, setTransfDeConta] = useState('');
@@ -110,15 +116,17 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     try {
       await addContaBancaria({
         nome: contaNome,
-        tipo: contaTipo,
+        tipo: contaTipo as any,
         saldo_atual: parseFloat(contaSaldo) || 0,
         cor: contaCor,
         banco: contaBanco || undefined,
+        status_liberdade: contaStatusLiberdade,
         editavel: true
       });
       setContaNome('');
       setContaSaldo('0');
       setContaBanco('');
+      setContaStatusLiberdade('livre');
       setShowAddConta(false);
     } catch (e) {
       alert('Erro ao criar conta bancária.');
@@ -133,7 +141,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         nome: editContaNome,
         tipo: editContaTipo as any,
         saldo_atual: parseFloat(editContaSaldo) || 0,
-        cor: editContaCor
+        cor: editContaCor,
+        status_liberdade: editContaStatusLiberdade
       });
       setEditingConta(null);
     } catch (e) {
@@ -707,11 +716,12 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" id="contas_cards_grid">
           {contasBancarias.map(conta => {
             const isMovel = conta.tipo === 'carteira_movel';
-            const isCaixa = conta.tipo === 'caixa_fisico';
+            const isCaixa = conta.tipo === 'caixa_fisico' || conta.tipo === 'caixa';
+            const isEmergencia = conta.status_liberdade === 'emergencia';
             return (
               <div
                 key={conta.id}
-                className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-3.5 space-y-3"
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-3.5 space-y-3 relative overflow-hidden"
                 id={`card_conta_${conta.id}`}
               >
                 <div className="flex justify-between items-start">
@@ -727,9 +737,20 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                     </div>
                     <div>
                       <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">{conta.nome}</span>
-                      <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider block">
-                        {isMovel ? 'Carteira Móvel' : isCaixa ? 'Caixa Físico' : 'Conta Bancária'} {conta.banco ? `• ${conta.banco}` : ''}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider block">
+                          {isMovel ? 'Carteira Móvel' : isCaixa ? 'Caixa Físico' : 'Conta Bancária'} {conta.banco ? `• ${conta.banco}` : ''}
+                        </span>
+                        {isEmergencia ? (
+                          <span className="text-[9px] font-black bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded-md border border-rose-200 dark:border-rose-900/50">
+                            🔴 Não Mexer
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900/50">
+                            🟢 Livre
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -742,22 +763,25 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                         setEditContaTipo(conta.tipo);
                         setEditContaSaldo(conta.saldo_atual.toString());
                         setEditContaCor(conta.cor || 'bg-indigo-600');
+                        setEditContaStatusLiberdade(conta.status_liberdade || 'livre');
                       }}
                       className="p-1 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-                      title="Editar saldo / nome"
+                      title="Editar saldo / nome / status"
                     >
                       <Edit className="w-3.5 h-3.5" />
                     </button>
-                    {conta.editavel && (
-                      <button
-                        id={`btn_delete_conta_${conta.id}`}
-                        onClick={() => deleteContaBancaria(conta.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                        title="Eliminar conta"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      id={`btn_delete_conta_${conta.id}`}
+                      onClick={() => {
+                        if (confirm(`Tem certeza que deseja apagar a conta "${conta.nome}"?`)) {
+                          deleteContaBancaria(conta.id);
+                        }
+                      }}
+                      className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                      title="Apagar conta"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
 
@@ -768,6 +792,22 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                       {conta.saldo_atual.toLocaleString()} {moeda}
                     </span>
                   </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {conta.historico_retiradas && conta.historico_retiradas.length > 0 && (
+                      <button
+                        id={`btn_hist_conta_${conta.id}`}
+                        onClick={() => {
+                          setHistoricoContaSelected(conta);
+                          setShowHistoricoContaModal(true);
+                        }}
+                        className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 border border-amber-200/60 dark:border-amber-800/50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Ver histórico de retiradas e motivos"
+                      >
+                        <History className="w-3 h-3" />
+                        <span>Histórico ({conta.historico_retiradas.length})</span>
+                      </button>
+                    )}
 
                   <button
                     id={`btn_retirar_conta_${conta.id}`}
@@ -782,8 +822,9 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
         </div>
       </div>
 
@@ -1320,6 +1361,23 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 />
               </div>
 
+              <div className="space-y-1" id="field_add_conta_status">
+                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                  Status de Liberdade do Saldo
+                </label>
+                <select
+                  value={contaStatusLiberdade}
+                  onChange={(e: any) => setContaStatusLiberdade(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                >
+                  <option value="livre">🟢 Livre Movimentação (Uso Diário / Saídas Gerais)</option>
+                  <option value="emergencia">🔴 Não Mexer (Reserva de Emergência / Excluir de Saídas Gerais)</option>
+                </select>
+                <p className="text-[10px] text-slate-400">
+                  Contas &quot;Não Mexer&quot; são excluídas de saídas automáticas e exigem motivo ao retirar.
+                </p>
+              </div>
+
               <div className="flex space-x-2 pt-2" id="add_conta_modal_actions">
                 <button
                   type="button"
@@ -1356,7 +1414,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
 
             <form onSubmit={handleSaveEditConta} className="space-y-3.5" id="form_edit_conta">
               <div className="space-y-1" id="field_edit_conta_nome">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta / Carteira</label>
                 <input
                   type="text"
                   required
@@ -1375,6 +1433,23 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   onChange={(e) => setEditContaSaldo(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
                 />
+              </div>
+
+              <div className="space-y-1" id="field_edit_conta_status">
+                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                  Status de Liberdade do Saldo
+                </label>
+                <select
+                  value={editContaStatusLiberdade}
+                  onChange={(e: any) => setEditContaStatusLiberdade(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                >
+                  <option value="livre">🟢 Livre Movimentação (Uso Diário / Saídas Gerais)</option>
+                  <option value="emergencia">🔴 Não Mexer (Reserva de Emergência / Excluir de Saídas Gerais)</option>
+                </select>
+                <p className="text-[10px] text-slate-400">
+                  Contas &quot;Não Mexer&quot; são protegidas. Ao retirar valor delas, é pedido o motivo em popup.
+                </p>
               </div>
 
               <div className="flex space-x-2 pt-2" id="edit_conta_modal_actions">
@@ -1518,11 +1593,28 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 >
                   {contasBancarias.map(c => (
                     <option key={c.id} value={c.id}>
-                      {c.nome} (Saldo Banco: {c.saldo_atual.toLocaleString()} {moeda})
+                      {c.nome} (Saldo Banco: {c.saldo_atual.toLocaleString()} {moeda}) {c.status_liberdade === 'emergencia' ? ' (🔴 NÃO MEXER)' : ''}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {(() => {
+                const selAcc = contasBancarias.find(c => c.id === retiradaContaIdSelected);
+                if (selAcc?.status_liberdade === 'emergencia') {
+                  return (
+                    <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-3 rounded-2xl text-xs text-rose-900 dark:text-rose-200 space-y-1" id="emergencia_retirada_warning">
+                      <p className="font-bold flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                        <ShieldAlert className="w-4 h-4" /> Conta de Emergência (Não Mexer)
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        O motivo digitado abaixo ficará registrado permanentemente no histórico da conta.
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className="space-y-1" id="field_retirada_conta_val">
                 <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Valor a Levantado ({moeda})</label>
@@ -1539,10 +1631,13 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
               </div>
 
               <div className="space-y-1" id="field_retirada_conta_motivo">
-                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Motivo</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                  Motivo {contasBancarias.find(c => c.id === retiradaContaIdSelected)?.status_liberdade === 'emergencia' ? '(Obrigatório) *' : '(Opcional)'}
+                </label>
                 <input
                   type="text"
-                  placeholder="Ex: Taxa bancária / Levantamento pessoal"
+                  required={contasBancarias.find(c => c.id === retiradaContaIdSelected)?.status_liberdade === 'emergencia'}
+                  placeholder="Ex: Taxa bancária / Levantamento pessoal / Emergência"
                   value={retiradaContaMotivo}
                   onChange={(e) => setRetiradaContaMotivo(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
@@ -1565,6 +1660,77 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: HISTÓRICO DE RETIRADAS ================= */}
+      {showHistoricoContaModal && historicoContaSelected && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" id="modal_hist_conta">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative max-h-[85vh] flex flex-col" id="modal_hist_conta_content">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-xl">
+                  <History className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 dark:text-white text-base font-display">
+                    Histórico da Conta: {historicoContaSelected.nome}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Registro permanente de retiradas e motivos de emergência
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowHistoricoContaModal(false);
+                  setHistoricoContaSelected(null);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 space-y-2.5 pr-1">
+              {(!historicoContaSelected.historico_retiradas || historicoContaSelected.historico_retiradas.length === 0) ? (
+                <p className="text-xs text-slate-400 text-center py-6">Nenhum registro de retirada até o momento.</p>
+              ) : (
+                historicoContaSelected.historico_retiradas.map((item: any) => (
+                  <div key={item.id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 p-3.5 rounded-2xl space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">
+                        -{item.valor.toLocaleString()} {moeda}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(item.data).toLocaleString('pt-MZ', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/60 mt-1">
+                      💬 <strong>Motivo:</strong> {item.motivo}
+                    </p>
+                    {item.despesa_descricao && (
+                      <p className="text-[10px] text-slate-400 italic">
+                        Descrição: {item.despesa_descricao}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  setShowHistoricoContaModal(false);
+                  setHistoricoContaSelected(null);
+                }}
+                className="w-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -629,7 +629,7 @@ export default function VendasView() {
                           <span>ESTOQUE ZERADO / A REPOR</span>
                         </div>
                         <p className="text-[10px] text-slate-600 dark:text-slate-300">
-                          Para repor este estoque, você precisa re-investir <strong className="text-rose-700 dark:text-rose-400 font-black">{reinvestmentVal.toLocaleString()} {currency}</strong> (Custo: {p.preco_compra} {currency} × Lote de {loteSize} un.).
+                          Para repor este estoque, você precisa re-investir <strong className="text-rose-700 dark:text-rose-400 font-black">{reinvestVal.toLocaleString()} {currency}</strong> (Custo: {p.preco_compra} {currency} × Lote de {loteSize} un.).
                         </p>
                       </div>
                       <button
@@ -651,7 +651,7 @@ export default function VendasView() {
                           <span>ESTOQUE FINALIZANDO ({p.quantidade} un. restantes)</span>
                         </div>
                         <p className="text-[10px] text-slate-600 dark:text-slate-300">
-                          Valor de re-investimento para reposição do lote ({loteSize} un.): <strong className="text-amber-800 dark:text-amber-300 font-black">{reinvestmentVal.toLocaleString()} {currency}</strong>.
+                          Valor de re-investimento para reposição do lote ({loteSize} un.): <strong className="text-amber-800 dark:text-amber-300 font-black">{reinvestVal.toLocaleString()} {currency}</strong>.
                         </p>
                       </div>
                       <button
