@@ -3,11 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'dropflow-cache-v2';
+const CACHE_NAME = 'dropflow-cache-v3-brand';
 const ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/icons/favicon-32.png',
+  '/icons/favicon-48.png',
+  '/icons/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png'
 ];
 
 // Install Event

@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
 import { TrendingUp, Megaphone, ShieldCheck, ArrowRight, Sparkles, Wallet } from 'lucide-react';
-import dropflowLogo from '../assets/images/droopflow_logo_1783896707656.jpg';
+import dropflowLogo from '../assets/images/dropflow-icon.png';
 
 export default function Onboarding() {
   const { login, loginGoogle } = useApp();

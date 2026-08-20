@@ -18,7 +18,7 @@ import VendaModal from './components/VendaModal.tsx';
 import DespesaModal from './components/DespesaModal.tsx';
 import { motion, AnimatePresence } from 'motion/react';
 import WelcomeTour from './components/WelcomeTour.tsx';
-import dropflowLogo from './assets/images/droopflow_logo_1783896707656.jpg';
+import dropflowLogo from './assets/images/dropflow-icon.png';
 
 import { 
   TrendingUp, 
