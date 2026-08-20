@@ -164,42 +164,90 @@ export function cleanUndefined(obj: any): any {
   return JSON.parse(JSON.stringify(obj));
 }
 
+function getQueueDocument(item: any) {
+  const { type, data } = item;
+  if (!data?.id) return null;
+
+  let colName = `${type}s`;
+  if (type === 'zona') {
+    colName = 'zonas_entrega';
+  } else if (type === 'fornecedor') {
+    colName = 'fornecedores';
+  } else if (type === 'despesa_recorrente') {
+    colName = 'despesas_recorrentes';
+  } else if (type === 'meta_item') {
+    colName = 'meta_items';
+  } else if (type === 'conta_bancaria') {
+    colName = 'contas_bancarias';
+  }
+
+  return doc(db, colName, data.id);
+}
+
+function addQueueMutation(batch: ReturnType<typeof writeBatch>, item: any) {
+  const docRef = getQueueDocument(item);
+  if (!docRef || !item.data) return false;
+
+  if (item.action === 'create' || item.action === 'update') {
+    batch.set(docRef, cleanUndefined(item.data), { merge: true });
+    return true;
+  }
+  if (item.action === 'delete') {
+    batch.delete(docRef);
+    return true;
+  }
+  return false;
+}
+
 export async function pushQueueToFirestore(queue: any[]) {
-  if (queue.length === 0) return;
+  const keyedQueue = queue.map((item, index) => ({
+    item,
+    key: item.id || `queue-item-${index}`
+  }));
+  if (keyedQueue.length === 0) return { successfulIds: [], failedIds: [] };
 
   const batch = writeBatch(db);
-
-  for (const item of queue) {
-    const { type, action, data } = item;
-    if (!data) continue;
-
-    let colName = `${type}s`;
-    if (type === 'zona') {
-      colName = 'zonas_entrega';
-    } else if (type === 'fornecedor') {
-      colName = 'fornecedores';
-    } else if (type === 'despesa_recorrente') {
-      colName = 'despesas_recorrentes';
-    } else if (type === 'meta_item') {
-      colName = 'meta_items';
-    } else if (type === 'conta_bancaria') {
-      colName = 'contas_bancarias';
-    }
-    const docId = data.id;
-    if (!docId) continue;
-
-    const docRef = doc(db, colName, docId);
-
-    if (action === 'create' || action === 'update') {
-      batch.set(docRef, cleanUndefined(data), { merge: true });
-    } else if (action === 'delete') {
-      batch.delete(docRef);
-    }
-  }
+  keyedQueue.forEach(({ item }) => addQueueMutation(batch, item));
 
   try {
     await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'batch_commit');
+    return {
+      successfulIds: keyedQueue.map(({ key }) => key),
+      failedIds: []
+    };
+  } catch (batchError) {
+    // A single invalid/unauthorised document must not block every other
+    // balance or sale. Retry each mutation independently and identify the
+    // exact failing queue item for the caller.
+    console.warn('Firestore batch rejected; retrying mutations individually.', batchError);
+    const successfulIds: string[] = [];
+    const failedIds: string[] = [];
+
+    for (const { item, key } of keyedQueue) {
+      const singleBatch = writeBatch(db);
+      if (!addQueueMutation(singleBatch, item)) {
+        failedIds.push(key);
+        continue;
+      }
+      try {
+        await singleBatch.commit();
+        successfulIds.push(key);
+      } catch (itemError) {
+        failedIds.push(key);
+        console.error('Firestore mutation rejected:', JSON.stringify({
+          queueId: key,
+          type: item.type,
+          action: item.action,
+          documentId: item.data?.id,
+          userId: item.data?.user_id,
+          error: itemError instanceof Error ? itemError.message : String(itemError)
+        }));
+      }
+    }
+
+    if (failedIds.length > 0) {
+      console.error('Some Firestore mutations remain pending:', failedIds);
+    }
+    return { successfulIds, failedIds };
   }
 }

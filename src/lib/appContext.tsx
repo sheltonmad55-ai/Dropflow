@@ -320,9 +320,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (cachedProfileStr) {
             try {
               const cachedProfile = JSON.parse(cachedProfileStr);
-              setProfile(cachedProfile);
-              setIsAuthenticated(true);
-              setIsLoadingAuth(false); // Speed optimization for immediate UI rendering
+              if (cachedProfile?.id === user.uid) {
+                setProfile(cachedProfile);
+                setIsAuthenticated(true);
+                setIsLoadingAuth(false); // Speed optimization for immediate UI rendering
+              } else {
+                localStorage.removeItem('dropflow_profile');
+              }
             } catch (err) {
               console.error("Error parsing cached profile:", err);
             }
@@ -1153,7 +1157,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!profile) return;
     const newRelatorio = {
       id: crypto.randomUUID(),
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       tipo,
       data_geracao: new Date().toISOString(),
       total_vendido: totalVendido,
@@ -1208,7 +1212,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // queued mutation in the current user's batch: one unauthorized write
         // would reject the entire Firestore batch and make every balance appear
         // to roll back locally.
-        const currentUserId = profile.id;
+        const currentUserId = auth.currentUser.uid;
         const ownedQueue = queue.filter(item =>
           item.data?.user_id === currentUserId
           || (item.type === 'profile' && item.data?.id === currentUserId)
@@ -1235,12 +1239,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
           });
         const compactedQueue = Array.from(latestByDocument.values());
-        await pushQueueToFirestore(compactedQueue);
-        // Remove only the entries that were read in this successful batch. Newer entries remain queued.
-        await db.deleteSyncQueueItems(ownedQueue.map(item => item.id));
+        const syncResult = await pushQueueToFirestore(compactedQueue);
+        const successfulQueueIds = new Set(syncResult.successfulIds);
+        // Remove only mutations confirmed by Firestore. Failed items remain
+        // visible locally and can be retried after their owner is corrected.
+        await db.deleteSyncQueueItems(
+          ownedQueue
+            .filter(item => successfulQueueIds.has(item.id))
+            .map(item => item.id)
+        );
 
         const remaining = await db.getAll<SyncQueueItem>('sync_queue');
-        shouldRetry = remaining.some(item =>
+        shouldRetry = syncResult.failedIds.length > 0 || remaining.some(item =>
           item.data?.user_id === currentUserId
           || (item.type === 'profile' && item.data?.id === currentUserId)
         );
@@ -1264,7 +1274,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // CORE BUSINESS ACTION: ADD SALE (AUTOMATIC POCKET DISTRIBUTION)
   async function addVenda(vendaData: Omit<Venda, 'id' | 'user_id' | 'sync_status' | 'criado_em'>) {
     if (!profile) return;
-    const userId = profile.id;
+    const userId = auth.currentUser?.uid || profile.id;
     const vendaId = crypto.randomUUID();
 
     const value = vendaData.valor_recebido;
@@ -1546,7 +1556,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // CORE BUSINESS ACTION: ADD EXPENSE (SUBTRACT BALANCES FROM SOURCE POCKET)
   async function addDespesa(despesaData: Omit<Despesa, 'id' | 'user_id' | 'sync_status' | 'criado_em'>) {
     if (!profile) return;
-    const userId = profile.id;
+    const userId = auth.currentUser?.uid || profile.id;
     const despesaId = crypto.randomUUID();
 
     const newDespesa: Despesa = {
@@ -1741,7 +1751,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newMeta: MetaItem = {
       ...metaData,
       id: crypto.randomUUID(),
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       valor_atual: metaData.valor_atual || 0,
       criado_em: new Date().toISOString()
     };
@@ -1778,7 +1788,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const target = metaItems.find(m => m.id === id);
     setMetaItems(prev => prev.filter(m => m.id !== id));
       await db.deleteItem('meta_items', id);
-      await enqueueMutation({ type: 'meta_item', action: 'delete', data: { id, user_id: profile.id } });
+      await enqueueMutation({ type: 'meta_item', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile.id } });
     if (target) {
       triggerToast('Meta Eliminada', `A meta "${target.nome}" foi removida.`, 'warning');
     }
@@ -1817,7 +1827,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newProduto: Produto = {
       ...produtoData,
       id,
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       margem,
       criado_em: new Date().toISOString()
     };
@@ -1857,7 +1867,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newFornecedor: Fornecedor = {
       ...fornecedorData,
       id,
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       criado_em: new Date().toISOString()
     };
 
@@ -1889,7 +1899,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newZona: ZonaEntrega = {
       ...zonaData,
       id,
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       criado_em: new Date().toISOString()
     };
 
@@ -1928,7 +1938,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const id = crypto.randomUUID();
     const newCx: Caixinha = {
       id,
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       nome,
       icone,
       cor,
@@ -2048,7 +2058,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newConta: ContaBancaria = {
       ...contaData,
       id: crypto.randomUUID(),
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       editavel: true,
       criado_em: new Date().toISOString()
     };
@@ -2076,7 +2086,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const conta = contasBancarias.find(c => c.id === id);
     if (!conta) return;
     await db.deleteItem('contas_bancarias', id);
-    await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: profile.id } });
+    await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile.id } });
     setContasBancarias(prev => prev.filter(c => c.id !== id));
     setSyncStatus('pending');
     syncWithServer();
@@ -2153,7 +2163,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newCampanha: Campanha = {
       ...campanhaData,
       id,
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       criado_em: new Date().toISOString()
     };
 
@@ -2203,7 +2213,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newDR: DespesaRecorrente = {
       ...despesaRecorrenteData,
       id,
-      user_id: profile.id,
+      user_id: auth.currentUser?.uid || profile.id,
       criado_em: new Date().toISOString()
     };
 
