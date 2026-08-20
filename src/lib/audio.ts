@@ -7,75 +7,19 @@
 // Attempts to play real audio files if available, otherwise falls back to beautiful browser-synthesized sounds.
 
 export function playCashRegister(enabled: boolean = true) {
-  if (!enabled) return;
-  
-  // Try playing a real audio file first (e.g. meta celebration)
-  const audioPaths = [
-    '/sounds/metas_batidas.mp3',
-    '/meta.mp3',
-    '/sounds/metas_batidas.wav',
-    '/meta.wav'
-  ];
-
-  let played = false;
-
-  const tryPlayFile = (index: number) => {
-    if (index >= audioPaths.length) {
-      if (!played) {
-        // Fallback to synthesiser
-        playSyntheticCashRegister();
-      }
-      return;
-    }
-
-    const audio = new Audio(audioPaths[index]);
-    audio.play()
-      .then(() => {
-        played = true;
-      })
-      .catch((err) => {
-        // If it fails (e.g. 404 or blocked), try the next path
-        tryPlayFile(index + 1);
-      });
-  };
-
-  tryPlayFile(0);
+  if (!enabled || !hasActiveUserGesture()) return;
+  playSyntheticCashRegister();
 }
 
 export function playNotificationPing(enabled: boolean = true) {
-  if (!enabled) return;
+  if (!enabled || !hasActiveUserGesture()) return;
+  playSyntheticNotificationPing();
+}
 
-  // Try playing a real audio file first (e.g. report notifications)
-  const audioPaths = [
-    '/sounds/relatorios.mp3',
-    '/relatorio.mp3',
-    '/sounds/relatorios.wav',
-    '/relatorio.wav'
-  ];
-
-  let played = false;
-
-  const tryPlayFile = (index: number) => {
-    if (index >= audioPaths.length) {
-      if (!played) {
-        // Fallback to synthesiser
-        playSyntheticNotificationPing();
-      }
-      return;
-    }
-
-    const audio = new Audio(audioPaths[index]);
-    audio.play()
-      .then(() => {
-        played = true;
-      })
-      .catch((err) => {
-        // If it fails (e.g. 404 or blocked), try the next path
-        tryPlayFile(index + 1);
-      });
-  };
-
-  tryPlayFile(0);
+function hasActiveUserGesture() {
+  return typeof navigator === 'undefined'
+    || !navigator.userActivation
+    || navigator.userActivation.isActive;
 }
 
 // --- Synthesizer Fallbacks ---

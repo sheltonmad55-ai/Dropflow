@@ -1,391 +1,144 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Global Safety Net (Pillar 1)
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Check if ID is valid to prevent ID Poisoning (Pillar 3)
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    // Helper to check if user is authenticated (Pillar 4)
     function isAuth() {
       return request.auth != null;
     }
 
-    // Helper to check if user is an administrator
     function isAdmin() {
-      return isAuth() && (request.auth.token.admin == true || request.auth.token.email == 'sheltonmad55@gmail.com');
+      return isAuth()
+        && (request.auth.token.admin == true
+          || request.auth.token.email == 'sheltonmad55@gmail.com');
     }
 
-    // Helper to check ownership
-    function isOwner(userId) {
-      return isAuth() && request.auth.uid == userId;
+    function isValidId(id) {
+      return id is string
+        && id.size() > 0
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Validation Helpers
-    function isValidProfile(data) {
-      return data.id is string
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0 && data.nome.size() <= 200))
-        && (!('pais' in data) || (data.pais is string && data.pais.size() > 0))
-        && (!('moeda' in data) || (data.moeda is string && data.moeda.size() > 0))
-        && (!('plano' in data) || data.plano is string)
-        && (!('trial_expires_at' in data) || data.trial_expires_at is string)
-        && (!('criado_em' in data) || data.criado_em is string)
-        && (!('anuncios_percent' in data) || data.anuncios_percent is number)
-        && (!('lucro_percent' in data) || data.lucro_percent is number)
-        && (!('metaDiaria' in data) || data.metaDiaria is number)
-        && (!('metaSemanal' in data) || data.metaSemanal is number)
-        && (!('metaMensal' in data) || data.metaMensal is number)
-        && (!('metaDiariaBatidaEm' in data) || data.metaDiariaBatidaEm is string)
-        && (!('metaSemanalBatidaEm' in data) || data.metaSemanalBatidaEm is string)
-        && (!('metaMensalBatidaEm' in data) || data.metaMensalBatidaEm is string)
-        && (!('suspenso' in data) || data.suspenso is bool)
-        && (!('ativarSons' in data) || data.ativarSons is bool);
+    function ownsNewDocument() {
+      return isAuth()
+        && request.resource.data.user_id == request.auth.uid;
     }
 
-    // Caixinhas validation helper
-    function isValidCaixinha(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
-        && (!('icone' in data) || data.icone is string)
-        && (!('cor' in data) || data.cor is string)
-        && (!('tipo' in data) || data.tipo is string)
-        && (!('saldo_atual' in data) || data.saldo_atual is number)
-        && (!('criado_em' in data) || data.criado_em is string)
-        && (!('percentual_padrao' in data) || data.percentual_padrao is number)
-        && (!('distribuicao_modo' in data) || data.distribuicao_modo is string)
-        && (!('valor_distribuicao' in data) || data.valor_distribuicao is number);
+    function ownsExistingDocument() {
+      return isAuth()
+        && resource.data.user_id == request.auth.uid
+        && request.resource.data.user_id == request.auth.uid;
     }
 
-    // Vendas validation helper
-    function isValidVenda(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('valor_recebido' in data) || data.valor_recebido is number)
-        && (!('produto_id' in data) || data.produto_id is string)
-        && (!('fornecedor_id' in data) || data.fornecedor_id is string)
-        && (!('zona_entrega_id' in data) || data.zona_entrega_id is string)
-        && (!('conta_id' in data) || data.conta_id is string)
-        && (!('forma_pagamento' in data) || data.forma_pagamento is string)
-        && (!('data_venda' in data) || data.data_venda is string)
-        && (!('distribuicao' in data) || data.distribuicao is map)
-        && (!('criado_em' in data) || data.criado_em is string)
-        && (!('observacao' in data) || data.observacao is string)
-        && (!('custom_anuncios_percent' in data) || data.custom_anuncios_percent is number)
-        && (!('quantidade' in data) || data.quantidade is number)
-        && (!('preco_unitario' in data) || data.preco_unitario is number)
-        && (!('desconto' in data) || data.desconto is number)
-        && (!('status' in data) || data.status is string)
-        && (!('sync_status' in data) || data.sync_status is string);
+    function ownsDocument() {
+      return isAuth() && resource.data.user_id == request.auth.uid;
     }
 
-    // Despesas validation helper
-    function isValidDespesa(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('valor' in data) || data.valor is number)
-        && (!('categoria' in data) || data.categoria is string)
-        && (!('caixinha_id' in data) || data.caixinha_id is string)
-        && (!('conta_id' in data) || data.conta_id is string)
-        && (!('descricao' in data) || data.descricao is string)
-        && (!('data' in data) || data.data is string)
-        && (!('criado_em' in data) || data.criado_em is string)
-        && (!('sync_status' in data) || data.sync_status is string);
-    }
-
-    // Produtos validation helper
-    function isValidProduto(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
-        && (!('categoria' in data) || data.categoria is string)
-        && (!('fornecedor_id' in data) || data.fornecedor_id is string)
-        && (!('preco_compra' in data) || data.preco_compra is number)
-        && (!('preco_venda' in data) || data.preco_venda is number)
-        && (!('margem' in data) || data.margem is number)
-        && (!('quantidade' in data) || data.quantidade is number)
-        && (!('criado_em' in data) || data.criado_em is string);
-    }
-
-    // Fornecedores validation helper
-    function isValidFornecedor(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
-        && (!('telefone' in data) || data.telefone is string)
-        && (!('valor_pendente' in data) || data.valor_pendente is number)
-        && (!('tipo_origem' in data) || data.tipo_origem is string)
-        && (!('criado_em' in data) || data.criado_em is string);
-    }
-
-    // ContasBancarias validation helper
-    function isValidContaBancaria(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
-        && (!('tipo' in data) || data.tipo is string)
-        && (!('saldo_atual' in data) || data.saldo_atual is number)
-        && (!('cor' in data) || data.cor is string)
-        && (!('editavel' in data) || data.editavel is bool)
-        && (!('criado_em' in data) || data.criado_em is string);
-    }
-
-    // Zonas de entrega validation helper
-    function isValidZona(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome_zona' in data) || (data.nome_zona is string && data.nome_zona.size() > 0))
-        && (!('custo' in data) || data.custo is number)
-        && (!('criado_em' in data) || data.criado_em is string);
-    }
-
-    // Campanhas validation helper
-    function isValidCampanha(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
-        && (!('plataforma' in data) || data.plataforma is string)
-        && (!('orcamento' in data) || data.orcamento is number)
-        && (!('gasto' in data) || data.gasto is number)
-        && (!('cliques' in data) || data.cliques is number)
-        && (!('impressoes' in data) || data.impressoes is number)
-        && (!('conversoes' in data) || data.conversoes is number)
-        && (!('valor_vendas' in data) || data.valor_vendas is number)
-        && (!('data' in data) || data.data is string)
-        && (!('criado_em' in data) || data.criado_em is string)
-        && (!('orcamento_maximo' in data) || data.orcamento_maximo is number)
-        && (!('orcamento_usd' in data) || data.orcamento_usd is bool)
-        && (!('metricas_diarias' in data) || data.metricas_diarias is list);
-    }
-
-    // Despesas recorrentes validation helper
-    function isValidDespesaRecorrente(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('descricao' in data) || data.descricao is string)
-        && (!('valor' in data) || data.valor is number)
-        && (!('caixinha_id' in data) || data.caixinha_id is string)
-        && (!('categoria' in data) || data.categoria is string)
-        && (!('frequencia' in data) || data.frequencia is string)
-        && (!('dia_vencimento' in data) || data.dia_vencimento is number)
-        && (!('ultimo_processado' in data) || data.ultimo_processado is string)
-        && (!('ativa' in data) || data.ativa is bool)
-        && (!('criado_em' in data) || data.criado_em is string);
-    }
-
-    // MetaItems validation helper
-    function isValidMetaItem(data) {
-      return data.id is string
-        && data.user_id == request.auth.uid
-        && (!('nome' in data) || (data.nome is string && data.nome.size() > 0))
-        && (!('valor_alvo' in data) || data.valor_alvo is number)
-        && (!('valor_atual' in data) || data.valor_atual is number)
-        && (!('categoria' in data) || data.categoria is string)
-        && (!('icone' in data) || data.icone is string)
-        && (!('criado_em' in data) || data.criado_em is string);
-    }
-
-    // Test collection for boot validation
+    // Boot connectivity probe.
     match /test/connection {
       allow read: if true;
     }
 
-    // Profiles Rules
+    // Profiles are keyed by the Firebase Auth UID.
     match /profiles/{profileId} {
-      allow get: if (isOwner(profileId) || isAdmin()) && isValidId(profileId);
-      allow list: if isOwner(profileId) || isAdmin();
-      allow create, update: if (isOwner(profileId) || isAdmin()) 
-        && isValidId(profileId)
-        && isValidProfile(request.resource.data);
+      allow get: if isValidId(profileId)
+        && (isAdmin() || (isAuth() && request.auth.uid == profileId));
+      allow list: if isAdmin();
+      allow create, update: if isValidId(profileId)
+        && isAuth()
+        && (request.auth.uid == profileId || isAdmin())
+        && request.resource.data.id == profileId;
       allow delete: if isAdmin() && isValidId(profileId);
     }
 
-    // Caixinhas Rules
-    match /caixinhas/{caixinhaId} {
-      allow get: if isAuth() && isValidId(caixinhaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(caixinhaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidCaixinha(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(caixinhaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidCaixinha(request.resource.data);
-      allow delete: if isAuth() && isValidId(caixinhaId) && isOwner(resource.data.user_id);
+    // User-owned financial collections. The data model is intentionally not
+    // hard-coded here: older documents and new optional fields must not make
+    // the whole Firestore batch fail. Ownership remains mandatory.
+    match /caixinhas/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Vendas Rules
-    match /vendas/{vendaId} {
-      allow get: if isAuth() && isValidId(vendaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(vendaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidVenda(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(vendaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidVenda(request.resource.data);
-      allow delete: if isAuth() && isValidId(vendaId) && isOwner(resource.data.user_id);
+    match /vendas/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Despesas Rules
-    match /despesas/{despesaId} {
-      allow get: if isAuth() && isValidId(despesaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(despesaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidDespesa(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(despesaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidDespesa(request.resource.data);
-      allow delete: if isAuth() && isValidId(despesaId) && isOwner(resource.data.user_id);
+    match /despesas/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Produtos Rules
-    match /produtos/{produtoId} {
-      allow get: if isAuth() && isValidId(produtoId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(produtoId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidProduto(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(produtoId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidProduto(request.resource.data);
-      allow delete: if isAuth() && isValidId(produtoId) && isOwner(resource.data.user_id);
+    match /produtos/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Fornecedores Rules
-    match /fornecedores/{fornecedorId} {
-      allow get: if isAuth() && isValidId(fornecedorId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(fornecedorId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidFornecedor(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(fornecedorId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidFornecedor(request.resource.data);
-      allow delete: if isAuth() && isValidId(fornecedorId) && isOwner(resource.data.user_id);
+    match /fornecedores/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Zonas de Entrega Rules
-    match /zonas_entrega/{zonaId} {
-      allow get: if isAuth() && isValidId(zonaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(zonaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidZona(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(zonaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidZona(request.resource.data);
-      allow delete: if isAuth() && isValidId(zonaId) && isOwner(resource.data.user_id);
+    match /zonas_entrega/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Campanhas Rules
-    match /campanhas/{campanhaId} {
-      allow get: if isAuth() && isValidId(campanhaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(campanhaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidCampanha(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(campanhaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidCampanha(request.resource.data);
-      allow delete: if isAuth() && isValidId(campanhaId) && isOwner(resource.data.user_id);
+    match /campanhas/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Despesas Recorrentes Rules
     match /despesas_recorrentes/{id} {
-      allow get: if isAuth() && isValidId(id) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidDespesaRecorrente(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(id)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidDespesaRecorrente(request.resource.data);
-      allow delete: if isAuth() && isValidId(id) && isOwner(resource.data.user_id);
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // MetaItems Rules
-    match /meta_items/{metaId} {
-      allow get: if isAuth() && isValidId(metaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(metaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidMetaItem(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(metaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidMetaItem(request.resource.data);
-      allow delete: if isAuth() && isValidId(metaId) && isOwner(resource.data.user_id);
+    match /meta_items/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // ContasBancarias Rules
-    match /contas_bancarias/{contaId} {
-      allow get: if isAuth() && isValidId(contaId) && resource != null && isOwner(resource.data.user_id);
-      allow list: if isAuth() && isOwner(resource.data.user_id);
-      allow create: if isAuth() 
-        && isValidId(contaId) 
-        && isOwner(request.resource.data.user_id)
-        && isValidContaBancaria(request.resource.data);
-      allow update: if isAuth() 
-        && isValidId(contaId)
-        && isOwner(resource.data.user_id) 
-        && isOwner(request.resource.data.user_id)
-        && isValidContaBancaria(request.resource.data);
-      allow delete: if isAuth() && isValidId(contaId) && isOwner(resource.data.user_id);
+    match /contas_bancarias/{id} {
+      allow get, list: if ownsDocument();
+      allow create: if isValidId(id) && ownsNewDocument();
+      allow update: if isValidId(id) && ownsExistingDocument();
+      allow delete: if isValidId(id) && ownsDocument();
     }
 
-    // Admin Logs Rules
-    match /admin_logs/{logId} {
-      allow get: if isAdmin() && isValidId(logId);
-      allow list: if isAdmin();
-      allow write: if isAdmin() && isValidId(logId);
+    match /admin_logs/{id} {
+      allow get, list, write: if isAdmin() && isValidId(id);
     }
 
-    // Broadcasts Rules
-    match /broadcasts/{broadcastId} {
-      allow get: if isAuth() && isValidId(broadcastId);
-      allow list: if isAuth();
-      allow write: if isAdmin() && isValidId(broadcastId);
+    match /broadcasts/{id} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin() && isValidId(id);
     }
 
-    // Relatorios Rules
-    match /relatorios/{relatorioId} {
-      allow get: if isAuth() && isValidId(relatorioId) && (resource == null || isOwner(resource.data.user_id) || isAdmin());
-      allow list: if isAuth() && (isOwner(resource.data.user_id) || isAdmin());
-      allow create, update: if isAuth() && isValidId(relatorioId) && (request.resource.data.user_id == request.auth.uid || isAdmin());
-      allow delete: if isAdmin() && isValidId(relatorioId);
+    match /relatorios/{id} {
+      allow get, list: if isAuth()
+        && (isAdmin() || resource.data.user_id == request.auth.uid);
+      allow create, update: if isValidId(id)
+        && (isAdmin() || ownsNewDocument());
+      allow delete: if isAdmin()
+        || (isValidId(id) && ownsDocument());
     }
   }
 }

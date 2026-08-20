@@ -310,6 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         try {
+          pendingMutationsRef.current.clear();
           const freshToken = await user.getIdToken();
           setToken(freshToken);
           localStorage.setItem('dropflow_token', freshToken);
@@ -821,6 +822,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setProfile(currentUserProfile);
       }
 
+      // Restore the latest local mutations before real-time listeners start.
+      // This prevents a cached/old Firestore snapshot from flashing over a
+      // change that is still waiting for its first successful sync.
+      const latestPending = new Map<string, SyncQueueItem>();
+      queue
+        .filter(item => item.data?.user_id === userId || (item.type === 'profile' && item.data?.id === userId))
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .forEach(item => {
+          if (item.data?.id) latestPending.set(mutationKey(item.type, item.data.id), item);
+        });
+      pendingMutationsRef.current.clear();
+      latestPending.forEach((item, key) => {
+        pendingMutationsRef.current.set(key, { ...item, version: ++mutationVersionRef.current });
+      });
+
       setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
       const userContas = dbContas.filter(c => c.user_id === userId);
       const seededKey = `dropflow_contas_seeded_${userId}`;
@@ -1188,9 +1204,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // IndexedDB is shared by browser sessions. Never send another user's
+        // queued mutation in the current user's batch: one unauthorized write
+        // would reject the entire Firestore batch and make every balance appear
+        // to roll back locally.
+        const currentUserId = profile.id;
+        const ownedQueue = queue.filter(item =>
+          item.data?.user_id === currentUserId
+          || (item.type === 'profile' && item.data?.id === currentUserId)
+        );
+        // Keep another user's queue intact for a possible later sign-in, but
+        // quarantine malformed legacy entries that have no owner at all.
+        const malformedQueueIds = queue
+          .filter(item => !item.data?.user_id && !(item.type === 'profile' && item.data?.id))
+          .map(item => item.id);
+        await db.deleteSyncQueueItems(malformedQueueIds);
+
+        if (ownedQueue.length === 0) {
+          setSyncStatus('synced');
+          return;
+        }
+
         // Keep only the latest mutation per document; older snapshots cannot win later.
         const latestByDocument = new Map<string, SyncQueueItem>();
-        queue
+        ownedQueue
           .sort((a, b) => a.timestamp - b.timestamp)
           .forEach(item => {
             if (item.data?.id) {
@@ -1199,11 +1236,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
         const compactedQueue = Array.from(latestByDocument.values());
         await pushQueueToFirestore(compactedQueue);
-        // Remove only the entries that were read in this batch. Newer entries remain queued.
-        await db.deleteSyncQueueItems(queue.map(item => item.id));
+        // Remove only the entries that were read in this successful batch. Newer entries remain queued.
+        await db.deleteSyncQueueItems(ownedQueue.map(item => item.id));
 
         const remaining = await db.getAll<SyncQueueItem>('sync_queue');
-        shouldRetry = remaining.length > 0;
+        shouldRetry = remaining.some(item =>
+          item.data?.user_id === currentUserId
+          || (item.type === 'profile' && item.data?.id === currentUserId)
+        );
         setSyncStatus(shouldRetry ? 'pending' : 'synced');
       } catch (e) {
         console.error('Synchronization failed (retrying later):', e);
@@ -1737,8 +1777,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!profile) return;
     const target = metaItems.find(m => m.id === id);
     setMetaItems(prev => prev.filter(m => m.id !== id));
-    await db.deleteItem('meta_items', id);
-    await enqueueMutation({ type: 'meta_item', action: 'delete', data: { id } });
+      await db.deleteItem('meta_items', id);
+      await enqueueMutation({ type: 'meta_item', action: 'delete', data: { id, user_id: profile.id } });
     if (target) {
       triggerToast('Meta Eliminada', `A meta "${target.nome}" foi removida.`, 'warning');
     }

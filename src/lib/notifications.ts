@@ -39,12 +39,8 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 export async function sendNotification(title: string, body: string, options?: NotificationOptions) {
   if (typeof window === 'undefined') return;
 
-  // Trigger haptic vibration if supported on mobile
-  if (navigator.vibrate) {
-    try {
-      navigator.vibrate([200, 100, 200]);
-    } catch (_) {}
-  }
+  // Do not vibrate here: this function is also called by timers and realtime
+  // callbacks, which are not user gestures and are blocked by modern browsers.
 
   // 1. Try ServiceWorker Registration showNotification (Works reliably on Chrome Mobile & PWAs)
   if ('serviceWorker' in navigator) {
@@ -53,8 +49,8 @@ export async function sendNotification(title: string, body: string, options?: No
       if (registration && registration.showNotification) {
         await (registration as unknown as { showNotification: (t: string, o?: object) => Promise<void> }).showNotification(title, {
           body,
-          icon: '/public/manifest.json',
-          vibrate: [200, 100, 200],
+          // The manifest is JSON, not an image. Leave the icon unset until a
+          // real image asset is available instead of requesting a 404 path.
           renotify: true,
           tag: 'dropflow-alert-' + Date.now(),
           ...options

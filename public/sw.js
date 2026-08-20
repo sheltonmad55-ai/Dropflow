@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'dropflow-cache-v1';
+const CACHE_NAME = 'dropflow-cache-v2';
 const ASSETS = [
   '/',
   '/index.html',
-  '/public/manifest.json'
+  '/manifest.json'
 ];
 
 // Install Event
@@ -121,9 +121,6 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    vibrate: [200, 100, 200],
     tag: 'dropflow-push-' + Date.now(),
     renotify: true,
     data: {
@@ -141,9 +138,6 @@ self.addEventListener('message', (event) => {
     const { title, body } = event.data;
     const options = {
       body: body || 'Notificação DropFlow',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [200, 100, 200],
       tag: 'dropflow-msg-' + Date.now(),
       renotify: true
     };
