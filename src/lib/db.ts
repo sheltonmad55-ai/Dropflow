@@ -120,3 +120,18 @@ export function addToSyncQueue(item: Omit<SyncQueueItem, 'id' | 'timestamp'>): P
   };
   return putItem('sync_queue', queueItem);
 }
+
+/** Remove only queue entries that were included in a completed sync batch. */
+export function deleteSyncQueueItems(ids: string[]): Promise<void> {
+  if (ids.length === 0) return Promise.resolve();
+  return initDB().then(db => {
+    return new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction('sync_queue', 'readwrite');
+      const store = transaction.objectStore('sync_queue');
+      ids.forEach(id => store.delete(id));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('Failed to delete sync queue items'));
+    });
+  });
+}

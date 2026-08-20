@@ -204,6 +204,81 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Ref to track active Firestore subscriptions for clean-up
   const unsubscribesRef = useRef<(() => void)[]>([]);
 
+  type PendingMutation = Omit<SyncQueueItem, 'id' | 'timestamp'>;
+  type PendingMutationState = PendingMutation & { version: number };
+  const pendingMutationsRef = useRef<Map<string, PendingMutationState>>(new Map());
+  const mutationVersionRef = useRef(0);
+  const syncPromiseRef = useRef<Promise<void> | null>(null);
+
+  const mutationKey = (type: SyncQueueItem['type'], id: string) => `${type}:${id}`;
+
+  async function enqueueMutation(item: PendingMutation) {
+    const id = item.data?.id;
+    if (id) {
+      const version = ++mutationVersionRef.current;
+      pendingMutationsRef.current.set(mutationKey(item.type, id), { ...item, version });
+    }
+    await db.addToSyncQueue(item);
+  }
+
+  function acknowledgeCollectionSnapshot<T extends { id: string }>(type: SyncQueueItem['type'], remoteData: T[]) {
+    const remoteById = new Map(remoteData.map(item => [item.id, item]));
+    pendingMutationsRef.current.forEach((mutation, key) => {
+      if (mutation.type !== type || !mutation.data?.id) return;
+      const remote = remoteById.get(mutation.data.id);
+      const matches = mutation.action === 'delete'
+        ? !remote
+        : !!remote && JSON.stringify(remote) === JSON.stringify(mutation.data);
+      if (matches) pendingMutationsRef.current.delete(key);
+    });
+  }
+
+  function acknowledgeDocumentSnapshot<T extends { id: string }>(type: SyncQueueItem['type'], remoteData: T | null) {
+    if (!remoteData?.id) return;
+    const key = mutationKey(type, remoteData.id);
+    const mutation = pendingMutationsRef.current.get(key);
+    if (!mutation) return;
+    const matches = mutation.action !== 'delete' && JSON.stringify(remoteData) === JSON.stringify(mutation.data);
+    if (matches) pendingMutationsRef.current.delete(key);
+  }
+
+  function reconcileCollection<T extends { id: string }>(
+    type: SyncQueueItem['type'],
+    remoteData: T[],
+    localData: T[]
+  ): T[] {
+    const result = new Map(remoteData.map(item => [item.id, item]));
+
+    pendingMutationsRef.current.forEach((mutation, key) => {
+      if (mutation.type !== type || !mutation.data?.id) return;
+      if (mutation.action === 'delete') {
+        result.delete(mutation.data.id);
+      } else {
+        result.set(mutation.data.id, mutation.data as T);
+      }
+      // Keep a local record that has not reached the server yet, including creates.
+      if (mutation.action !== 'delete' && !result.has(mutation.data.id)) {
+        const local = localData.find(item => item.id === mutation.data.id);
+        if (local) result.set(local.id, local);
+      }
+    });
+
+    return Array.from(result.values());
+  }
+
+  function reconcileDocument<T extends { id: string }>(
+    type: SyncQueueItem['type'],
+    remoteData: T | null,
+    localData: T | null
+  ): T | null {
+    if (!remoteData && !localData) return null;
+    const id = remoteData?.id || localData?.id;
+    if (!id) return remoteData || localData;
+    const pending = pendingMutationsRef.current.get(mutationKey(type, id));
+    if (!pending) return remoteData || localData;
+    return pending.action === 'delete' ? null : (pending.data as T);
+  }
+
   // Listen to network status
   useEffect(() => {
     const handleOnline = () => {
@@ -259,9 +334,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const unsubProfile = onSnapshot(doc(fDb, 'profiles', user.uid), (snapshot) => {
             if (snapshot.exists()) {
               const profileData = snapshot.data() as Profile;
-              setProfile(profileData);
-              localStorage.setItem('dropflow_profile', JSON.stringify(profileData));
-              db.putItem('profiles', profileData);
+              acknowledgeDocumentSnapshot('profile', profileData);
+              const reconciledProfile = reconcileDocument('profile', profileData, profileRef.current);
+              if (reconciledProfile) {
+                setProfile(reconciledProfile);
+                localStorage.setItem('dropflow_profile', JSON.stringify(reconciledProfile));
+                void db.putItem('profiles', reconciledProfile);
+              }
               setIsAuthenticated(true);
             } else {
               setProfile(null);
@@ -278,9 +357,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'caixinhas'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as Caixinha);
-              setCaixinhas(data);
-              db.clearStore('caixinhas').then(() => {
-                data.forEach(item => db.putItem('caixinhas', item));
+              acknowledgeCollectionSnapshot('caixinha', data);
+              const reconciled = reconcileCollection('caixinha', data, caixinhas);
+              setCaixinhas(reconciled);
+              void db.clearStore('caixinhas').then(() => {
+                reconciled.forEach(item => void db.putItem('caixinhas', item));
               });
             },
             (error) => console.error("Caixinhas real-time listener error:", error)
@@ -292,9 +373,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'vendas'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as Venda);
-              setVendas(data.sort((a, b) => b.data_venda.localeCompare(a.data_venda)));
-              db.clearStore('vendas').then(() => {
-                data.forEach(item => db.putItem('vendas', item));
+              acknowledgeCollectionSnapshot('venda', data);
+              const reconciled = reconcileCollection('venda', data, vendas);
+              setVendas(reconciled.sort((a, b) => b.data_venda.localeCompare(a.data_venda)));
+              void db.clearStore('vendas').then(() => {
+                reconciled.forEach(item => void db.putItem('vendas', item));
               });
             },
             (error) => console.error("Vendas real-time listener error:", error)
@@ -306,9 +389,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'despesas'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as Despesa);
-              setDespesas(data.sort((a, b) => b.data.localeCompare(a.data)));
-              db.clearStore('despesas').then(() => {
-                data.forEach(item => db.putItem('despesas', item));
+              acknowledgeCollectionSnapshot('despesa', data);
+              const reconciled = reconcileCollection('despesa', data, despesas);
+              setDespesas(reconciled.sort((a, b) => b.data.localeCompare(a.data)));
+              void db.clearStore('despesas').then(() => {
+                reconciled.forEach(item => void db.putItem('despesas', item));
               });
             },
             (error) => console.error("Despesas real-time listener error:", error)
@@ -320,9 +405,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'produtos'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as Produto);
-              setProdutos(data);
-              db.clearStore('produtos').then(() => {
-                data.forEach(item => db.putItem('produtos', item));
+              acknowledgeCollectionSnapshot('produto', data);
+              const reconciled = reconcileCollection('produto', data, produtos);
+              setProdutos(reconciled);
+              void db.clearStore('produtos').then(() => {
+                reconciled.forEach(item => void db.putItem('produtos', item));
               });
             },
             (error) => console.error("Produtos real-time listener error:", error)
@@ -334,9 +421,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'fornecedores'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as Fornecedor);
-              setFornecedores(data);
-              db.clearStore('fornecedores').then(() => {
-                data.forEach(item => db.putItem('fornecedores', item));
+              acknowledgeCollectionSnapshot('fornecedor', data);
+              const reconciled = reconcileCollection('fornecedor', data, fornecedores);
+              setFornecedores(reconciled);
+              void db.clearStore('fornecedores').then(() => {
+                reconciled.forEach(item => void db.putItem('fornecedores', item));
               });
             },
             (error) => console.error("Fornecedores real-time listener error:", error)
@@ -348,9 +437,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'zonas_entrega'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as ZonaEntrega);
-              setZonasEntrega(data);
-              db.clearStore('zonas_entrega').then(() => {
-                data.forEach(item => db.putItem('zonas_entrega', item));
+              acknowledgeCollectionSnapshot('zona', data);
+              const reconciled = reconcileCollection('zona', data, zonasEntrega);
+              setZonasEntrega(reconciled);
+              void db.clearStore('zonas_entrega').then(() => {
+                reconciled.forEach(item => void db.putItem('zonas_entrega', item));
               });
             },
             (error) => console.error("Zonas real-time listener error:", error)
@@ -362,9 +453,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'campanhas'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as Campanha);
-              setCampanhas(data.sort((a, b) => b.data.localeCompare(a.data)));
-              db.clearStore('campanhas').then(() => {
-                data.forEach(item => db.putItem('campanhas', item));
+              acknowledgeCollectionSnapshot('campanha', data);
+              const reconciled = reconcileCollection('campanha', data, campanhas);
+              setCampanhas(reconciled.sort((a, b) => b.data.localeCompare(a.data)));
+              void db.clearStore('campanhas').then(() => {
+                reconciled.forEach(item => void db.putItem('campanhas', item));
               });
             },
             (error) => console.error("Campanhas real-time listener error:", error)
@@ -376,9 +469,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'despesas_recorrentes'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as DespesaRecorrente);
-              setDespesasRecorrentes(data);
-              db.clearStore('despesas_recorrentes').then(() => {
-                data.forEach(item => db.putItem('despesas_recorrentes', item));
+              acknowledgeCollectionSnapshot('despesa_recorrente', data);
+              const reconciled = reconcileCollection('despesa_recorrente', data, despesasRecorrentes);
+              setDespesasRecorrentes(reconciled);
+              void db.clearStore('despesas_recorrentes').then(() => {
+                reconciled.forEach(item => void db.putItem('despesas_recorrentes', item));
               });
             },
             (error) => console.error("DespesasRecorrentes real-time listener error:", error)
@@ -390,9 +485,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'meta_items'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as MetaItem);
-              setMetaItems(data.sort((a, b) => b.criado_em.localeCompare(a.criado_em)));
-              db.clearStore('meta_items').then(() => {
-                data.forEach(item => db.putItem('meta_items', item));
+              acknowledgeCollectionSnapshot('meta_item', data);
+              const reconciled = reconcileCollection('meta_item', data, metaItems);
+              setMetaItems(reconciled.sort((a, b) => b.criado_em.localeCompare(a.criado_em)));
+              void db.clearStore('meta_items').then(() => {
+                reconciled.forEach(item => void db.putItem('meta_items', item));
               });
             },
             (error) => console.error("MetaItems real-time listener error:", error)
@@ -404,19 +501,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
             query(collection(fDb, 'contas_bancarias'), where('user_id', '==', user.uid)),
             (snapshot) => {
               const data = snapshot.docs.map(doc => doc.data() as ContaBancaria);
+              acknowledgeCollectionSnapshot('conta_bancaria', data);
+              const reconciled = reconcileCollection('conta_bancaria', data, contasBancarias);
               const seededKey = `dropflow_contas_seeded_${user.uid}`;
               const hasSeeded = localStorage.getItem(seededKey) === 'true';
 
-              if (data.length === 0 && !hasSeeded) {
+              if (reconciled.length === 0 && !hasSeeded) {
                 localStorage.setItem(seededKey, 'true');
                 seedDefaultContas(user.uid);
               } else {
-                if (data.length > 0) {
+                if (reconciled.length > 0) {
                   localStorage.setItem(seededKey, 'true');
                 }
-                setContasBancarias(data);
-                db.clearStore('contas_bancarias').then(() => {
-                  data.forEach(item => db.putItem('contas_bancarias', item));
+                setContasBancarias(reconciled);
+                void db.clearStore('contas_bancarias').then(() => {
+                  reconciled.forEach(item => void db.putItem('contas_bancarias', item));
                 });
               }
             },
@@ -468,6 +567,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setIsLoadingAuth(false);
         }
       } else {
+        pendingMutationsRef.current.clear();
         setToken(null);
         setProfile(null);
         setIsAdmin(false);
@@ -781,7 +881,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setContasBancarias(defaults);
     for (const c of defaults) {
       await db.putItem('contas_bancarias', c);
-      await db.addToSyncQueue({ type: 'conta_bancaria', action: 'create', data: c });
+      await enqueueMutation({ type: 'conta_bancaria', action: 'create', data: c });
     }
   }
 
@@ -993,7 +1093,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('dropflow_profile', JSON.stringify(updated));
 
     await db.putItem('profiles', updated);
-    await db.addToSyncQueue({
+    await enqueueMutation({
       type: 'profile',
       action: 'update',
       data: updated
@@ -1073,27 +1173,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Real-time server pushing engine for offline writes
   async function syncWithServer() {
+    if (syncPromiseRef.current) return syncPromiseRef.current;
     if (!token || !profile || !navigator.onLine || !auth.currentUser) {
       return;
     }
 
-    setSyncStatus('syncing');
-    try {
-      // 1. Get the local queue of modifications
-      const queue = await db.getAll<SyncQueueItem>('sync_queue');
+    let shouldRetry = false;
+    const run = (async () => {
+      setSyncStatus('syncing');
+      try {
+        const queue = await db.getAll<SyncQueueItem>('sync_queue');
+        if (queue.length === 0) {
+          setSyncStatus('synced');
+          return;
+        }
 
-      // 2. Post queue to Firestore
-      if (queue.length > 0) {
-        await pushQueueToFirestore(queue);
-        // Clear successfully synced items from queue
-        await db.clearStore('sync_queue');
+        // Keep only the latest mutation per document; older snapshots cannot win later.
+        const latestByDocument = new Map<string, SyncQueueItem>();
+        queue
+          .sort((a, b) => a.timestamp - b.timestamp)
+          .forEach(item => {
+            if (item.data?.id) {
+              latestByDocument.set(mutationKey(item.type, item.data.id), item);
+            }
+          });
+        const compactedQueue = Array.from(latestByDocument.values());
+        await pushQueueToFirestore(compactedQueue);
+        // Remove only the entries that were read in this batch. Newer entries remain queued.
+        await db.deleteSyncQueueItems(queue.map(item => item.id));
+
+        const remaining = await db.getAll<SyncQueueItem>('sync_queue');
+        shouldRetry = remaining.length > 0;
+        setSyncStatus(shouldRetry ? 'pending' : 'synced');
+      } catch (e) {
+        console.error('Synchronization failed (retrying later):', e);
+        setSyncStatus('pending');
       }
+    })();
 
-      setSyncStatus('synced');
-    } catch (e) {
-      console.error('Synchronization failed (retrying later):', e);
-      setSyncStatus('pending'); // keep as pending to indicate changes are waiting
-    }
+    syncPromiseRef.current = run;
+    void run.finally(() => {
+      syncPromiseRef.current = null;
+      if (shouldRetry && navigator.onLine) {
+        window.setTimeout(() => void syncWithServer(), 250);
+      }
+    });
+    return run;
   }
 
   // CORE BUSINESS ACTION: ADD SALE (AUTOMATIC POCKET DISTRIBUTION)
@@ -1219,6 +1344,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...vendaData,
       id: vendaId,
       user_id: userId,
+      fornecedor_id: supplierId,
+      custo_compra_total: purchaseCost,
       distribuicao: distribution,
       sync_status: 'pending',
       criado_em: new Date().toISOString()
@@ -1232,7 +1359,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Save updated pocket to DB
         const updatedCx = { ...cx, saldo_atual: newBalance };
         db.putItem('caixinhas', updatedCx);
-        db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+        void enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
         return updatedCx;
       }
       return cx;
@@ -1243,7 +1370,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newPending = Math.round((supplier.valor_pendente + purchaseCost) * 100) / 100;
       const updatedSupplier = { ...supplier, valor_pendente: newPending };
       await db.putItem('fornecedores', updatedSupplier);
-      await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
+      await enqueueMutation({ type: 'fornecedor', action: 'update', data: updatedSupplier });
       setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
     }
 
@@ -1261,13 +1388,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newQty = Math.max(0, product.quantidade - qty);
       const updatedProduct = { ...product, quantidade: newQty };
       await db.putItem('produtos', updatedProduct);
-      await db.addToSyncQueue({ type: 'produto', action: 'update', data: updatedProduct });
+      await enqueueMutation({ type: 'produto', action: 'update', data: updatedProduct });
       setProdutos(prev => prev.map(p => p.id === product.id ? updatedProduct : p));
     }
 
     // Save Venda to Local DB & queue sync
     await db.putItem('vendas', newVenda);
-    await db.addToSyncQueue({ type: 'venda', action: 'create', data: newVenda });
+    await enqueueMutation({ type: 'venda', action: 'create', data: newVenda });
 
     // If a goal allocation was selected, allocate funds to that custom goal
     if (vendaData.meta_id && vendaData.meta_valor_alocado && vendaData.meta_valor_alocado > 0) {
@@ -1295,7 +1422,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updated = { ...original, ...updates, sync_status: 'pending' as const };
     await db.putItem('vendas', updated);
-    await db.addToSyncQueue({ type: 'venda', action: 'update', data: updated });
+    await enqueueMutation({ type: 'venda', action: 'update', data: updated });
     setVendas(prev => prev.map(v => v.id === id ? updated : v));
 
     setSyncStatus('pending');
@@ -1306,50 +1433,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const original = vendas.find(v => v.id === id);
     if (!original) return;
 
-    // 1. Revert product stock quantity (add back quantity sold)
+    // 1. Revert product stock quantity (add back quantity sold).
     const product = produtos.find(p => p.id === original.produto_id);
     if (product) {
       const newQty = product.quantidade + (original.quantidade || 1);
       const updatedProduct = { ...product, quantidade: newQty };
       await db.putItem('produtos', updatedProduct);
-      await db.addToSyncQueue({ type: 'produto', action: 'update', data: updatedProduct });
+      await enqueueMutation({ type: 'produto', action: 'update', data: updatedProduct });
       setProdutos(prev => prev.map(p => p.id === product.id ? updatedProduct : p));
     }
 
-    // 2. Revert supplier outstanding value (valor_pendente) if there is any supplier
-    if (original.fornecedor_id) {
-      const purchaseCost = (product ? product.preco_compra : 0) * (original.quantidade || 1);
-      const supplier = fornecedores.find(f => f.id === original.fornecedor_id);
-      if (supplier) {
-        const newPending = Math.max(0, Math.round((supplier.valor_pendente - purchaseCost) * 100) / 100);
-        const updatedSupplier = { ...supplier, valor_pendente: newPending };
-        await db.putItem('fornecedores', updatedSupplier);
-        await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
-        setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
-      }
+    // 2. Revert supplier outstanding value, including the product fallback used on sale creation.
+    const supplierId = original.fornecedor_id || product?.fornecedor_id;
+    const supplier = fornecedores.find(f => f.id === supplierId);
+    if (supplier && supplier.tipo_origem !== 'local') {
+      const purchaseCost = original.custo_compra_total ?? (product ? product.preco_compra : 0) * (original.quantidade || 1);
+      const newPending = Math.max(0, Math.round((supplier.valor_pendente - purchaseCost) * 100) / 100);
+      const updatedSupplier = { ...supplier, valor_pendente: newPending };
+      await db.putItem('fornecedores', updatedSupplier);
+      await enqueueMutation({ type: 'fornecedor', action: 'update', data: updatedSupplier });
+      setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
     }
 
-    // 3. Revert local balances of Caixinhas
+    // 3. Revert every pocket allocation recorded on the sale.
     const updatedCaixinhas = caixinhas.map(cx => {
       const distributedAmt = original.distribuicao?.[cx.id] || 0;
-      if (distributedAmt > 0) {
-        const newBalance = Math.max(0, Math.round((cx.saldo_atual - distributedAmt) * 100) / 100);
-        const updatedCx = { ...cx, saldo_atual: newBalance };
-        db.putItem('caixinhas', updatedCx);
-        db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
-        return updatedCx;
-      }
-      return cx;
+      if (!distributedAmt) return cx;
+      const updatedCx = { ...cx, saldo_atual: Math.round((cx.saldo_atual - distributedAmt) * 100) / 100 };
+      void db.putItem('caixinhas', updatedCx);
+      void enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
+      return updatedCx;
     });
     setCaixinhas(updatedCaixinhas);
 
-    // 4. Delete the Venda
+    // 4. Revert the account that received the sale, without clamping away money.
+    if (original.conta_id) {
+      const account = contasBancarias.find(c => c.id === original.conta_id);
+      if (account) {
+        const updatedAccount = {
+          ...account,
+          saldo_atual: Math.round((account.saldo_atual - original.valor_recebido) * 100) / 100
+        };
+        await db.putItem('contas_bancarias', updatedAccount);
+        await enqueueMutation({ type: 'conta_bancaria', action: 'update', data: updatedAccount });
+        setContasBancarias(prev => prev.map(c => c.id === account.id ? updatedAccount : c));
+      }
+    }
+
+    // 5. Revert an allocation made to a custom goal.
+    if (original.meta_id && original.meta_valor_alocado && original.meta_valor_alocado > 0) {
+      const meta = metaItems.find(m => m.id === original.meta_id);
+      if (meta) {
+        const updatedMeta = {
+          ...meta,
+          valor_atual: Math.max(0, Math.round((meta.valor_atual - original.meta_valor_alocado) * 100) / 100)
+        };
+        await db.putItem('meta_items', updatedMeta);
+        await enqueueMutation({ type: 'meta_item', action: 'update', data: updatedMeta });
+        setMetaItems(prev => prev.map(m => m.id === meta.id ? updatedMeta : m));
+      }
+    }
+
+    // 6. Delete the sale only after all local reversals have been persisted.
     await db.deleteItem('vendas', id);
-    await db.addToSyncQueue({ type: 'venda', action: 'delete', data: original });
+    await enqueueMutation({ type: 'venda', action: 'delete', data: original });
     setVendas(prev => prev.filter(v => v.id !== id));
 
     setSyncStatus('pending');
-    syncWithServer();
+    void syncWithServer();
   }
 
   // CORE BUSINESS ACTION: ADD EXPENSE (SUBTRACT BALANCES FROM SOURCE POCKET)
@@ -1363,33 +1514,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: despesaId,
       user_id: userId,
       sync_status: 'pending',
-      criado_em: new Date().toISOString()
+      criado_em: new Date().toISOString(),
+      distribuicao_caixinhas: {},
+      distribuicao_contas: {}
     };
 
     // Subtract expense value from selected Caixinha balance
     let updatedCaixinhas = caixinhas;
     if (despesaData.caixinha_id === 'todas') {
       const totalBal = caixinhas.reduce((acc, c) => acc + c.saldo_atual, 0);
-      updatedCaixinhas = caixinhas.map(cx => {
-        let deduct = 0;
-        if (totalBal > 0) {
-          deduct = (cx.saldo_atual / totalBal) * despesaData.valor;
-        } else {
-          deduct = despesaData.valor / (caixinhas.length || 1);
-        }
+      let allocated = 0;
+      updatedCaixinhas = caixinhas.map((cx, index) => {
+        const deduct = index === caixinhas.length - 1
+          ? Math.round((despesaData.valor - allocated) * 100) / 100
+          : totalBal > 0
+            ? Math.round((despesaData.valor * (cx.saldo_atual / totalBal)) * 100) / 100
+            : Math.round((despesaData.valor / (caixinhas.length || 1)) * 100) / 100;
+        allocated += deduct;
+        newDespesa.distribuicao_caixinhas![cx.id] = deduct;
         const newBalance = Math.round((cx.saldo_atual - deduct) * 100) / 100;
         const updatedCx = { ...cx, saldo_atual: newBalance };
-        db.putItem('caixinhas', updatedCx);
-        db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+        void db.putItem('caixinhas', updatedCx);
+        void enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
         return updatedCx;
       });
     } else {
       updatedCaixinhas = caixinhas.map(cx => {
         if (cx.id === despesaData.caixinha_id) {
-          const newBalance = Math.round((cx.saldo_atual - despesaData.valor) * 100) / 100;
+          const deduct = despesaData.valor;
+          newDespesa.distribuicao_caixinhas![cx.id] = deduct;
+          const newBalance = Math.round((cx.saldo_atual - deduct) * 100) / 100;
           const updatedCx = { ...cx, saldo_atual: newBalance };
-          db.putItem('caixinhas', updatedCx);
-          db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+          void db.putItem('caixinhas', updatedCx);
+          void enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
           return updatedCx;
         }
         return cx;
@@ -1403,10 +1560,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const suppliersWithPending = fornecedores.filter(f => f.valor_pendente > 0);
       if (suppliersWithPending.length > 0) {
         const s = suppliersWithPending[0];
-        const newPending = Math.max(0, Math.round((s.valor_pendente - despesaData.valor) * 100) / 100);
+        const paidToSupplier = Math.min(s.valor_pendente, despesaData.valor);
+        const newPending = Math.max(0, Math.round((s.valor_pendente - paidToSupplier) * 100) / 100);
         const updatedSupplier = { ...s, valor_pendente: newPending };
+        newDespesa.fornecedor_id_pagamento = s.id;
+        newDespesa.fornecedor_valor_pago = paidToSupplier;
         await db.putItem('fornecedores', updatedSupplier);
-        await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updatedSupplier });
+        await enqueueMutation({ type: 'fornecedor', action: 'update', data: updatedSupplier });
         setFornecedores(prev => prev.map(f => f.id === s.id ? updatedSupplier : f));
       }
     }
@@ -1420,18 +1580,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const totalBankBal = targetList.reduce((acc, c) => acc + c.saldo_atual, 0);
         for (const targetAcc of targetList) {
           let deduct = 0;
-          if (totalBankBal > 0) {
-            deduct = (targetAcc.saldo_atual / totalBankBal) * despesaData.valor;
+          if (targetList.indexOf(targetAcc) === targetList.length - 1) {
+            deduct = Math.round((despesaData.valor - targetList.slice(0, -1).reduce((sum, acc) => sum + (newDespesa.distribuicao_contas?.[acc.id] || 0), 0)) * 100) / 100;
+          } else if (totalBankBal > 0) {
+            deduct = Math.round((targetAcc.saldo_atual / totalBankBal) * despesaData.valor * 100) / 100;
           } else {
-            deduct = despesaData.valor / (targetList.length || 1);
+            deduct = Math.round((despesaData.valor / (targetList.length || 1)) * 100) / 100;
           }
-          const newAccBal = Math.max(0, Math.round((targetAcc.saldo_atual - deduct) * 100) / 100);
+          newDespesa.distribuicao_contas![targetAcc.id] = deduct;
+          const newAccBal = Math.round((targetAcc.saldo_atual - deduct) * 100) / 100;
           await editContaBancaria(targetAcc.id, { saldo_atual: newAccBal });
         }
       } else {
-        const targetAcc = contasBancarias.find(c => c.id === despesaData.conta_id);
-        if (targetAcc) {
-          const newAccBal = Math.max(0, Math.round((targetAcc.saldo_atual - despesaData.valor) * 100) / 100);
+          const targetAcc = contasBancarias.find(c => c.id === despesaData.conta_id);
+          if (targetAcc) {
+            newDespesa.distribuicao_contas![targetAcc.id] = despesaData.valor;
+            const newAccBal = Math.round((targetAcc.saldo_atual - despesaData.valor) * 100) / 100;
           const updates: Partial<ContaBancaria> = { saldo_atual: newAccBal };
 
           if (targetAcc.status_liberdade === 'emergencia' || despesaData.motivo_emergencia) {
@@ -1442,7 +1606,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 data: new Date().toISOString(),
                 valor: despesaData.valor,
                 motivo: despesaData.motivo_emergencia || 'Retirada de Emergência em Saída',
-                despesa_descricao: despesaData.descricao
+                despesa_descricao: despesaData.descricao,
+                despesa_id: newDespesa.id
               }
             ];
             updates.historico_retiradas = novoHist;
@@ -1455,7 +1620,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Save Despesa to Local DB & queue sync
     await db.putItem('despesas', newDespesa);
-    await db.addToSyncQueue({ type: 'despesa', action: 'create', data: newDespesa });
+    await enqueueMutation({ type: 'despesa', action: 'create', data: newDespesa });
 
     // Update React states
     setCaixinhas(updatedCaixinhas);
@@ -1475,11 +1640,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function deleteDespesa(id: string) {
     const original = despesas.find(d => d.id === id);
     if (!original) return;
+
+    // Restore pocket balances using the exact distribution stored with the expense.
+    const pocketDistribution = original.distribuicao_caixinhas || {
+      [original.caixinha_id]: original.valor
+    };
+    const updatedCaixinhas = caixinhas.map(cx => {
+      const restored = pocketDistribution[cx.id] || 0;
+      if (!restored) return cx;
+      const updatedCx = { ...cx, saldo_atual: Math.round((cx.saldo_atual + restored) * 100) / 100 };
+      void db.putItem('caixinhas', updatedCx);
+      void enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
+      return updatedCx;
+    });
+    setCaixinhas(updatedCaixinhas);
+
+    // Restore account balances and remove the emergency-history entries created by this expense.
+    const accountDistribution = original.distribuicao_contas || (original.conta_id ? {
+      [original.conta_id]: original.valor
+    } : {});
+    const updatedContas = contasBancarias.map(account => {
+      const restored = accountDistribution[account.id] || 0;
+      const history = (account.historico_retiradas || []).filter(item => item.despesa_id !== original.id);
+      if (!restored && history.length === (account.historico_retiradas || []).length) return account;
+      const updatedAccount = {
+        ...account,
+        saldo_atual: Math.round((account.saldo_atual + restored) * 100) / 100,
+        historico_retiradas: history
+      };
+      void db.putItem('contas_bancarias', updatedAccount);
+      void enqueueMutation({ type: 'conta_bancaria', action: 'update', data: updatedAccount });
+      return updatedAccount;
+    });
+    setContasBancarias(updatedContas);
+
+    // Restore the exact amount paid against a supplier, when this metadata exists.
+    if (original.fornecedor_id_pagamento && original.fornecedor_valor_pago) {
+      const supplier = fornecedores.find(f => f.id === original.fornecedor_id_pagamento);
+      if (supplier) {
+        const updatedSupplier = {
+          ...supplier,
+          valor_pendente: Math.round((supplier.valor_pendente + original.fornecedor_valor_pago) * 100) / 100
+        };
+        await db.putItem('fornecedores', updatedSupplier);
+        await enqueueMutation({ type: 'fornecedor', action: 'update', data: updatedSupplier });
+        setFornecedores(prev => prev.map(f => f.id === supplier.id ? updatedSupplier : f));
+      }
+    }
+
     setDespesas(prev => prev.filter(d => d.id !== id));
     await db.deleteItem('despesas', id);
-    await db.addToSyncQueue({ type: 'despesa', action: 'delete', data: original });
+    await enqueueMutation({ type: 'despesa', action: 'delete', data: original });
     setSyncStatus('pending');
-    syncWithServer();
+    void syncWithServer();
   }
 
   // Custom Goals (Metas de Objetivos / Compras) Management
@@ -1495,7 +1708,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setMetaItems(prev => [newMeta, ...prev]);
     await db.putItem('meta_items', newMeta);
-    await db.addToSyncQueue({ type: 'meta_item', action: 'create', data: newMeta });
+    await enqueueMutation({ type: 'meta_item', action: 'create', data: newMeta });
     
     triggerToast(
       'Nova Meta Criada! 🎯',
@@ -1514,7 +1727,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setMetaItems(prev => prev.map(m => m.id === id ? updated : m));
     await db.putItem('meta_items', updated);
-    await db.addToSyncQueue({ type: 'meta_item', action: 'update', data: updated });
+    await enqueueMutation({ type: 'meta_item', action: 'update', data: updated });
     triggerToast('Meta Atualizada! ✏️', `A meta "${updated.nome}" foi atualizada.`, 'info');
     setSyncStatus('pending');
     syncWithServer();
@@ -1525,7 +1738,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const target = metaItems.find(m => m.id === id);
     setMetaItems(prev => prev.filter(m => m.id !== id));
     await db.deleteItem('meta_items', id);
-    await db.addToSyncQueue({ type: 'meta_item', action: 'delete', data: { id } });
+    await enqueueMutation({ type: 'meta_item', action: 'delete', data: { id } });
     if (target) {
       triggerToast('Meta Eliminada', `A meta "${target.nome}" foi removida.`, 'warning');
     }
@@ -1543,7 +1756,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     setMetaItems(prev => prev.map(m => m.id === id ? updated : m));
     await db.putItem('meta_items', updated);
-    await db.addToSyncQueue({ type: 'meta_item', action: 'update', data: updated });
+    await enqueueMutation({ type: 'meta_item', action: 'update', data: updated });
     
     const pct = Math.min(100, Math.round((newCurrent / target.valor_alvo) * 100));
     triggerToast(
@@ -1570,7 +1783,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     await db.putItem('produtos', newProduto);
-    await db.addToSyncQueue({ type: 'produto', action: 'create', data: newProduto });
+    await enqueueMutation({ type: 'produto', action: 'create', data: newProduto });
     setProdutos(prev => [...prev, newProduto]);
 
     setSyncStatus('pending');
@@ -1590,7 +1803,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     await db.putItem('produtos', updated);
-    await db.addToSyncQueue({ type: 'produto', action: 'update', data: updated });
+    await enqueueMutation({ type: 'produto', action: 'update', data: updated });
     setProdutos(prev => prev.map(p => p.id === id ? updated : p));
 
     setSyncStatus('pending');
@@ -1609,7 +1822,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     await db.putItem('fornecedores', newFornecedor);
-    await db.addToSyncQueue({ type: 'fornecedor', action: 'create', data: newFornecedor });
+    await enqueueMutation({ type: 'fornecedor', action: 'create', data: newFornecedor });
     setFornecedores(prev => [...prev, newFornecedor]);
 
     setSyncStatus('pending');
@@ -1622,7 +1835,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updated = { ...original, ...updates };
     await db.putItem('fornecedores', updated);
-    await db.addToSyncQueue({ type: 'fornecedor', action: 'update', data: updated });
+    await enqueueMutation({ type: 'fornecedor', action: 'update', data: updated });
     setFornecedores(prev => prev.map(f => f.id === id ? updated : f));
 
     setSyncStatus('pending');
@@ -1641,7 +1854,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     await db.putItem('zonas_entrega', newZona);
-    await db.addToSyncQueue({ type: 'zona', action: 'create', data: newZona });
+    await enqueueMutation({ type: 'zona', action: 'create', data: newZona });
     setZonasEntrega(prev => [...prev, newZona]);
 
     setSyncStatus('pending');
@@ -1654,7 +1867,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updated = { ...original, ...updates };
     await db.putItem('zonas_entrega', updated);
-    await db.addToSyncQueue({ type: 'zona', action: 'update', data: updated });
+    await enqueueMutation({ type: 'zona', action: 'update', data: updated });
     setZonasEntrega(prev => prev.map(z => z.id === id ? updated : z));
 
     setSyncStatus('pending');
@@ -1689,7 +1902,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     await db.putItem('caixinhas', newCx);
-    await db.addToSyncQueue({ type: 'caixinha', action: 'create', data: newCx });
+    await enqueueMutation({ type: 'caixinha', action: 'create', data: newCx });
     setCaixinhas(prev => [...prev, newCx]);
 
     setSyncStatus('pending');
@@ -1702,7 +1915,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updated = { ...original, ...updates };
     await db.putItem('caixinhas', updated);
-    await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updated });
+    await enqueueMutation({ type: 'caixinha', action: 'update', data: updated });
     setCaixinhas(prev => prev.map(c => c.id === id ? updated : c));
 
     setSyncStatus('pending');
@@ -1714,7 +1927,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!original || original.tipo !== 'personalizado') return; // cannot delete default caixinhas
 
     await db.deleteItem('caixinhas', id);
-    await db.addToSyncQueue({ type: 'caixinha', action: 'delete', data: original });
+    await enqueueMutation({ type: 'caixinha', action: 'delete', data: original });
     setCaixinhas(prev => prev.filter(c => c.id !== id));
 
     setSyncStatus('pending');
@@ -1724,46 +1937,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function retirarDaCaixinha(caixinhaId: string, valor: number, motivo?: string, contaId?: string) {
     if (!profile || valor <= 0) return;
 
-    let updatedList = [...caixinhas];
-
-    if (caixinhaId === 'todas') {
-      const totalActual = caixinhas.reduce((acc, c) => acc + c.saldo_atual, 0);
-      if (totalActual > 0) {
-        updatedList = await Promise.all(caixinhas.map(async (cx) => {
-          const ratio = cx.saldo_atual / totalActual;
-          const portionToDeduct = Math.min(cx.saldo_atual, Math.round(valor * ratio * 100) / 100);
-          const newBal = Math.max(0, Math.round((cx.saldo_atual - portionToDeduct) * 100) / 100);
-          const updatedCx = { ...cx, saldo_atual: newBal };
-          await db.putItem('caixinhas', updatedCx);
-          await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
-          return updatedCx;
-        }));
-      }
-    } else {
-      const cx = caixinhas.find(c => c.id === caixinhaId);
-      if (cx) {
-        const newBal = Math.max(0, Math.round((cx.saldo_atual - valor) * 100) / 100);
-        const updatedCx = { ...cx, saldo_atual: newBal };
-        await db.putItem('caixinhas', updatedCx);
-        await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
-        updatedList = caixinhas.map(c => c.id === caixinhaId ? updatedCx : c);
-      }
+    const positivePockets = caixinhas.filter(c => c.saldo_atual > 0);
+    const totalActual = positivePockets.reduce((acc, c) => acc + c.saldo_atual, 0);
+    if (caixinhaId === 'todas' && totalActual < valor) {
+      throw new Error('Saldo insuficiente nas caixinhas para esta retirada.');
     }
+    const selected = caixinhas.find(c => c.id === caixinhaId);
+    if (selected && selected.saldo_atual < valor) {
+      throw new Error('Saldo insuficiente na caixinha seleccionada.');
+    }
+    if (contaId) {
+      const accountTargets = contaId === 'todas'
+        ? contasBancarias.filter(c => c.status_liberdade !== 'emergencia')
+        : contasBancarias.filter(c => c.id === contaId);
+      const usableTargets = accountTargets.length > 0 ? accountTargets : contasBancarias;
+      const accountTotal = usableTargets.reduce((sum, account) => sum + account.saldo_atual, 0);
+      if (accountTotal < valor) throw new Error('Saldo insuficiente na conta seleccionada.');
+    }
+
+    let allocated = 0;
+    const positiveIds = new Set(positivePockets.map(c => c.id));
+    const updatedList = caixinhas.map(cx => {
+      const shouldUpdate = caixinhaId === 'todas' ? positiveIds.has(cx.id) : cx.id === caixinhaId;
+      if (!shouldUpdate) return cx;
+      const positiveIndex = positivePockets.findIndex(item => item.id === cx.id);
+      const portion = caixinhaId === 'todas'
+        ? positiveIndex === positivePockets.length - 1
+          ? Math.round((valor - allocated) * 100) / 100
+          : Math.round((valor * (cx.saldo_atual / totalActual)) * 100) / 100
+        : valor;
+      allocated += portion;
+      const updatedCx = { ...cx, saldo_atual: Math.round((cx.saldo_atual - portion) * 100) / 100 };
+      void db.putItem('caixinhas', updatedCx);
+      void enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
+      return updatedCx;
+    });
 
     setCaixinhas(updatedList);
-
-    if (contaId) {
-      await retirarDaConta(contaId, valor, motivo);
-    }
+    if (contaId) await retirarDaConta(contaId, valor, motivo);
 
     const curr = profile.moeda || 'MT';
     triggerToast(
-      'Levantamento Realizado! 💸',
+      'Levantamento Realizado!',
       `Subtraído ${valor.toLocaleString()} ${curr}${motivo ? ` (${motivo})` : ''}`,
       'info'
     );
     setSyncStatus('pending');
-    syncWithServer();
+    void syncWithServer();
   }
 
   async function ajustarSaldoCaixinha(caixinhaId: string, novoSaldo: number) {
@@ -1773,7 +1993,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const val = Math.max(0, Math.round(novoSaldo * 100) / 100);
     const updatedCx = { ...cx, saldo_atual: val };
     await db.putItem('caixinhas', updatedCx);
-    await db.addToSyncQueue({ type: 'caixinha', action: 'update', data: updatedCx });
+    await enqueueMutation({ type: 'caixinha', action: 'update', data: updatedCx });
     setCaixinhas(prev => prev.map(c => c.id === caixinhaId ? updatedCx : c));
     
     const curr = profile.moeda || 'MT';
@@ -1793,7 +2013,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       criado_em: new Date().toISOString()
     };
     await db.putItem('contas_bancarias', newConta);
-    await db.addToSyncQueue({ type: 'conta_bancaria', action: 'create', data: newConta });
+    await enqueueMutation({ type: 'conta_bancaria', action: 'create', data: newConta });
     setContasBancarias(prev => [...prev, newConta]);
     setSyncStatus('pending');
     syncWithServer();
@@ -1805,7 +2025,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!conta) return;
     const updated = { ...conta, ...updates };
     await db.putItem('contas_bancarias', updated);
-    await db.addToSyncQueue({ type: 'conta_bancaria', action: 'update', data: updated });
+    await enqueueMutation({ type: 'conta_bancaria', action: 'update', data: updated });
     setContasBancarias(prev => prev.map(c => c.id === id ? updated : c));
     setSyncStatus('pending');
     syncWithServer();
@@ -1816,7 +2036,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const conta = contasBancarias.find(c => c.id === id);
     if (!conta) return;
     await db.deleteItem('contas_bancarias', id);
-    await db.addToSyncQueue({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: profile.id } });
+    await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: profile.id } });
     setContasBancarias(prev => prev.filter(c => c.id !== id));
     setSyncStatus('pending');
     syncWithServer();
@@ -1824,26 +2044,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   async function retirarDaConta(contaId: string, valor: number, motivo?: string) {
     if (!profile || valor <= 0) return;
-    const conta = contasBancarias.find(c => c.id === contaId);
-    if (!conta) return;
-    const novoSaldo = Math.max(0, Math.round((conta.saldo_atual - valor) * 100) / 100);
 
-    const updates: Partial<ContaBancaria> = { saldo_atual: novoSaldo };
-    if (motivo || conta.status_liberdade === 'emergencia') {
-      updates.historico_retiradas = [
-        ...(conta.historico_retiradas || []),
-        {
-          id: crypto.randomUUID(),
-          data: new Date().toISOString(),
-          valor,
-          motivo: motivo || 'Retirada Direta',
-        }
-      ];
-    }
+    const targets = contaId === 'todas'
+      ? contasBancarias.filter(c => c.status_liberdade !== 'emergencia')
+      : contasBancarias.filter(c => c.id === contaId);
+    const usableTargets = targets.length > 0 ? targets : contasBancarias;
+    const totalBalance = usableTargets.reduce((sum, account) => sum + account.saldo_atual, 0);
+    if (totalBalance < valor) throw new Error('Saldo insuficiente para esta retirada.');
 
-    await editContaBancaria(contaId, updates);
+    let allocated = 0;
+    const updatedAccounts = contasBancarias.map(account => {
+      if (!usableTargets.some(target => target.id === account.id)) return account;
+      const index = usableTargets.findIndex(target => target.id === account.id);
+      const portion = index === usableTargets.length - 1
+        ? Math.round((valor - allocated) * 100) / 100
+        : Math.round((valor * (account.saldo_atual / totalBalance)) * 100) / 100;
+      allocated += portion;
+      const updates: Partial<ContaBancaria> = {
+        saldo_atual: Math.round((account.saldo_atual - portion) * 100) / 100
+      };
+      if (motivo || account.status_liberdade === 'emergencia') {
+        updates.historico_retiradas = [
+          ...(account.historico_retiradas || []),
+          {
+            id: crypto.randomUUID(),
+            data: new Date().toISOString(),
+            valor: portion,
+            motivo: motivo || 'Retirada Direta'
+          }
+        ];
+      }
+      const updated = { ...account, ...updates };
+      void db.putItem('contas_bancarias', updated);
+      void enqueueMutation({ type: 'conta_bancaria', action: 'update', data: updated });
+      return updated;
+    });
+    setContasBancarias(updatedAccounts);
     const curr = profile.moeda || 'MT';
-    triggerToast('Levantamento de Conta! 💸', `Retirado ${valor.toLocaleString()} ${curr} de ${conta.nome}${motivo ? ` (${motivo})` : ''}`, 'info');
+    triggerToast('Levantamento de Conta!', `Retirado ${valor.toLocaleString()} ${curr}`, 'info');
+    setSyncStatus('pending');
+    void syncWithServer();
   }
 
   async function transferirEntreContas(deContaId: string, paraContaId: string, valor: number) {
@@ -1851,14 +2091,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const deConta = contasBancarias.find(c => c.id === deContaId);
     const paraConta = contasBancarias.find(c => c.id === paraContaId);
     if (!deConta || !paraConta) return;
+    if (deConta.saldo_atual < valor) throw new Error('Saldo insuficiente na conta de origem.');
 
-    const deNovoSaldo = Math.max(0, Math.round((deConta.saldo_atual - valor) * 100) / 100);
-    const paraNovoSaldo = Math.round((paraConta.saldo_atual + valor) * 100) / 100;
-
-    await editContaBancaria(deContaId, { saldo_atual: deNovoSaldo });
-    await editContaBancaria(paraContaId, { saldo_atual: paraNovoSaldo });
+    const deAtualizada = { ...deConta, saldo_atual: Math.round((deConta.saldo_atual - valor) * 100) / 100 };
+    const paraAtualizada = { ...paraConta, saldo_atual: Math.round((paraConta.saldo_atual + valor) * 100) / 100 };
+    await db.putItem('contas_bancarias', deAtualizada);
+    await enqueueMutation({ type: 'conta_bancaria', action: 'update', data: deAtualizada });
+    await db.putItem('contas_bancarias', paraAtualizada);
+    await enqueueMutation({ type: 'conta_bancaria', action: 'update', data: paraAtualizada });
+    setContasBancarias(prev => prev.map(c => c.id === deConta.id ? deAtualizada : c.id === paraConta.id ? paraAtualizada : c));
     const curr = profile.moeda || 'MT';
-    triggerToast('Transferência Concluída! 🔄', `Transferido ${valor.toLocaleString()} ${curr} de ${deConta.nome} para ${paraConta.nome}`, 'success');
+    triggerToast('Transferência Concluída!', `Transferido ${valor.toLocaleString()} ${curr} de ${deConta.nome} para ${paraConta.nome}`, 'success');
+    setSyncStatus('pending');
+    void syncWithServer();
   }
 
   // Campanhas management
@@ -1873,7 +2118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     await db.putItem('campanhas', newCampanha);
-    await db.addToSyncQueue({ type: 'campanha', action: 'create', data: newCampanha });
+    await enqueueMutation({ type: 'campanha', action: 'create', data: newCampanha });
     setCampanhas(prev => [newCampanha, ...prev].sort((a,b) => b.data.localeCompare(a.data)));
 
     const currencySymbol = newCampanha.orcamento_usd ? '$' : (profile.moeda || 'MT');
@@ -1889,7 +2134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updated = { ...original, ...updates };
     await db.putItem('campanhas', updated);
-    await db.addToSyncQueue({ type: 'campanha', action: 'update', data: updated });
+    await enqueueMutation({ type: 'campanha', action: 'update', data: updated });
     setCampanhas(prev => prev.map(c => c.id === id ? updated : c).sort((a,b) => b.data.localeCompare(a.data)));
 
     const currencySymbol = updated.orcamento_usd ? '$' : (profile.moeda || 'MT');
@@ -1904,7 +2149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!original) return;
 
     await db.deleteItem('campanhas', id);
-    await db.addToSyncQueue({ type: 'campanha', action: 'delete', data: original });
+    await enqueueMutation({ type: 'campanha', action: 'delete', data: original });
     setCampanhas(prev => prev.filter(c => c.id !== id));
 
     setSyncStatus('pending');
@@ -1923,7 +2168,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     await db.putItem('despesas_recorrentes', newDR);
-    await db.addToSyncQueue({ type: 'despesa_recorrente', action: 'create', data: newDR });
+    await enqueueMutation({ type: 'despesa_recorrente', action: 'create', data: newDR });
     setDespesasRecorrentes(prev => [...prev, newDR]);
 
     setSyncStatus('pending');
@@ -1936,7 +2181,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const updated = { ...original, ...updates };
     await db.putItem('despesas_recorrentes', updated);
-    await db.addToSyncQueue({ type: 'despesa_recorrente', action: 'update', data: updated });
+    await enqueueMutation({ type: 'despesa_recorrente', action: 'update', data: updated });
     setDespesasRecorrentes(prev => prev.map(dr => dr.id === id ? updated : dr));
 
     setSyncStatus('pending');
@@ -1948,7 +2193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!original) return;
 
     await db.deleteItem('despesas_recorrentes', id);
-    await db.addToSyncQueue({ type: 'despesa_recorrente', action: 'delete', data: original });
+    await enqueueMutation({ type: 'despesa_recorrente', action: 'delete', data: original });
     setDespesasRecorrentes(prev => prev.filter(dr => dr.id !== id));
 
     setSyncStatus('pending');

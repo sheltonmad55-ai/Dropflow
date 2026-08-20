@@ -106,33 +106,15 @@ export default function CaixinhasView() {
 
     try {
       if (retiradaCaixinhaId === 'todas') {
-        // Distribute subtraction across all caixinhas proportionally to their current balance
-        const total = caixinhas.reduce((acc, c) => acc + c.saldo_atual, 0);
-        if (total > 0) {
-          for (const c of caixinhas) {
-            if (c.saldo_atual > 0) {
-              const valorProporcional = Math.round((c.saldo_atual / total) * valor * 100) / 100;
-              if (valorProporcional > 0) {
-                await retirarDaCaixinha(c.id, valorProporcional, retiradaMotivo || 'Retirada Global');
-              }
-            }
-          }
-        }
+        // Keep the global withdrawal as one atomic context operation.
+        await retirarDaCaixinha('todas', valor, retiradaMotivo || 'Retirada Global');
       } else {
         await retirarDaCaixinha(retiradaCaixinhaId, valor, retiradaMotivo, retiradaContaId !== 'todas' ? retiradaContaId : undefined);
       }
 
       // Bank account deduction
       if (retiradaContaId === 'todas') {
-        const totalBank = contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0);
-        for (const cb of contasBancarias) {
-          if (cb.saldo_atual > 0 && totalBank > 0) {
-            const propBank = Math.round((cb.saldo_atual / totalBank) * valor * 100) / 100;
-            if (propBank > 0) {
-              await retirarDaConta(cb.id, propBank, retiradaMotivo || 'Retirada Global');
-            }
-          }
-        }
+        await retirarDaConta('todas', valor, retiradaMotivo || 'Retirada Global');
       } else if (retiradaCaixinhaId === 'todas') {
         await retirarDaConta(retiradaContaId, valor, retiradaMotivo || 'Retirada Global');
       }
@@ -266,12 +248,11 @@ export default function CaixinhasView() {
         updates.percentual_padrao = editCxModo === 'percentual' ? editCxPercentualPersonalizado : 0;
       }
 
-      await editCaixinha(editingCx.id, updates);
-
       const newSal = parseFloat(editCxSaldoAtual);
       if (!isNaN(newSal) && newSal !== editingCx.saldo_atual) {
-        await ajustarSaldoCaixinha(editingCx.id, newSal);
+        updates.saldo_atual = Math.max(0, Math.round(newSal * 100) / 100);
       }
+      await editCaixinha(editingCx.id, updates);
 
       if (editingCx.tipo === 'lucro') {
         if (editCxModo === 'percentual') {

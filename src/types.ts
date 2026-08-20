@@ -98,6 +98,7 @@ export interface RetiradaHistoricoItem {
   valor: number;
   motivo: string;
   despesa_descricao?: string;
+  despesa_id?: string;
 }
 
 export interface ContaBancaria {
@@ -163,6 +164,7 @@ export interface Venda {
   meta_valor_alocado?: number;  // Valor em MT alocado para a meta
   conta_id?: string;            // ID da Conta Bancária / Carteira onde o valor foi depositado
   quantidade?: number;
+  custo_compra_total?: number;
   preco_unitario?: number;
   desconto?: number;
   status?: 'pendente' | 'entregue';
@@ -180,6 +182,10 @@ export interface Despesa {
   motivo_emergencia?: string;  // Motivo caso tenha retirado de conta com status 'emergencia'
   descricao: string;
   data: string; // YYYY-MM-DD
+  distribuicao_caixinhas?: { [caixinhaId: string]: number };
+  distribuicao_contas?: { [contaId: string]: number };
+  fornecedor_id_pagamento?: string;
+  fornecedor_valor_pago?: number;
   sync_status: 'synced' | 'pending';
   criado_em: string;
 }
