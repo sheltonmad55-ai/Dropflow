@@ -130,7 +130,7 @@ export default function AdminView() {
             <Shield className="w-5 h-5 text-indigo-600" />
             <span>Painel Administrativo</span>
           </h2>
-          <p className="text-[10px] text-slate-500">Gestão global do ecossistema DroopFlow</p>
+          <p className="text-[10px] text-slate-500">Gestão global do ecossistema DropFlow</p>
         </div>
         <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
           Acesso Total
@@ -286,7 +286,7 @@ export default function AdminView() {
               <label className="text-[9px] font-black text-slate-400 uppercase block">Link da Novidade / Ação (Opcional)</label>
               <input
                 type="url"
-                placeholder="Ex: https://droopflow.com/novas-metas"
+                placeholder="Ex: https://dropflow-lake.vercel.app/novas-metas"
                 value={announcementLink}
                 onChange={e => setAnnouncementLink(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"

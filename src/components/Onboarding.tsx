@@ -59,13 +59,13 @@ export default function Onboarding() {
           <div className="w-12 h-12 rounded-2xl overflow-hidden border border-slate-200/50 shadow-md flex items-center justify-center bg-white" id="logo_icon">
             <img 
               src={dropflowLogo} 
-              alt="DroopFlow Logo" 
+              alt="DropFlow Logo"
               className="w-full h-full object-cover" 
               referrerPolicy="no-referrer"
             />
           </div>
           <span className="text-2xl font-black tracking-tight text-slate-900 font-display" id="logo_text">
-            DroopFlow
+            DropFlow
           </span>
         </div>
 
@@ -98,7 +98,7 @@ export default function Onboarding() {
           {slide === 1 && (
             <div className="bg-white rounded-[32px] p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.03)] border border-slate-100 space-y-6 animate-fade-in" id="slide_1">
               <h2 className="text-xl font-bold text-slate-900 text-center leading-snug">
-                Como funciona o DroopFlow?
+                Como funciona o DropFlow?
               </h2>
               
               <div className="space-y-4" id="concept_cards">
@@ -151,7 +151,7 @@ export default function Onboarding() {
                   Iniciar Sessão
                 </h2>
                 <p className="text-slate-500 text-xs leading-relaxed">
-                  Introduz o <strong className="text-slate-800 dark:text-slate-200">mesmo email</strong> que usaste ao efetuar o pagamento para aceder à tua conta do DroopFlow.
+                  Introduz o <strong className="text-slate-800 dark:text-slate-200">mesmo email</strong> que usaste ao efetuar o pagamento para aceder à tua conta do DropFlow.
                 </p>
               </div>
 

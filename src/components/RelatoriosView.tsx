@@ -589,7 +589,7 @@ export default function RelatoriosView() {
             </div>
 
             <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
-              Nota: O DroopFlow irá verificar todas as vendas, taxas de envio e despesas operacionais realizadas no período selecionado, calcular as margens exatas de lucro líquido e atualizar o seu registo de metas.
+              Nota: O DropFlow irá verificar todas as vendas, taxas de envio e despesas operacionais realizadas no período selecionado, calcular as margens exatas de lucro líquido e atualizar o seu registo de metas.
             </p>
 
             {reportFeedback && (

@@ -506,7 +506,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
               </h2>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              {profile?.plano === 'trial' ? 'Período experimental grátis' : 'Plano DroopFlow Pro Ativo'}
+              {profile?.plano === 'trial' ? 'Período experimental grátis' : 'Plano DropFlow Pro Activo'}
             </p>
           </div>
 
@@ -1370,7 +1370,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                 </div>
                 <div className="text-left">
                   <h3 className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">Transparência de Métricas & ROI</h3>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Entenda detalhadamente como os seus lucros e retorno são calculados no DroopFlow</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Entenda detalhadamente como os seus lucros e retorno são calculados no DropFlow</p>
                 </div>
               </div>
               <button 
@@ -1387,7 +1387,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
               
               {/* Introduction */}
               <p className="text-slate-500 dark:text-slate-400">
-                No dropshipping, controlar a margem real de cada venda é o fator de sucesso número um. O DroopFlow divide as suas métricas em dois conceitos fundamentais para que saiba com precisão para onde vai cada cêntimo/metical.
+                No dropshipping, controlar a margem real de cada venda é o fator de sucesso número um. O DropFlow divide as suas métricas em dois conceitos fundamentais para que saiba com precisão para onde vai cada cêntimo/metical.
               </p>
 
               {/* Concept 1: Balance (Cashflow) */}

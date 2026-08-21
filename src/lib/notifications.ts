@@ -146,7 +146,7 @@ export function checkAndTriggerDailyGoalReminder(vendas: Venda[], profile: Profi
     const percent = Math.round((salesToday / meta) * 100);
     
     sendNotification(
-      'DroopFlow - Lembrete de Meta Diária 🚀',
+      'DropFlow - Lembrete de Meta Diária 🚀',
       `Você faturou ${salesToday.toLocaleString()} ${currencySymbol} hoje (${percent}% da sua meta de ${meta.toLocaleString()} ${currencySymbol}). Ainda restam ${(meta - salesToday).toLocaleString()} ${currencySymbol}! Bora vender!`
     );
 
