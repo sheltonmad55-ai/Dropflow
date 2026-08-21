@@ -1,6 +1,8 @@
 {
   "short_name": "DropFlow",
   "name": "DropFlow - Gestão Financeira para Dropshippers",
+  "id": "/",
+  "description": "Gestão financeira simples para o seu negócio de dropshipping.",
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -20,5 +22,5 @@
   "background_color": "#090d16",
   "theme_color": "#10b981",
   "display": "standalone",
-  "orientation": "portrait"
+  "orientation": "any"
 }

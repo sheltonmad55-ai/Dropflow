@@ -20,6 +20,8 @@ sizes = {
     'favicon-32.png': 32,
     'favicon-48.png': 48,
     'apple-touch-icon.png': 180,
+    'apple-touch-icon-167.png': 167,
+    'apple-touch-icon-152.png': 152,
     'icon-192.png': 192,
     'icon-512.png': 512,
 }

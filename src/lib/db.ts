@@ -8,6 +8,13 @@ import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, Sy
 const DB_NAME = 'DroopFlowDB';
 const DB_VERSION = 5;
 
+function createQueueId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `queue-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -115,7 +122,7 @@ export function clearStore(storeName: string): Promise<void> {
 export function addToSyncQueue(item: Omit<SyncQueueItem, 'id' | 'timestamp'>): Promise<void> {
   const queueItem: SyncQueueItem = {
     ...item,
-    id: crypto.randomUUID(),
+    id: createQueueId(),
     timestamp: Date.now()
   };
   return putItem('sync_queue', queueItem);

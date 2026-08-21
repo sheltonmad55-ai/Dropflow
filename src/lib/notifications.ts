@@ -5,12 +5,30 @@
 
 import { Profile, Campanha, Venda } from '../types.ts';
 
+function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function isHomeScreenApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+}
+
 /**
  * Solicita permissão para notificações do navegador e ServiceWorker.
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     console.warn('Este navegador não suporta notificações de desktop/telemóvel.');
+    return 'denied';
+  }
+
+  // No iOS/iPadOS, Web Push is available to Home Screen web apps;
+  // Safari tabs should not trigger a permission request that cannot work.
+  if (isIOSDevice() && !isHomeScreenApp()) {
     return 'denied';
   }
 
@@ -37,7 +55,9 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
  * Envia uma notificação de forma altamente compatível com telemóveis (Android / iOS / PWA) e PC Chrome.
  */
 export async function sendNotification(title: string, body: string, options?: NotificationOptions) {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  if (isIOSDevice() && !isHomeScreenApp()) return;
 
   // Do not vibrate here: this function is also called by timers and realtime
   // callbacks, which are not user gestures and are blocked by modern browsers.
@@ -63,7 +83,7 @@ export async function sendNotification(title: string, body: string, options?: No
   }
 
   // 2. Fallback to standard Notification API (PC Chrome / Desktop)
-  if ('Notification' in window && Notification.permission === 'granted') {
+  if (Notification.permission === 'granted') {
     try {
       new Notification(title, { body, ...options });
     } catch (e) {

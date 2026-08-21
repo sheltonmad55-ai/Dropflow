@@ -293,3 +293,100 @@
 .dark .bg-slate-950\/80 {
   background-color: var(--bg-slate-900-40) !important;
 }
+
+
+/* iOS Safari / Home Screen web app resilience */
+html {
+  min-height: 100%;
+  background: var(--bg-app);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app_root_layout,
+#loading_splash,
+#onboarding_container {
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
+}
+
+#app_header {
+  padding-top: max(1rem, env(safe-area-inset-top));
+}
+
+#app_main_content {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+#app_navbar {
+  height: calc(5rem + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+#quick_floating_wrapper {
+  bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+#global_app_toast {
+  top: calc(1rem + env(safe-area-inset-top));
+}
+
+#venda_modal,
+#despesa_modal,
+[id$="_modal"] {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+#venda_modal_content,
+#despesa_modal_content,
+[id$="_modal_content"] {
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 2rem);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea,
+  button {
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

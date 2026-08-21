@@ -9,7 +9,7 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
 import { useApp } from '../lib/appContext.tsx';
 import { auth } from '../lib/firebase.ts';
 import { playCashRegister, playNotificationPing } from '../lib/audio.ts';
-import { sendNotification } from '../lib/notifications.ts';
+import { requestNotificationPermission as requestBrowserNotificationPermission, sendNotification } from '../lib/notifications.ts';
 import { 
   Settings, 
   User, 
@@ -255,20 +255,18 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
       alert('As notificações não são suportadas neste navegador.');
       return;
     }
-    try {
-      const permission = await Notification.requestPermission();
-      setPermissionStatus(permission);
-      if (permission === 'granted') {
-        try {
-          new Notification('DropFlow', {
-            body: 'Notificações ativadas com sucesso! 🎉',
-          });
-        } catch (nErr) {
-          console.warn("Could not fire confirmation notification inside iframe sandbox:", nErr);
-        }
-      }
-    } catch (err) {
-      console.error("Erro ao solicitar permissões:", err);
+
+    const permission = await requestBrowserNotificationPermission();
+    setPermissionStatus(permission);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (permission === 'denied' && isIOS) {
+      alert('No iPhone/iPad, active as notificações depois de instalar o DropFlow no ecrã inicial.');
+      return;
+    }
+
+    if (permission === 'granted') {
+      await sendNotification('DropFlow', 'Notificações activadas com sucesso!');
     }
   };
 
