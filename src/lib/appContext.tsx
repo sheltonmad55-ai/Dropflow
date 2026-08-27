@@ -9,7 +9,7 @@ import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, Sy
 import { checkCampaignBudget, startNotificationScheduler, sendNotification } from './notifications.ts';
 import { 
   auth,
-  authPersistenceReady,
+  ensureAuthPersistence,
   db as fDb,
   loginWithGoogle, 
   pullAllUserData, 
@@ -308,10 +308,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const startAuthListener = () => {
-      // Do not block the first auth callback on browser storage initialisation.
-      // Firebase can restore an existing user immediately while persistence is
-      // prepared in parallel; explicit login handlers still await the promise.
-      void authPersistenceReady;
+      // Register the auth observer immediately so startup is never blocked.
       if (cancelled) return;
 
       unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -924,7 +921,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     setIsLoadingAuth(true);
     try {
-      await authPersistenceReady;
+      await ensureAuthPersistence();
       await signInWithEmailAndPassword(auth, email, password);
       // Real-time onAuthStateChanged will handle profile retrieval and loading states
     } catch (e: any) {
@@ -936,7 +933,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function register(email: string, password: string, nome: string, pais: string, moeda: string) {
     setIsLoadingAuth(true);
     try {
-      await authPersistenceReady;
+      await ensureAuthPersistence();
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
@@ -1019,7 +1016,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function loginGoogle() {
     setIsLoadingAuth(true);
     try {
-      await authPersistenceReady;
+      await ensureAuthPersistence();
       const user = await loginWithGoogle();
       const freshToken = await user.getIdToken();
 

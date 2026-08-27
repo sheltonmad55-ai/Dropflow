@@ -300,7 +300,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`DropFlow server running on http://localhost:${PORT}`);
+    console.log(`DroopFlow server running on http://localhost:${PORT}`);
   });
 }
 

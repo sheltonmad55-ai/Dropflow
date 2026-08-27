@@ -33,11 +33,15 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Keep the Firebase session across browser restarts and PWA relaunches.
-// The explicit setup prevents browsers from falling back to session-only auth.
-export const authPersistenceReady = setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.warn('Não foi possível activar a persistência local da sessão:', error);
-});
+// Firebase uses local browser persistence by default. Keep the explicit
+// configuration available for sign-in flows without blocking app startup.
+export async function ensureAuthPersistence(): Promise<void> {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (error) {
+    console.warn('Não foi possível activar a persistência local da sessão:', error);
+  }
+}
 
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
