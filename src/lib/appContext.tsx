@@ -307,8 +307,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let unsubscribe: (() => void) | null = null;
     let cancelled = false;
 
-    const startAuthListener = async () => {
-      await authPersistenceReady;
+    const startAuthListener = () => {
+      // Do not block the first auth callback on browser storage initialisation.
+      // Firebase can restore an existing user immediately while persistence is
+      // prepared in parallel; explicit login handlers still await the promise.
+      void authPersistenceReady;
       if (cancelled) return;
 
       unsubscribe = onAuthStateChanged(auth, async (user) => {
