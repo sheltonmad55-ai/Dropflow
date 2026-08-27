@@ -261,12 +261,12 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (permission === 'denied' && isIOS) {
-      alert('No iPhone/iPad, active as notificações depois de instalar o DropFlow no ecrã inicial.');
+      alert('No iPhone/iPad, active as notificações depois de instalar o DroopFlow no ecrã inicial.');
       return;
     }
 
     if (permission === 'granted') {
-      await sendNotification('DropFlow', 'Notificações activadas com sucesso!');
+      await sendNotification('DroopFlow', 'Notificações activadas com sucesso!');
     }
   };
 
@@ -334,7 +334,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         usuario: {
           uid: auth.currentUser?.uid || 'offline',
           email: auth.currentUser?.email || 'N/A',
-          nome_comercial: profile?.nome || 'DropFlow User',
+          nome_comercial: profile?.nome || 'DroopFlow User',
         },
         profile,
         caixinhas,
@@ -557,7 +557,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             <User className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> A Minha Conta
           </h3>
           <span className="text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/50">
-            Plano: DropFlow Ativo
+            Plano: DroopFlow Ativo
           </span>
         </div>
 
@@ -567,7 +567,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
               {profile?.nome ? profile.nome.substring(0, 2).toUpperCase() : 'DF'}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{profile?.nome || 'Usuário DropFlow'}</p>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">{profile?.nome || 'Usuário DroopFlow'}</p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <Mail className="w-3 h-3 text-slate-400 dark:text-slate-500" /> {currentUser?.email || 'Acesso Local / Convidado'}
               </p>
@@ -598,7 +598,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse" /> Tour Guiado de Boas-Vindas
           </h3>
           <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
-            Aprenda a utilizar os principais recursos do DropFlow, incluindo a gestão de Pockets (caixinhas), cálculo de ROAS e controlo de margens.
+            Aprenda a utilizar os principais recursos do DroopFlow, incluindo a gestão de Pockets (caixinhas), cálculo de ROAS e controlo de margens.
           </p>
         </div>
         <button
@@ -907,7 +907,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 : 'Ative as notificações para receber avisos de metas batidas'}
             </p>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-              O sistema de metas do DropFlow emite alertas visuais no seu ambiente de trabalho e comemorações sonoras em tempo real quando atinge os seus objetivos. Para isso, precisamos que autorize as notificações no navegador.
+              O sistema de metas do DroopFlow emite alertas visuais no seu ambiente de trabalho e comemorações sonoras em tempo real quando atinge os seus objetivos. Para isso, precisamos que autorize as notificações no navegador.
             </p>
           </div>
 
@@ -934,7 +934,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase mr-1">Testar Alertas:</span>
             <button
               type="button"
-              onClick={() => sendNotification("DropFlow - Meta Diária Alcançada! 🎉", `Meta Diária de ${profile?.metaDiaria?.toLocaleString() || '1.000'} ${profile?.moeda || 'MT'} batida com sucesso!`)}
+              onClick={() => sendNotification("DroopFlow - Meta Diária Alcançada! 🎉", `Meta Diária de ${profile?.metaDiaria?.toLocaleString() || '1.000'} ${profile?.moeda || 'MT'} batida com sucesso!`)}
               className="bg-slate-50 hover:bg-slate-100 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[9px] py-1.5 px-3 rounded-lg transition-all cursor-pointer flex items-center gap-1 border border-slate-200/40 dark:border-slate-800/60"
             >
               <TrendingUp className="w-3 h-3 text-emerald-500" />
@@ -1198,7 +1198,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         </h3>
         
         <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-          Garante que tens o controlo total sobre os teus dados. Descarrega relatórios de fluxos separados ou do total de transações compatíveis com o Excel, ou efetua um backup de segurança completo de toda a atividade do DropFlow.
+          Garante que tens o controlo total sobre os teus dados. Descarrega relatórios de fluxos separados ou do total de transações compatíveis com o Excel, ou efetua um backup de segurança completo de toda a atividade do DroopFlow.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2" id="export_actions_grid">
@@ -1260,13 +1260,13 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         </div>
       </div>
 
-      {/* 3. Subscription Management (DropFlow Pro) */}
+      {/* 3. Subscription Management (DroopFlow Pro) */}
       <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 relative overflow-hidden shadow-sm" id="definicoes_billing_panel">
         <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl -mr-6 -mt-6 pointer-events-none"></div>
 
         <div className="flex justify-between items-center" id="billing_header">
           <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
-            <Crown className="w-4 h-4 mr-1.5 text-purple-600 dark:text-purple-400" /> Plano DropFlow Pro
+            <Crown className="w-4 h-4 mr-1.5 text-purple-600 dark:text-purple-400" /> Plano DroopFlow Pro
           </h3>
           <span className="text-[9px] bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 border border-slate-200/65 dark:border-slate-800 font-bold">
             297 MT / mês

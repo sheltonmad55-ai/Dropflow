@@ -130,7 +130,7 @@ export default function AdminView() {
             <Shield className="w-5 h-5 text-indigo-600" />
             <span>Painel Administrativo</span>
           </h2>
-          <p className="text-[10px] text-slate-500">Gestão global do ecossistema DropFlow</p>
+          <p className="text-[10px] text-slate-500">Gestão global do ecossistema DroopFlow</p>
         </div>
         <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
           Acesso Total

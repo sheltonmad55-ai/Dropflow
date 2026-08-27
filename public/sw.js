@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'dropflow-cache-v4-ios';
+const CACHE_NAME = 'droopflow-cache-v5-brand';
 const ASSETS = [
   '/',
   '/index.html',
@@ -111,7 +111,7 @@ self.addEventListener('notificationclick', (event) => {
 
 // Push Event Receiver for background push notifications
 self.addEventListener('push', (event) => {
-  let data = { title: 'DropFlow', body: 'Nova atualização do seu negócio!' };
+  let data = { title: 'DroopFlow', body: 'Nova atualização do seu negócio!' };
   if (event.data) {
     try {
       data = event.data.json();
@@ -138,10 +138,10 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, body } = event.data;
     const options = {
-      body: body || 'Notificação DropFlow',
+      body: body || 'Notificação DroopFlow',
       tag: 'dropflow-msg-' + Date.now(),
       renotify: true
     };
-    self.registration.showNotification(title || 'DropFlow 🚀', options);
+    self.registration.showNotification(title || 'DroopFlow 🚀', options);
   }
 });

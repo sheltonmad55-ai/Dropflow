@@ -8,7 +8,8 @@ import * as db from './db.ts';
 import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem, ContaBancaria } from '../types.ts';
 import { checkCampaignBudget, startNotificationScheduler, sendNotification } from './notifications.ts';
 import { 
-  auth, 
+  auth,
+  authPersistenceReady,
   db as fDb,
   loginWithGoogle, 
   pullAllUserData, 
@@ -303,7 +304,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Load initial local data once authenticated and listen to Firebase Auth / Firestore real-time snapshots
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    const startAuthListener = async () => {
+      await authPersistenceReady;
+      if (cancelled) return;
+
+      unsubscribe = onAuthStateChanged(auth, async (user) => {
       // Clear any previous subscriptions first
       unsubscribesRef.current.forEach(unsub => unsub());
       unsubscribesRef.current = [];
@@ -608,12 +616,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         setIsLoadingAuth(false);
       }
-    });
+      });
+    };
+
+    void startAuthListener();
 
     return () => {
+      cancelled = true;
       unsubscribesRef.current.forEach(unsub => unsub());
       unsubscribesRef.current = [];
-      unsubscribe();
+      unsubscribe?.();
     };
   }, []);
 
@@ -909,6 +921,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     setIsLoadingAuth(true);
     try {
+      await authPersistenceReady;
       await signInWithEmailAndPassword(auth, email, password);
       // Real-time onAuthStateChanged will handle profile retrieval and loading states
     } catch (e: any) {
@@ -920,6 +933,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function register(email: string, password: string, nome: string, pais: string, moeda: string) {
     setIsLoadingAuth(true);
     try {
+      await authPersistenceReady;
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
@@ -1002,6 +1016,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function loginGoogle() {
     setIsLoadingAuth(true);
     try {
+      await authPersistenceReady;
       const user = await loginWithGoogle();
       const freshToken = await user.getIdToken();
 
