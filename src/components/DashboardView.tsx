@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../lib/appContext.tsx';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
+import { BankLogo } from './BankLogo.tsx';
 import { 
   TrendingUp, 
   TrendingDown,
@@ -55,6 +56,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     caixinhas, 
     contasBancarias,
     editContaBancaria,
+    deleteContaBancaria,
     vendas, 
     despesas,
     deleteVenda,
@@ -70,6 +72,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   const currency = profile?.moeda || 'MT';
 
   const [zerandoContaBancaria, setZerandoContaBancaria] = useState<any>(null);
+  const [deletingContaBancaria, setDeletingContaBancaria] = useState<any>(null);
   const [deletingActivity, setDeletingActivity] = useState<any>(null);
 
   // Date utilities (local-safe to avoid timezone mismatches)
@@ -2039,34 +2042,41 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                       id={`dash_conta_card_${cb.id}`}
                     >
                       <div className="flex justify-between items-start">
-                        <div className="space-y-0.5">
-                          <span className="text-[9px] uppercase font-black text-indigo-600 dark:text-indigo-400 block tracking-wider">
-                            {cb.banco ? cb.banco : 'Carteira / Banco'}
-                          </span>
-                          <h5 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm">
-                            {cb.nome}
-                          </h5>
-                          {cb.tipo_conta && (
-                            <span className="text-[10px] text-slate-400 capitalize block">
-                              {cb.tipo_conta}
+                        <div className="flex items-center space-x-3">
+                          <BankLogo nome={cb.nome} banco={cb.banco} tipo={cb.tipo} size="md" />
+                          <div className="space-y-0.5">
+                            <span className="text-[9px] uppercase font-black text-indigo-600 dark:text-indigo-400 block tracking-wider">
+                              {cb.banco ? cb.banco : cb.tipo === 'carteira_movel' ? 'Carteira Móvel' : 'Conta Bancária'}
                             </span>
-                          )}
+                            <h5 className="font-extrabold text-slate-900 dark:text-slate-100 text-sm">
+                              {cb.nome}
+                            </h5>
+                          </div>
                         </div>
 
-                        <button
-                          onClick={() => {
-                            if (isEditingThis) {
-                              setEditingContaId(null);
-                            } else {
-                              setEditingContaId(cb.id);
-                              setEditContaSaldo(cb.saldo_atual.toString());
-                            }
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
-                          title="Ajustar saldo desta conta"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => {
+                              if (isEditingThis) {
+                                setEditingContaId(null);
+                              } else {
+                                setEditingContaId(cb.id);
+                                setEditContaSaldo(cb.saldo_atual.toString());
+                              }
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/50"
+                            title="Ajustar saldo desta conta"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingContaBancaria(cb)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            title="Apagar conta"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
                       {isEditingThis ? (
@@ -2170,6 +2180,22 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           }
         }}
         onClose={() => setZerandoContaBancaria(null)}
+      />
+
+      {/* Confirmation Modal for Deleting Conta Bancaria */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingContaBancaria}
+        title="Eliminar Conta Bancária"
+        itemName={deletingContaBancaria?.nome}
+        description={`Tem certeza que deseja eliminar a conta "${deletingContaBancaria?.nome}"? Ela deixará de constar na sua lista de carteiras e saldos.`}
+        confirmText="Eliminar"
+        onConfirm={async () => {
+          if (deletingContaBancaria) {
+            await deleteContaBancaria(deletingContaBancaria.id);
+            setDeletingContaBancaria(null);
+          }
+        }}
+        onClose={() => setDeletingContaBancaria(null)}
       />
 
       {/* Confirmation Modal for Deleting Activity (Venda or Saída) */}

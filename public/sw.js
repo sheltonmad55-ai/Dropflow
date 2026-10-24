@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'droopflow-cache-v11-webp-enhanced';
+const CACHE_NAME = 'droopflow-cache-v12-bank-logos-pwa-fix';
 const ASSETS = [
   '/',
   '/index.html',

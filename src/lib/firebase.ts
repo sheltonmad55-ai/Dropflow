@@ -125,7 +125,7 @@ export async function pullAllUserData(userId: string) {
     try {
       const q = query(collection(db, colName), where('user_id', '==', userId));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map(d => d.data());
+      return snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, colName);
     }

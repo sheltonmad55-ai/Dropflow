@@ -556,7 +556,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const unsubContasBancarias = onSnapshot(
             query(collection(fDb, 'contas_bancarias'), where('user_id', '==', user.uid)),
             (snapshot) => {
-              const data = snapshot.docs.map(doc => doc.data() as ContaBancaria);
+              const data = snapshot.docs.map(doc => ({ ...(doc.data() as ContaBancaria), id: doc.id }));
               acknowledgeCollectionSnapshot('conta_bancaria', data);
               const reconciled = reconcileCollection('conta_bancaria', data, contasBancarias);
               const seededKey = `dropflow_contas_seeded_${user.uid}`;
@@ -782,6 +782,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const isMonthlyMet = goalMonthlyVal > 0 && salesMonthly >= goalMonthlyVal;
 
+    // Weekly Goal Notifications: only fire once the weekly period finishes (a meta semanal só deve aparecer assim que o período acabar)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const wFim = profile.metaSemanalFim || '';
+    const endWeekly = new Date(startWeekly);
+    endWeekly.setDate(startWeekly.getDate() + (pSemanal * 7) - 1);
+    endWeekly.setHours(23, 59, 59, 999);
+    const isWeeklyPeriodEnded = wFim ? todayStr > wFim : (new Date() >= endWeekly);
+    const weeklyPeriodKey = `dropflow_notified_weekly_${profile.id}_${startWeekly.toISOString().split('T')[0]}_${wFim || endWeekly.toISOString().split('T')[0]}`;
+    const alreadyNotifiedWeekly = typeof window !== 'undefined' && localStorage.getItem(weeklyPeriodKey) === 'true';
+
     // If it's the initial load for this profile, initialize ref silently to avoid spamming alerts on page refresh
     if (previousMetGoalsRef.current.profileId !== profile.id) {
       previousMetGoalsRef.current = {
@@ -795,7 +805,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Subsequent changes: trigger notifications and sound effect when any goal state shifts from incomplete to achieved
     const dailyJustMet = isDailyMet && !previousMetGoalsRef.current.daily;
-    const weeklyJustMet = isWeeklyMet && !previousMetGoalsRef.current.weekly;
+    const weeklyJustMet = isWeeklyPeriodEnded && isWeeklyMet && !alreadyNotifiedWeekly;
     const monthlyJustMet = isMonthlyMet && !previousMetGoalsRef.current.monthly;
 
     if (dailyJustMet || weeklyJustMet || monthlyJustMet) {
@@ -808,8 +818,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           sendNotification("Meta Diária Alcançada! 🎉", msg);
         }
         if (weeklyJustMet) {
-          msg = `Espetacular! A sua Meta Semanal de ${goalWeeklyVal.toLocaleString()} ${currency} foi superada! Faturamento atual: ${salesWeekly.toLocaleString()} ${currency}. 🚀`;
+          msg = `Período Semanal Concluído! A sua Meta Semanal de ${goalWeeklyVal.toLocaleString()} ${currency} foi superada! Faturamento final: ${salesWeekly.toLocaleString()} ${currency}. 🚀`;
           sendNotification("Meta Semanal Alcançada! 🚀", msg);
+          try {
+            localStorage.setItem(weeklyPeriodKey, 'true');
+          } catch (e) {}
         }
         if (monthlyJustMet) {
           msg = `Histórico! A sua Meta Mensal de ${goalMonthlyVal.toLocaleString()} ${currency} foi batida! Faturamento atual: ${salesMonthly.toLocaleString()} ${currency}. 🏆`;
@@ -2173,18 +2186,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function deleteContaBancaria(id: string) {
     if (!profile) return;
     const conta = contasBancarias.find(c => c.id === id);
-    if (!conta) return;
+    const contaNome = conta?.nome || 'Conta';
 
-    // 1. Immediate local state removal
+    // 1. Purge any prior create/update pending mutation for this account
+    const mKey = mutationKey('conta_bancaria', id);
+    pendingMutationsRef.current.delete(mKey);
+
+    // 2. Immediate local state removal
     setContasBancarias(prev => prev.filter(c => c.id !== id));
     
-    // 2. Immediate local DB removal
+    // 3. Immediate local DB removal
     await db.deleteItem('contas_bancarias', id);
     
-    // 3. Queue mutation
-    await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile.id } });
+    // 4. Queue mutation for delete
+    await enqueueMutation({ 
+      type: 'conta_bancaria', 
+      action: 'delete', 
+      data: { id, user_id: auth.currentUser?.uid || profile.id } 
+    });
     
-    // 4. Direct Firestore deletion when online
+    // 5. Direct Firestore deletion when online
     if (auth.currentUser) {
       try {
         await deleteDoc(doc(fDb, 'contas_bancarias', id));
@@ -2193,7 +2214,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
     
-    triggerToast('Conta Eliminada', `A carteira "${conta.nome}" foi removida com sucesso.`, 'info');
+    triggerToast('Conta Eliminada', `A carteira "${contaNome}" foi removida com sucesso.`, 'info');
     setSyncStatus('pending');
     void syncWithServer();
   }

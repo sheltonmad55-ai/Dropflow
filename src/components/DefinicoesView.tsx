@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { ModalPortal } from './ModalPortal.tsx';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal.tsx';
+import { BankLogo } from './BankLogo.tsx';
 import { useApp } from '../lib/appContext.tsx';
 import { auth } from '../lib/firebase.ts';
 import { playCashRegister, playNotificationPing } from '../lib/audio.ts';
@@ -746,15 +747,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
               >
                 <div className="flex justify-between items-start">
                   <div className="flex items-center space-x-2.5">
-                    <div className={`p-2 rounded-xl text-white ${conta.cor || 'bg-indigo-600'}`}>
-                      {isMovel ? (
-                        <Smartphone className="w-4 h-4" />
-                      ) : isCaixa ? (
-                        <Wallet className="w-4 h-4" />
-                      ) : (
-                        <Building2 className="w-4 h-4" />
-                      )}
-                    </div>
+                    <BankLogo nome={conta.nome} banco={conta.banco} tipo={conta.tipo} size="md" />
                     <div>
                       <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">{conta.nome}</span>
                       <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -1410,12 +1403,55 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
               </div>
 
               <form onSubmit={handleCreateConta} className="space-y-3.5" id="form_add_conta">
+                {/* Official Bank / Wallet Selector */}
+                <div className="space-y-1.5" id="presets_bancos_logos">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold block">
+                    Instituição (Logos Oficiais de Moçambique)
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { nome: 'M-Pesa', tipo: 'carteira_movel', banco: 'Vodacom', cor: 'bg-[#E60000]' },
+                      { nome: 'e-Mola', tipo: 'carteira_movel', banco: 'Movitel', cor: 'bg-[#FF6600]' },
+                      { nome: 'Millennium BIM', tipo: 'banco', banco: 'BIM', cor: 'bg-[#C30045]' },
+                      { nome: 'BCI', tipo: 'banco', banco: 'BCI', cor: 'bg-[#002D62]' },
+                      { nome: 'Standard Bank', tipo: 'banco', banco: 'Standard Bank', cor: 'bg-[#0033A1]' },
+                      { nome: 'Moza Banco', tipo: 'banco', banco: 'Moza Banco', cor: 'bg-[#5C1D8D]' },
+                      { nome: 'Absa Bank', tipo: 'banco', banco: 'Absa Bank', cor: 'bg-[#DC0032]' },
+                      { nome: 'Caixa Físico', tipo: 'caixa_fisico', banco: '', cor: 'bg-emerald-600' }
+                    ].map(preset => {
+                      const isSelected = contaNome.toLowerCase() === preset.nome.toLowerCase();
+                      return (
+                        <button
+                          key={preset.nome}
+                          type="button"
+                          onClick={() => {
+                            setContaNome(preset.nome);
+                            setContaTipo(preset.tipo);
+                            setContaBanco(preset.banco);
+                            setContaCor(preset.cor);
+                          }}
+                          className={`p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20' 
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50'
+                          }`}
+                        >
+                          <BankLogo nome={preset.nome} banco={preset.banco} tipo={preset.tipo} size="sm" />
+                          <span className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate w-full text-center">
+                            {preset.nome}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="space-y-1" id="field_add_conta_nome">
                   <label className="text-xs text-slate-600 dark:text-slate-400 font-semibold">Nome da Conta / Carteira</label>
                   <input
                     type="text"
                     required
-                    placeholder="Ex: BCE, Standard Bank, e-Mola, M-Pesa"
+                    placeholder="Ex: Millennium BIM, Standard Bank, e-Mola, M-Pesa"
                     value={contaNome}
                     onChange={(e) => setContaNome(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-500"

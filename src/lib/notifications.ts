@@ -69,8 +69,8 @@ export async function sendNotification(title: string, body: string, options?: No
       if (registration && registration.showNotification) {
         await (registration as unknown as { showNotification: (t: string, o?: object) => Promise<void> }).showNotification(title, {
           body,
-          // The manifest is JSON, not an image. Leave the icon unset until a
-          // real image asset is available instead of requesting a 404 path.
+          icon: '/icons/icon-192.png',
+          badge: '/icons/favicon-48.png',
           renotify: true,
           tag: 'dropflow-alert-' + Date.now(),
           ...options
@@ -85,7 +85,12 @@ export async function sendNotification(title: string, body: string, options?: No
   // 2. Fallback to standard Notification API (PC Chrome / Desktop)
   if (Notification.permission === 'granted') {
     try {
-      new Notification(title, { body, ...options });
+      new Notification(title, {
+        body,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/favicon-48.png',
+        ...options
+      });
     } catch (e) {
       console.warn('Erro ao disparar notificação local:', e);
     }
