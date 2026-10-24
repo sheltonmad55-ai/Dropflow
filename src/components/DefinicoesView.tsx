@@ -50,7 +50,8 @@ import {
   ArrowDownRight,
   History,
   Eye,
-  EyeOff
+  EyeOff,
+  ExternalLink
 } from 'lucide-react';
 
 interface DefinicoesViewProps {
@@ -1284,12 +1285,64 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
           </span>
         </div>
 
-        <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-1.5" id="pro_status_info">
-          <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 block uppercase tracking-wide flex items-center">
-            <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
-          </span>
-          <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.</p>
-        </div>
+        {(() => {
+          const userBillingEmail = (auth.currentUser?.email || profile?.email || '').toLowerCase().trim();
+          const isVipShelton = userBillingEmail === 'sheltonsam2.0@gmail.com';
+          const expiryRaw = profile?.trial_expires_at || profile?.plano_expira_em;
+          const expiryDateObj = expiryRaw ? new Date(expiryRaw) : null;
+          const diasRestantesCalculados = expiryDateObj 
+            ? Math.max(0, Math.ceil((expiryDateObj.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) 
+            : 30;
+          const dataRenovacaoTexto = expiryDateObj
+            ? expiryDateObj.toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' })
+            : '24 de Novembro de 2026';
+
+          return (
+            <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-3" id="pro_status_info">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide flex items-center">
+                  <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
+                </span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-mono font-bold border border-emerald-500/20">
+                  {isAdmin ? '👑 Acesso Vitalício Admin' : isVipShelton ? '⭐ VIP Pro (90 Dias)' : '🚀 Plano Mensal Pro'}
+                </span>
+              </div>
+              
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.
+              </p>
+
+              {/* Data de Renovação e Aviso de Bloqueio */}
+              <div className="pt-2.5 border-t border-emerald-200/50 dark:border-emerald-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                  <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>
+                    {isAdmin ? (
+                      <strong className="text-emerald-600 dark:text-emerald-400">Sem data de expiração (Acesso irrestrito).</strong>
+                    ) : (
+                      <>
+                        Data de Renovação: <strong className="text-slate-900 dark:text-white">{dataRenovacaoTexto}</strong>
+                        <span className="ml-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                          ({diasRestantesCalculados} {diasRestantesCalculados === 1 ? 'dia restante' : 'dias restantes'})
+                        </span>
+                      </>
+                    )}
+                  </span>
+                </div>
+                
+                <a
+                  href={`https://checkout.escalepay.com/9729350${userBillingEmail ? `?email=${encodeURIComponent(userBillingEmail)}` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition-all shrink-0 justify-center"
+                >
+                  <span>Renovar no EscalePay</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modo Foco & Privacidade */}

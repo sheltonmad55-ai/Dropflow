@@ -25,6 +25,8 @@ export interface Profile {
   moeda: string;
   plano: 'trial' | 'pro' | 'expired';
   trial_expires_at: string; // ISO date
+  plano_expira_em?: string; // ISO date for subscription expiration
+  plano_atualizado_em?: string;
   criado_em: string;
   anuncios_percent: number; // e.g. 50% of remainder
   lucro_percent: number;    // e.g. 50% of remainder

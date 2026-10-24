@@ -2427,8 +2427,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isAdminUser = userEmail === 'sheltonmad55@gmail.com' || profile?.id === 'admin';
   const isPro = profile?.plano === 'pro';
 
-  // Only VIP, Admin, and Pro (paid users) have access to the SaaS app!
-  const hasActiveAccess = isSheltonSam || isAdminUser || isPro;
+  // Check expiration date: if expired, block access until renewal
+  const expiryDateStr = profile?.trial_expires_at || profile?.plano_expira_em;
+  const isExpired = (!isAdminUser && expiryDateStr) ? (new Date() > new Date(expiryDateStr)) : false;
+
+  // Only VIP (while not expired), Admin, and active Pro (while not expired) have access to the SaaS app!
+  const hasActiveAccess = isAdminUser || (!isExpired && (isSheltonSam || isPro));
 
   async function checkPaymentStatus(): Promise<boolean> {
     const user = auth.currentUser;
@@ -2445,12 +2449,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (subSnap.exists()) {
         const subData = subSnap.data();
         if (subData?.plano === 'pro' || subData?.status === 'pro') {
+          const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
           await updateDoc(doc(fDb, 'profiles', user.uid), {
             plano: 'pro',
+            trial_expires_at: newExpiresAt,
+            plano_expira_em: newExpiresAt,
             plano_atualizado_em: new Date().toISOString()
           });
           if (profile) {
-            setProfile({ ...profile, plano: 'pro' });
+            setProfile({ 
+              ...profile, 
+              plano: 'pro', 
+              trial_expires_at: newExpiresAt, 
+              plano_expira_em: newExpiresAt, 
+              plano_atualizado_em: new Date().toISOString() 
+            });
           }
           triggerToast('Plano Pro Confirmado! 🚀', 'O seu pagamento no EscalePay foi verificado com sucesso.', 'success');
           return true;
