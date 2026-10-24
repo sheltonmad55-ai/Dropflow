@@ -358,9 +358,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 localStorage.setItem('dropflow_profile', JSON.stringify(reconciledProfile));
                 void db.putItem('profiles', reconciledProfile);
 
-                // Auto-upgrade if buyer already completed payment via EscalePay
-                if (reconciledProfile.plano !== 'pro' && user.email) {
-                  const cleanEmail = user.email.trim().toLowerCase().replace(/[^a-zA-Z0-9_@.-]/g, '_');
+                // VIP & Admin auto-upgrade checks
+                const userEmail = (user.email || '').toLowerCase().trim();
+                const isSheltonSam = userEmail === 'sheltonsam2.0@gmail.com';
+                const isAdminEmail = userEmail === 'sheltonmad55@gmail.com';
+
+                if (isSheltonSam || isAdminEmail) {
+                  const threeMonthsDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+                  const adminDate = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
+                  const targetExpiry = isSheltonSam ? threeMonthsDate : adminDate;
+
+                  if (reconciledProfile.plano !== 'pro' || !reconciledProfile.trial_expires_at || reconciledProfile.trial_expires_at < new Date().toISOString()) {
+                    void updateDoc(doc(fDb, 'profiles', user.uid), {
+                      plano: 'pro',
+                      trial_expires_at: targetExpiry,
+                      plano_atualizado_em: new Date().toISOString()
+                    });
+                    setProfile({ ...reconciledProfile, plano: 'pro', trial_expires_at: targetExpiry });
+                    triggerToast('Conta VIP Ativada! 💎', isSheltonSam ? 'Acesso Pro liberado com 3 meses de assinatura.' : 'Acesso Administrador Pro Vitalício.', 'success');
+                  }
+                } else if (reconciledProfile.plano !== 'pro' && user.email) {
+                  // Auto-upgrade if buyer already completed payment via EscalePay
+                  const cleanEmail = userEmail.replace(/[^a-zA-Z0-9_@.-]/g, '_');
                   void getDoc(doc(fDb, 'paid_subscribers', cleanEmail)).then((subSnap) => {
                     if (subSnap.exists()) {
                       const subData = subSnap.data();
@@ -369,6 +388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                           plano: 'pro',
                           plano_atualizado_em: new Date().toISOString()
                         });
+                        setProfile({ ...reconciledProfile, plano: 'pro' });
                         triggerToast('Plano Pro Ativado! 🚀', 'Seu pagamento no EscalePay foi reconhecido e o acesso Pro está liberado.', 'success');
                       }
                     }
@@ -959,14 +979,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Default initial plan to expired/payment pending
+      const normalizedEmail = (email || '').toLowerCase().trim();
+      const isSheltonSam = normalizedEmail === 'sheltonsam2.0@gmail.com';
+      const isAdminEmail = normalizedEmail === 'sheltonmad55@gmail.com';
+
+      // Plan calculation: Shelton Sam gets 3 months PRO, Admin gets PRO, others get active trial
+      let initialPlano: 'pro' | 'trial' = 'trial';
+      let trialExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+      if (isSheltonSam) {
+        initialPlano = 'pro';
+        trialExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (isAdminEmail) {
+        initialPlano = 'pro';
+        trialExpiry = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
+      }
+
       const newProfile: Profile = {
         id: user.uid,
         nome,
         pais: pais || 'Moçambique',
         moeda: moeda || 'MT',
-        plano: 'expired',
-        trial_expires_at: new Date().toISOString(),
+        plano: initialPlano,
+        trial_expires_at: trialExpiry,
         anuncios_percent: 50,
         lucro_percent: 50,
         criado_em: new Date().toISOString()
@@ -1046,16 +1081,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const data = await pullAllUserData(user.uid);
       let userProfile = data.profile as Profile | null;
       let userCaixinhas = data.caixinhas as Caixinha[];
-
       if (!userProfile) {
-        // If not, register a new profile with Google's details (default to payment pending/expired)
+        const googleEmail = (user.email || '').toLowerCase().trim();
+        const isSheltonSam = googleEmail === 'sheltonsam2.0@gmail.com';
+        const isAdminEmail = googleEmail === 'sheltonmad55@gmail.com';
+
+        let initialPlano: 'pro' | 'trial' = 'trial';
+        let trialExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+        if (isSheltonSam) {
+          initialPlano = 'pro';
+          trialExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        } else if (isAdminEmail) {
+          initialPlano = 'pro';
+          trialExpiry = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
+        }
+
         userProfile = {
           id: user.uid,
-          nome: user.displayName || 'Empreendedor Google',
+          nome: user.displayName || 'Empreendedor DroopFlow',
           pais: 'Moçambique',
           moeda: 'MT',
-          plano: 'expired',
-          trial_expires_at: new Date().toISOString(),
+          plano: initialPlano,
+          trial_expires_at: trialExpiry,
           anuncios_percent: 50,
           lucro_percent: 50,
           criado_em: new Date().toISOString()

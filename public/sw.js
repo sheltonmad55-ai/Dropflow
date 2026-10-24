@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'droopflow-cache-v5-brand';
+const CACHE_NAME = 'droopflow-cache-v8-unified-lp';
 const ASSETS = [
   '/',
   '/index.html',

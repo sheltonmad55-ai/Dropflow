@@ -272,23 +272,32 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
           </div>
 
           {/* Action CTAs */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button 
               onClick={() => {
                 setAuthMode('login');
                 setShowAuthModal(true);
               }}
-              className="text-xs font-bold text-slate-300 hover:text-white px-3 sm:px-4 py-2.5 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
+              className="text-xs font-bold text-slate-300 hover:text-white px-2.5 sm:px-3 py-2 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
             >
               Entrar
+            </button>
+            <button 
+              onClick={() => {
+                setAuthMode('register');
+                setShowAuthModal(true);
+              }}
+              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 sm:px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all cursor-pointer hidden xs:inline-flex"
+            >
+              Criar Conta
             </button>
             <a 
               href="https://checkout.escalepay.com/9729350"
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-3.5 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
             >
-              <span>Começar Agora</span>
+              <span>Assinar Pro</span>
               <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
             </a>
           </div>
@@ -337,6 +346,21 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
           >
             <Play className="w-4 h-4 fill-current text-emerald-400" />
             <span>Ver Demonstração Interativa</span>
+          </button>
+        </div>
+
+        {/* Alternative account creation notice */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs text-slate-400">
+          <span>Prefere criar a sua conta antes do pagamento?</span>
+          <button
+            onClick={() => {
+              setAuthMode('register');
+              setShowAuthModal(true);
+            }}
+            className="font-bold text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <span>Criar Conta Manualmente</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -977,6 +1001,36 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
             </p>
           </div>
 
+          <div className="bg-white/[0.02] border border-white/5 p-7 rounded-3xl space-y-3 hover:border-emerald-500/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <h3 className="font-display font-extrabold text-lg text-white">Gestão de Saídas & Estorno Total</h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Lançamento e controle de despesas operacionais com estorno automático. Se você apagar uma saída ou venda, o dinheiro volta imediatamente para o cofre e carteira bancária de origem.
+            </p>
+          </div>
+
+          <div className="bg-white/[0.02] border border-white/5 p-7 rounded-3xl space-y-3 hover:border-emerald-500/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+              <Coins className="w-6 h-6" />
+            </div>
+            <h3 className="font-display font-extrabold text-lg text-white">Metas Pessoais de Faturamento</h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Defina metas reais (comprar moto, capital de giro, reserva) e configure uma porcentagem fixa de cada venda para ir diretamente para a sua meta financeira até bater o objetivo.
+            </p>
+          </div>
+
+          <div className="bg-white/[0.02] border border-white/5 p-7 rounded-3xl space-y-3 hover:border-emerald-500/30 transition-all">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+              <Eye className="w-6 h-6" />
+            </div>
+            <h3 className="font-display font-extrabold text-lg text-white">Modo Foco & Privacidade</h3>
+            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Oculte saldos, faturamentos e lucros com 1 clique para usar a aplicação em público, balcão da loja ou perto de terceiros com total discrição e tranquilidade.
+            </p>
+          </div>
+
         </div>
       </section>
 
@@ -990,7 +1044,7 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
               O investimento que se paga na tua primeira venda
             </h2>
             <p className="text-slate-400 text-xs sm:text-base max-w-xl mx-auto">
-              Sem contratos, sem taxas ocultas. Tenha acesso a todas as ferramentas financeiras com ativação imediata.
+              Sem contratos, sem taxas ocultas. Podes criar a tua conta primeiro ou assinar diretamente pelo checkout do EscalePay.
             </p>
           </div>
 
@@ -1021,7 +1075,9 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
                 'Zonas de Entrega Personalizadas por Província',
                 'Controle de Fornecedores e Reposição de Estoque',
                 'Gestão e Exclusão Segura de Saídas & Vendas com Estorno',
-                'Sincronização Nuvem + Modo Offline-First',
+                'Metas Financeiras Pessoais com Alocação Direta',
+                'Modo Foco e Privacidade com 1 Clique',
+                'Sincronização Nuvem + Funcionamento 100% Offline',
                 'Suporte Prioritário no WhatsApp'
               ].map((feat, i) => (
                 <div key={i} className="flex items-center gap-2.5">
@@ -1038,9 +1094,21 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
                 rel="noopener noreferrer"
                 className="block w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-center py-4 rounded-2xl shadow-xl shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all text-sm uppercase tracking-wider"
               >
-                Garantir Acesso Instantâneo 🚀
+                Garantir Acesso Pro Instantâneo 🚀
               </a>
-              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 text-center">
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setShowAuthModal(true);
+                }}
+                className="block w-full bg-white/5 hover:bg-white/10 text-slate-200 font-bold text-center py-3.5 rounded-2xl border border-white/10 hover:border-emerald-500/30 transition-all text-xs cursor-pointer"
+              >
+                Criar Minha Conta Manualmente Primeiro
+              </button>
+
+              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 text-center pt-1">
                 <Lock className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Pagamento 100% Seguro via EscalePay • Ativação Imediata</span>
               </div>
@@ -1062,6 +1130,10 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
 
         <div className="space-y-3">
           {[
+            {
+              q: 'Devo criar a conta antes ou depois de fazer o pagamento?',
+              a: 'Você pode escolher o que for mais prático! Pode criar a sua conta manualmente agora mesmo para começar o teste grátis ou pode pagar direto no EscalePay. Ao usar o mesmo e-mail na compra, a sua conta é vinculada e ativada automaticamente com o plano Pro!'
+            },
             {
               q: 'Como funciona o pagamento com M-Pesa e e-Mola?',
               a: 'O checkout da EscalePay aceita pagamentos via M-Pesa, e-Mola e cartões de crédito/débito. Assim que concluíres o pagamento, o nosso webhook ativa a tua conta Pro instantaneamente.'
