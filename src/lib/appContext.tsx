@@ -28,7 +28,10 @@ import {
   collection,
   query,
   where,
-  setDoc
+  setDoc,
+  deleteDoc,
+  getDoc,
+  updateDoc
 } from 'firebase/firestore';
 
 interface AppContextType {
@@ -112,6 +115,7 @@ interface AppContextType {
   addContaBancaria: (contaData: Omit<ContaBancaria, 'id' | 'user_id' | 'criado_em'>) => Promise<void>;
   editContaBancaria: (id: string, updates: Partial<ContaBancaria>) => Promise<void>;
   deleteContaBancaria: (id: string) => Promise<void>;
+  limparContasDuplicadas: () => Promise<void>;
   retirarDaConta: (contaId: string, valor: number, motivo?: string) => Promise<void>;
   transferirEntreContas: (deContaId: string, paraContaId: string, valor: number) => Promise<void>;
 
@@ -353,6 +357,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 setProfile(reconciledProfile);
                 localStorage.setItem('dropflow_profile', JSON.stringify(reconciledProfile));
                 void db.putItem('profiles', reconciledProfile);
+
+                // Auto-upgrade if buyer already completed payment via EscalePay
+                if (reconciledProfile.plano !== 'pro' && user.email) {
+                  const cleanEmail = user.email.trim().toLowerCase().replace(/[^a-zA-Z0-9_@.-]/g, '_');
+                  void getDoc(doc(fDb, 'paid_subscribers', cleanEmail)).then((subSnap) => {
+                    if (subSnap.exists()) {
+                      const subData = subSnap.data();
+                      if (subData?.plano === 'pro' || subData?.status === 'pro') {
+                        void updateDoc(doc(fDb, 'profiles', user.uid), { 
+                          plano: 'pro',
+                          plano_atualizado_em: new Date().toISOString()
+                        });
+                        triggerToast('Plano Pro Ativado! 🚀', 'Seu pagamento no EscalePay foi reconhecido e o acesso Pro está liberado.', 'success');
+                      }
+                    }
+                  }).catch(() => {});
+                }
               }
               setIsAuthenticated(true);
             } else {
@@ -523,9 +544,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 localStorage.setItem(seededKey, 'true');
                 seedDefaultContas(user.uid);
               } else {
-                if (reconciled.length > 0) {
-                  localStorage.setItem(seededKey, 'true');
-                }
+                localStorage.setItem(seededKey, 'true');
                 setContasBancarias(reconciled);
                 void db.clearStore('contas_bancarias').then(() => {
                   reconciled.forEach(item => void db.putItem('contas_bancarias', item));
@@ -885,9 +904,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   async function seedDefaultContas(userId: string) {
+    const seededKey = `dropflow_contas_seeded_${userId}`;
+    localStorage.setItem(seededKey, 'true');
+
     const defaults: ContaBancaria[] = [
       {
-        id: crypto.randomUUID(),
+        id: `conta_emola_${userId}`,
         user_id: userId,
         nome: 'e-Mola',
         tipo: 'carteira_movel',
@@ -898,7 +920,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         criado_em: new Date().toISOString()
       },
       {
-        id: crypto.randomUUID(),
+        id: `conta_mpesa_${userId}`,
         user_id: userId,
         nome: 'M-Pesa',
         tipo: 'carteira_movel',
@@ -2100,11 +2122,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!profile) return;
     const conta = contasBancarias.find(c => c.id === id);
     if (!conta) return;
-    await db.deleteItem('contas_bancarias', id);
-    await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile.id } });
+
+    // 1. Immediate local state removal
     setContasBancarias(prev => prev.filter(c => c.id !== id));
+    
+    // 2. Immediate local DB removal
+    await db.deleteItem('contas_bancarias', id);
+    
+    // 3. Queue mutation
+    await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile.id } });
+    
+    // 4. Direct Firestore deletion when online
+    if (auth.currentUser) {
+      try {
+        await deleteDoc(doc(fDb, 'contas_bancarias', id));
+      } catch (err) {
+        console.warn('Direct Firestore deleteDoc failed, fallback to sync queue:', err);
+      }
+    }
+    
+    triggerToast('Conta Eliminada', `A carteira "${conta.nome}" foi removida com sucesso.`, 'info');
     setSyncStatus('pending');
-    syncWithServer();
+    void syncWithServer();
+  }
+
+  async function limparContasDuplicadas() {
+    if (!profile || contasBancarias.length === 0) return;
+
+    const seen = new Map<string, ContaBancaria>();
+    const toDeleteIds: string[] = [];
+
+    for (const c of contasBancarias) {
+      const key = `${c.nome.trim().toLowerCase()}_${c.tipo}`;
+      if (!seen.has(key)) {
+        seen.set(key, c);
+      } else {
+        const existing = seen.get(key)!;
+        // Keep the one with positive or higher balance, prune the duplicate
+        if (c.saldo_atual > existing.saldo_atual) {
+          toDeleteIds.push(existing.id);
+          seen.set(key, c);
+        } else {
+          toDeleteIds.push(c.id);
+        }
+      }
+    }
+
+    if (toDeleteIds.length === 0) {
+      triggerToast('Contas Organizadas', 'Não foram encontradas contas duplicadas.', 'info');
+      return;
+    }
+
+    const remainingContas = Array.from(seen.values());
+    setContasBancarias(remainingContas);
+
+    for (const id of toDeleteIds) {
+      await db.deleteItem('contas_bancarias', id);
+      await enqueueMutation({ type: 'conta_bancaria', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile.id } });
+      if (auth.currentUser) {
+        try {
+          await deleteDoc(doc(fDb, 'contas_bancarias', id));
+        } catch (err) {
+          // ignore
+        }
+      }
+    }
+
+    triggerToast('Limpeza Concluída! ✨', `${toDeleteIds.length} conta(s) duplicada(s) foram removidas.`, 'success');
+    setSyncStatus('pending');
+    void syncWithServer();
   }
 
   async function retirarDaConta(contaId: string, valor: number, motivo?: string) {
@@ -2356,6 +2442,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addContaBancaria,
       editContaBancaria,
       deleteContaBancaria,
+      limparContasDuplicadas,
       retirarDaConta,
       transferirEntreContas,
 

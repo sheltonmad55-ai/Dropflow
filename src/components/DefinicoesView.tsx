@@ -68,6 +68,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     addContaBancaria,
     editContaBancaria,
     deleteContaBancaria,
+    limparContasDuplicadas,
     transferirEntreContas,
     retirarDaConta,
     vendas,
@@ -680,7 +681,17 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             </h3>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">Gira as contas reais (e-Mola, M-Pesa e contas personalizadas) onde os pagamentos entram e saem</p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+            <button
+              id="btn_limpar_contas_duplicadas"
+              type="button"
+              onClick={limparContasDuplicadas}
+              className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/60 font-extrabold px-3 py-1.5 rounded-xl hover:bg-amber-100 transition-colors flex items-center text-xs space-x-1 cursor-pointer"
+              title="Detecta e remove carteiras repetidas ou saldos duplicados"
+            >
+              <Sparkles className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Limpar Duplicadas</span>
+            </button>
             <button
               id="btn_open_transfer_modal"
               type="button"

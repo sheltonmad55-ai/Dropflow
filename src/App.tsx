@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './lib/appContext.tsx';
 import Onboarding from './components/Onboarding.tsx';
+import LandingPageView from './components/LandingPageView.tsx';
 import DashboardView from './components/DashboardView.tsx';
 import CaixinhasView from './components/CaixinhasView.tsx';
 import VendasView from './components/VendasView.tsx';
@@ -119,9 +120,9 @@ function AppContent() {
     );
   }
 
-  // 2. Onboarding Flow
+  // 2. Landing Page & Onboarding Flow
   if (!isAuthenticated) {
-    return <Onboarding />;
+    return <LandingPageView />;
   }
 
   // 3. Main Dashboard & PWA App Skeleton

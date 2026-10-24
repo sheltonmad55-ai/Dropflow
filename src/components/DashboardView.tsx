@@ -30,7 +30,8 @@ import {
   Wallet,
   Edit,
   Check,
-  Building2
+  Building2,
+  Trash2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -56,6 +57,8 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
     editContaBancaria,
     vendas, 
     despesas,
+    deleteVenda,
+    deleteDespesa,
     produtos,
     broadcasts,
     zonasEntrega,
@@ -67,6 +70,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
   const currency = profile?.moeda || 'MT';
 
   const [zerandoContaBancaria, setZerandoContaBancaria] = useState<any>(null);
+  const [deletingActivity, setDeletingActivity] = useState<any>(null);
 
   // Date utilities (local-safe to avoid timezone mismatches)
   const getLocalDateStr = (date: Date = new Date()) => {
@@ -142,6 +146,7 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
 
   // State to control Faturamento History Modal
   const [showFaturamentoModal, setShowFaturamentoModal] = React.useState(false);
+  const [modalFaturamentoFilter, setModalFaturamentoFilter] = React.useState<'periodo' | 'tudo'>('periodo');
 
   // State to control Financial Transparency & Real Net Profit Breakdown Modal
   const [showTransparenciaModal, setShowTransparenciaModal] = React.useState(false);
@@ -1337,11 +1342,21 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0" id="activity_value_col">
-                    <span className={`text-xs font-extrabold block ${act.type === 'venda' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {act.type === 'venda' ? '+' : '-'}{act.type === 'venda' ? act.valor_recebido : act.valor} {currency}
-                    </span>
-                    <span className="text-[9px] text-slate-400 dark:text-slate-500 block">{act.data_venda || act.data}</span>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <div className="text-right shrink-0" id="activity_value_col">
+                      <span className={`text-xs font-extrabold block ${act.type === 'venda' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {act.type === 'venda' ? '+' : '-'}{act.type === 'venda' ? act.valor_recebido : act.valor} {currency}
+                      </span>
+                      <span className="text-[9px] text-slate-400 dark:text-slate-500 block">{act.data_venda || act.data}</span>
+                    </div>
+                    <button
+                      id={`btn_delete_act_${act.id}`}
+                      onClick={() => setDeletingActivity(act)}
+                      className="p-1.5 text-slate-300 hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 transition-colors cursor-pointer rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                      title={act.type === 'venda' ? 'Eliminar Venda' : 'Eliminar Saída (Despesa)'}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );
@@ -1574,8 +1589,10 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
                   <TrendingUp className="w-5 h-5 shrink-0" />
                 </div>
                 <div className="text-left">
-                  <h3 className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">Histórico de Faturamento Acumulado</h3>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Análise consolidada de faturamento e fluxo de vendas de todo o tempo</p>
+                  <h3 className="font-extrabold text-slate-900 dark:text-slate-50 text-sm">Histórico de Faturamento</h3>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    {modalFaturamentoFilter === 'periodo' ? `Filtrado para: ${rangeLabel} (${activeStartDate} até ${activeEndDate})` : 'Análise acumulada de todo o tempo'}
+                  </p>
                 </div>
               </div>
               <button 
@@ -1587,87 +1604,126 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
               </button>
             </div>
 
+            {/* Filter Toggle in Modal */}
+            <div className="px-6 pt-4 pb-0 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-slate-900">
+              <div className="flex space-x-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setModalFaturamentoFilter('periodo')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    modalFaturamentoFilter === 'periodo'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                  }`}
+                >
+                  {rangeLabel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalFaturamentoFilter('tudo')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    modalFaturamentoFilter === 'tudo'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                  }`}
+                >
+                  Todo o Tempo
+                </button>
+              </div>
+              <span className="text-[10px] text-slate-400 font-bold hidden sm:inline">
+                {modalFaturamentoFilter === 'periodo' ? `${selectedVendas.length} vendas no filtro` : `${vendas.length} vendas totais`}
+              </span>
+            </div>
+
             {/* Modal Body (Scrollable) */}
             <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-600 dark:text-slate-300 text-left" id="faturamento_history_body">
               
               {/* Top Stats Overview Grid */}
-              <div className="grid grid-cols-3 gap-3" id="faturamento_total_stats_grid">
-                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/40 dark:from-emerald-950/20 dark:to-slate-900 border border-emerald-100/40 dark:border-emerald-900/30 p-4 rounded-2xl flex flex-col justify-center">
-                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Faturamento Total</span>
-                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-                    {totalFaturamento.toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
-                  </span>
-                </div>
+              {(() => {
+                const currentSalesList = modalFaturamentoFilter === 'periodo' ? selectedVendas : vendas;
+                const currentFaturamento = modalFaturamentoFilter === 'periodo' ? selectedSoldTotal : totalFaturamento;
+                const currentAvgTicket = currentSalesList.length > 0 ? Math.round(currentFaturamento / currentSalesList.length) : 0;
 
-                <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/20 dark:to-slate-900 border border-indigo-100/40 dark:border-indigo-900/30 p-4 rounded-2xl flex flex-col justify-center">
-                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Total de Vendas</span>
-                  <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
-                    {vendas.length} <span className="text-[10px] font-normal">vendas</span>
-                  </span>
-                </div>
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-3" id="faturamento_total_stats_grid">
+                      <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/40 dark:from-emerald-950/20 dark:to-slate-900 border border-emerald-100/40 dark:border-emerald-900/30 p-4 rounded-2xl flex flex-col justify-center">
+                        <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">
+                          {modalFaturamentoFilter === 'periodo' ? rangeLabel : 'Faturamento Total'}
+                        </span>
+                        <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                          {currentFaturamento.toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
+                        </span>
+                      </div>
 
-                <div className="bg-gradient-to-br from-sky-50 to-sky-100/40 dark:from-sky-950/20 dark:to-slate-900 border border-sky-100/40 dark:border-sky-900/30 p-4 rounded-2xl flex flex-col justify-center">
-                  <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Ticket Médio Geral</span>
-                  <span className="text-xl font-black text-sky-600 dark:text-sky-400">
-                    {(vendas.length > 0 ? Math.round(totalFaturamento / vendas.length) : 0).toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
-                  </span>
-                </div>
-              </div>
+                      <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/40 dark:from-indigo-950/20 dark:to-slate-900 border border-indigo-100/40 dark:border-indigo-900/30 p-4 rounded-2xl flex flex-col justify-center">
+                        <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Total de Vendas</span>
+                        <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                          {currentSalesList.length} <span className="text-[10px] font-normal">vendas</span>
+                        </span>
+                      </div>
 
-              {/* All time sales history table */}
-              <div className="space-y-3" id="all_sales_history_list_section">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <h4 className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">Lista de Todas as Vendas Registadas</h4>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">{vendas.length} no total</span>
-                </div>
+                      <div className="bg-gradient-to-br from-sky-50 to-sky-100/40 dark:from-sky-950/20 dark:to-slate-900 border border-sky-100/40 dark:border-sky-900/30 p-4 rounded-2xl flex flex-col justify-center">
+                        <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase block mb-1">Ticket Médio</span>
+                        <span className="text-xl font-black text-sky-600 dark:text-sky-400">
+                          {currentAvgTicket.toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
+                        </span>
+                      </div>
+                    </div>
 
-                {vendas.length === 0 ? (
-                  <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-150 dark:border-slate-800 rounded-2xl p-6 text-center space-y-2">
-                    <Info className="w-5 h-5 text-slate-400 mx-auto" />
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">Nenhuma venda registada até ao momento.</p>
-                    <p className="text-[10px] text-slate-400">Utilize o botão 'Adicionar Venda' no painel principal para registar o seu faturamento.</p>
-                  </div>
-                ) : (
-                  <div className="border border-slate-150 dark:border-slate-800/80 rounded-2xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 max-h-[45vh] overflow-y-auto" id="faturamento_modal_sales_list">
-                    {[...vendas].sort((a, b) => b.data_venda.localeCompare(a.data_venda)).map((venda) => {
-                      const prod = produtos?.find(p => p.id === venda.produto_id);
-                      return (
-                        <div key={venda.id} className="p-3.5 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 flex justify-between items-center transition-colors">
-                          <div className="min-w-0 flex items-center space-x-3">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                              <ArrowUpRight className="w-4 h-4 shrink-0" />
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 block truncate">
-                                {prod ? prod.nome : 'Produto Desconhecido'} {venda.quantidade > 1 && (
-                                  <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1 py-0.5 rounded-md font-bold ml-1">
-                                    {venda.quantidade}x
-                                  </span>
-                                )}
-                              </span>
-                              <span className="text-[9px] text-slate-400 dark:text-slate-500 block">
-                                {formatFriendlyDate(venda.data_venda)} • ID: {venda.id.slice(0, 8)}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="text-right shrink-0">
-                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block">
-                              +{venda.valor_recebido.toLocaleString()} {currency}
-                            </span>
-                            {venda.desconto > 0 && (
-                              <span className="text-[8px] bg-rose-50 dark:bg-rose-950/20 text-rose-500 px-1 py-0.2 rounded font-bold">
-                                Desconto: -{venda.desconto} {currency}
-                              </span>
-                            )}
-                          </div>
+                    {/* Sales history table */}
+                    <div className="space-y-3" id="all_sales_history_list_section">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                        <h4 className="font-extrabold text-slate-900 dark:text-slate-100 text-xs">
+                          {modalFaturamentoFilter === 'periodo' ? `Vendas em ${rangeLabel}` : 'Lista de Todas as Vendas Registadas'}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold">{currentSalesList.length} vendas</span>
+                      </div>
+
+                      {currentSalesList.length === 0 ? (
+                        <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-150 dark:border-slate-800 rounded-2xl p-6 text-center space-y-2">
+                          <Info className="w-5 h-5 text-slate-400 mx-auto" />
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">Nenhuma venda encontrada para este período.</p>
+                          <p className="text-[10px] text-slate-400">Mude o filtro ou utilize o botão 'Adicionar Venda' para registar faturamento.</p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
+                      ) : (
+                        <div className="border border-slate-150 dark:border-slate-800/80 rounded-2xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800 max-h-[45vh] overflow-y-auto" id="faturamento_modal_sales_list">
+                          {[...currentSalesList].sort((a, b) => b.data_venda.localeCompare(a.data_venda)).map((venda) => {
+                            const prod = produtos?.find(p => p.id === venda.produto_id);
+                            return (
+                              <div key={venda.id} className="p-3.5 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 flex justify-between items-center transition-colors">
+                                <div className="min-w-0 flex items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                    <ArrowUpRight className="w-4 h-4 shrink-0" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-100 block truncate">
+                                      {prod ? prod.nome : 'Produto Desconhecido'} {venda.quantidade > 1 && (
+                                        <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1 py-0.5 rounded-md font-bold ml-1">
+                                          {venda.quantidade}x
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 dark:text-slate-500 block">
+                                      {formatFriendlyDate(venda.data_venda)} • ID: {venda.id.slice(0, 8)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 block">
+                                    +{venda.valor_recebido.toLocaleString()} {currency}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 block">{venda.forma_pagamento || 'M-Pesa'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Modal Footer */}
@@ -2114,6 +2170,29 @@ export default function DashboardView({ onOpenVenda, onOpenDespesa, setActiveTab
           }
         }}
         onClose={() => setZerandoContaBancaria(null)}
+      />
+
+      {/* Confirmation Modal for Deleting Activity (Venda or Saída) */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingActivity}
+        title={deletingActivity?.type === 'venda' ? 'Eliminar Venda' : 'Eliminar Saída (Despesa)'}
+        itemName={deletingActivity?.type === 'venda' ? `Venda de ${deletingActivity?.valor_recebido} ${currency}` : `${deletingActivity?.descricao || 'Saída'} (-${deletingActivity?.valor} ${currency})`}
+        description={
+          deletingActivity?.type === 'venda'
+            ? 'Tem certeza que deseja eliminar esta venda? Os valores alocados às caixinhas serão estornados e o estoque de produtos será reposto.'
+            : 'Tem certeza que deseja eliminar esta saída? O valor gasto será estornado de volta para as caixinhas e carteiras correspondentes.'
+        }
+        confirmText="Eliminar Definitivamente"
+        onConfirm={async () => {
+          if (!deletingActivity) return;
+          if (deletingActivity.type === 'venda') {
+            await deleteVenda(deletingActivity.id);
+          } else {
+            await deleteDespesa(deletingActivity.id);
+          }
+          setDeletingActivity(null);
+        }}
+        onClose={() => setDeletingActivity(null)}
       />
 
     </div>

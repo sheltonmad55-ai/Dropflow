@@ -20,12 +20,20 @@ import {
   AlertCircle,
   Edit,
   Check,
-  X
+  X,
+  ArrowDownRight,
+  Layers,
+  Wallet,
+  Sparkles
 } from 'lucide-react';
 
 export default function VendasView() {
   const { 
     vendas, 
+    despesas,
+    deleteDespesa,
+    caixinhas,
+    contasBancarias,
     produtos, 
     fornecedores, 
     profile, 
@@ -39,11 +47,12 @@ export default function VendasView() {
     formatMoney
   } = useApp();
 
-  const [subTab, setSubTab] = useState<'historico' | 'produtos' | 'fornecedores'>('historico');
+  const [subTab, setSubTab] = useState<'historico' | 'saidas' | 'produtos' | 'fornecedores'>('historico');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Delete modal state
   const [deletingVenda, setDeletingVenda] = useState<any>(null);
+  const [deletingDespesa, setDeletingDespesa] = useState<any>(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<'tudo' | 'hoje' | '7dias' | '30dias'>('tudo');
   
@@ -127,6 +136,37 @@ export default function VendasView() {
       const limit = new Date();
       limit.setDate(limit.getDate() - 30);
       return v.data_venda >= getLocalDateStr(limit);
+    }
+
+    return true;
+  });
+
+  const filteredDespesas = despesas.filter(d => {
+    const cx = caixinhas.find(c => c.id === d.caixinha_id);
+    const cxName = cx ? cx.nome : 'Despesa Geral';
+    const matchesSearch = (d.descricao && d.descricao.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (d.categoria && d.categoria.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      cxName.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (dateFilter === 'tudo') return true;
+
+    const todayStr = getLocalDateStr(new Date());
+    if (dateFilter === 'hoje') {
+      return d.data === todayStr;
+    }
+
+    if (dateFilter === '7dias') {
+      const limit = new Date();
+      limit.setDate(limit.getDate() - 7);
+      return d.data >= getLocalDateStr(limit);
+    }
+
+    if (dateFilter === '30dias') {
+      const limit = new Date();
+      limit.setDate(limit.getDate() - 30);
+      return d.data >= getLocalDateStr(limit);
     }
 
     return true;
@@ -268,21 +308,29 @@ export default function VendasView() {
     <div className="space-y-4" id="vendas_view">
       
       {/* Sub tabs navigation */}
-      <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-3 gap-1" id="vendas_subtabs">
+      <div className="bg-slate-100 p-1.5 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-1" id="vendas_subtabs">
         <button
           id="tab_venda_historico"
           onClick={() => { setSubTab('historico'); setSearchTerm(''); setDateFilter('tudo'); }}
           className={`py-2 text-xs font-bold rounded-lg transition-colors flex items-center justify-center space-x-1.5 ${subTab === 'historico' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/45' : 'text-slate-500 hover:text-slate-900'}`}
         >
-          <DollarSign className="w-3.5 h-3.5" />
+          <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
           <span>Vendas</span>
+        </button>
+        <button
+          id="tab_venda_saidas"
+          onClick={() => { setSubTab('saidas'); setSearchTerm(''); setDateFilter('tudo'); }}
+          className={`py-2 text-xs font-bold rounded-lg transition-colors flex items-center justify-center space-x-1.5 ${subTab === 'saidas' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/45' : 'text-slate-500 hover:text-slate-900'}`}
+        >
+          <ArrowDownRight className="w-3.5 h-3.5 text-rose-500" />
+          <span>Saídas</span>
         </button>
         <button
           id="tab_venda_produtos"
           onClick={() => { setSubTab('produtos'); setSearchTerm(''); setDateFilter('tudo'); }}
           className={`py-2 text-xs font-bold rounded-lg transition-colors flex items-center justify-center space-x-1.5 ${subTab === 'produtos' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/45' : 'text-slate-500 hover:text-slate-900'}`}
         >
-          <ShoppingBag className="w-3.5 h-3.5" />
+          <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
           <span>Produtos</span>
         </button>
         <button
@@ -290,7 +338,7 @@ export default function VendasView() {
           onClick={() => { setSubTab('fornecedores'); setSearchTerm(''); setDateFilter('tudo'); }}
           className={`py-2 text-xs font-bold rounded-lg transition-colors flex items-center justify-center space-x-1.5 ${subTab === 'fornecedores' ? 'bg-white text-slate-900 shadow-sm border border-slate-200/45' : 'text-slate-500 hover:text-slate-900'}`}
         >
-          <Users className="w-3.5 h-3.5" />
+          <Users className="w-3.5 h-3.5 text-indigo-500" />
           <span>Fornecedores</span>
         </button>
       </div>
@@ -305,6 +353,7 @@ export default function VendasView() {
               type="text"
               placeholder={
                 subTab === 'historico' ? 'Pesquisar vendas...' :
+                subTab === 'saidas' ? 'Pesquisar saídas / despesas...' :
                 subTab === 'produtos' ? 'Pesquisar produtos...' : 'Pesquisar fornecedores...'
               }
               value={searchTerm}
@@ -336,7 +385,7 @@ export default function VendasView() {
           )}
         </div>
 
-        {subTab === 'historico' && (
+        {(subTab === 'historico' || subTab === 'saidas') && (
           <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-50 border border-slate-200/60 rounded-xl max-w-fit shadow-sm" id="vendas_date_filters">
             {[
               { id: 'tudo', label: 'Tudo' },
@@ -546,6 +595,101 @@ export default function VendasView() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= SAÍDAS / DESPESAS PANEL ================= */}
+      {subTab === 'saidas' && (
+        <div className="space-y-4" id="vendas_saidas_panel">
+          {/* Saídas Summary Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Total de Saídas</span>
+              <span className="text-lg sm:text-xl font-extrabold text-rose-600 dark:text-rose-400">
+                -{formatMoney(filteredDespesas.reduce((acc, d) => acc + (d.valor || 0), 0))} {currency}
+              </span>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Registros</span>
+              <span className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-slate-100">
+                {filteredDespesas.length}
+              </span>
+            </div>
+            <div className="hidden sm:block bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Período</span>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                {dateFilter === 'tudo' ? 'Todo o Histórico' : dateFilter === 'hoje' ? 'Hoje' : dateFilter === '7dias' ? 'Últimos 7 dias' : 'Últimos 30 dias'}
+              </span>
+            </div>
+          </div>
+
+          {filteredDespesas.length === 0 ? (
+            <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-8 text-center text-slate-400 space-y-1" id="empty_saidas">
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Nenhuma saída ou despesa registrada.</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Use o botão de registrar despesa no topo para registrar custos operacionais, anúncios ou retiradas.</p>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs" id="table_saidas_list">
+                  <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-bold uppercase text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                    <tr>
+                      <th className="p-3 pl-4">Data</th>
+                      <th className="p-3">Descrição & Categoria</th>
+                      <th className="p-3">Caixinha (Pocket)</th>
+                      <th className="p-3">Conta / Carteira</th>
+                      <th className="p-3 text-right">Valor</th>
+                      <th className="p-3 text-right pr-4">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredDespesas.map(d => {
+                      const cx = caixinhas.find(c => c.id === d.caixinha_id);
+                      const conta = contasBancarias.find(c => c.id === d.conta_id);
+
+                      return (
+                        <tr key={d.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors" id={`row_despesa_${d.id}`}>
+                          <td className="p-3 pl-4 whitespace-nowrap text-slate-500 dark:text-slate-400 font-medium">
+                            {d.data}
+                          </td>
+                          <td className="p-3">
+                            <div className="font-bold text-slate-800 dark:text-slate-200">{d.descricao || 'Despesa sem descrição'}</div>
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              {d.categoria || 'Geral'}
+                            </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200/50 dark:border-amber-900/50">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              {cx?.nome || 'Geral'}
+                            </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap text-slate-600 dark:text-slate-300">
+                            {conta ? conta.nome : <span className="text-slate-400 italic">Automática</span>}
+                          </td>
+                          <td className="p-3 text-right whitespace-nowrap">
+                            <span className="font-bold text-rose-600 dark:text-rose-400 text-sm">
+                              -{formatMoney(d.valor)} {currency}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right pr-4 whitespace-nowrap">
+                            <button
+                              onClick={() => setDeletingDespesa(d)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+                              title="Excluir saída e estornar valores"
+                              id={`btn_delete_despesa_${d.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1313,6 +1457,22 @@ export default function VendasView() {
         confirmText={`Eliminar ${selectedVendaIds.length} Vendas`}
         onConfirm={confirmBulkDelete}
         onClose={() => setIsBulkDeleteOpen(false)}
+      />
+
+      {/* Confirmation Modal for Saída / Despesa Deletion */}
+      <ConfirmDeleteModal
+        isOpen={!!deletingDespesa}
+        title="Eliminar Saída (Despesa)"
+        itemName={deletingDespesa ? `${deletingDespesa.descricao || 'Despesa'} (-${deletingDespesa.valor} ${currency})` : undefined}
+        description="Tem certeza que deseja eliminar esta saída? O valor gasto será devolvido e estornado para os cofres (caixinhas) e contas bancárias de origem."
+        confirmText="Eliminar Saída"
+        onConfirm={async () => {
+          if (deletingDespesa) {
+            await deleteDespesa(deletingDespesa.id);
+            setDeletingDespesa(null);
+          }
+        }}
+        onClose={() => setDeletingDespesa(null)}
       />
 
     </div>

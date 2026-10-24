@@ -98,6 +98,12 @@ const requireAuth = (req: express.Request, res: express.Response, next: express.
 
 // ================= API ENDPOINTS =================
 
+// EscalePay Webhook Handler
+import webhookHandler from './api/webhook.js';
+app.all('/api/webhook', (req, res) => {
+  webhookHandler(req, res);
+});
+
 // Auth: Register
 app.post('/api/auth/register', (req, res) => {
   const { email, password, nome, pais, moeda } = req.body;

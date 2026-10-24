@@ -140,5 +140,10 @@ service cloud.firestore {
       allow delete: if isAdmin()
         || (isValidId(id) && ownsDocument());
     }
+
+    match /paid_subscribers/{email} {
+      allow read: if isAuth();
+      allow write: if true;
+    }
   }
 }

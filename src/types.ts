@@ -47,6 +47,7 @@ export interface Profile {
   ativarSons?: boolean;
   somMetas?: boolean;
   somRelatorios?: boolean;
+  contas_seeded?: boolean;
 }
 
 export interface Broadcast {
