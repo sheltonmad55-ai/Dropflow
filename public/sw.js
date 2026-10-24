@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'droopflow-cache-v12-bank-logos-pwa-fix';
+const CACHE_NAME = 'droopflow-cache-v13-notification-icons-fix';
 const ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icons/favicon-32.png',
   '/icons/favicon-48.png',
+  '/icons/badge-96.png',
+  '/icons/badge-72.png',
   '/icons/apple-touch-icon.png',
   '/icons/apple-touch-icon-167.png',
   '/icons/apple-touch-icon-152.png',
@@ -120,8 +122,11 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const origin = self.location.origin || 'https://dropflow-lake.vercel.app';
   const options = {
     body: data.body,
+    icon: `${origin}/icons/icon-192.png`,
+    badge: `${origin}/icons/badge-96.png`,
     tag: 'dropflow-push-' + Date.now(),
     renotify: true,
     data: {
@@ -137,8 +142,11 @@ self.addEventListener('push', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, body } = event.data;
+    const origin = self.location.origin || 'https://dropflow-lake.vercel.app';
     const options = {
       body: body || 'Notificação DroopFlow',
+      icon: `${origin}/icons/icon-192.png`,
+      badge: `${origin}/icons/badge-96.png`,
       tag: 'dropflow-msg-' + Date.now(),
       renotify: true
     };

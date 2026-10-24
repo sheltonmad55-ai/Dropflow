@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 server_db.json
+.vercel

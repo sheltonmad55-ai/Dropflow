@@ -62,19 +62,30 @@ export async function sendNotification(title: string, body: string, options?: No
   // Do not vibrate here: this function is also called by timers and realtime
   // callbacks, which are not user gestures and are blocked by modern browsers.
 
+  const getAbsoluteUrl = (path: string) => {
+    try {
+      const base = (typeof window !== 'undefined' && window.location?.origin) || 'https://dropflow-lake.vercel.app';
+      return new URL(path, base).href;
+    } catch (_) {
+      return path;
+    }
+  };
+
+  const notificationOptions: NotificationOptions = {
+    body,
+    icon: getAbsoluteUrl('/icons/icon-192.png'),
+    badge: getAbsoluteUrl('/icons/badge-96.png'),
+    renotify: true,
+    tag: 'dropflow-alert-' + Date.now(),
+    ...options
+  };
+
   // 1. Try ServiceWorker Registration showNotification (Works reliably on Chrome Mobile & PWAs)
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.ready;
       if (registration && registration.showNotification) {
-        await (registration as unknown as { showNotification: (t: string, o?: object) => Promise<void> }).showNotification(title, {
-          body,
-          icon: '/icons/icon-192.png',
-          badge: '/icons/favicon-48.png',
-          renotify: true,
-          tag: 'dropflow-alert-' + Date.now(),
-          ...options
-        });
+        await (registration as unknown as { showNotification: (t: string, o?: object) => Promise<void> }).showNotification(title, notificationOptions);
         return;
       }
     } catch (swError) {
@@ -85,12 +96,7 @@ export async function sendNotification(title: string, body: string, options?: No
   // 2. Fallback to standard Notification API (PC Chrome / Desktop)
   if (Notification.permission === 'granted') {
     try {
-      new Notification(title, {
-        body,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/favicon-48.png',
-        ...options
-      });
+      new Notification(title, notificationOptions);
     } catch (e) {
       console.warn('Erro ao disparar notificação local:', e);
     }
