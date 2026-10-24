@@ -32,10 +32,25 @@ import { useApp } from '../lib/appContext.tsx';
 
 interface LandingPageViewProps {
   onOpenAuth?: (initialMode?: 'login' | 'register') => void;
+  paywallUser?: any;
+  onCheckPayment?: () => Promise<boolean>;
+  onLogout?: () => void;
 }
 
-export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
+export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPayment, onLogout }: LandingPageViewProps) {
   const { login, loginGoogle, register } = useApp();
+
+  const [checkingPayment, setCheckingPayment] = useState(false);
+
+  const handleVerifyPayment = async () => {
+    if (!onCheckPayment) return;
+    setCheckingPayment(true);
+    try {
+      await onCheckPayment();
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
 
   // Navigation anchors
   const scrollTo = (id: string) => {
@@ -273,36 +288,113 @@ export default function LandingPageView({ onOpenAuth }: LandingPageViewProps) {
 
           {/* Action CTAs */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <button 
-              onClick={() => {
-                setAuthMode('login');
-                setShowAuthModal(true);
-              }}
-              className="text-xs font-bold text-slate-300 hover:text-white px-2.5 sm:px-3 py-2 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
-            >
-              Entrar
-            </button>
-            <button 
-              onClick={() => {
-                setAuthMode('register');
-                setShowAuthModal(true);
-              }}
-              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 sm:px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all cursor-pointer hidden xs:inline-flex"
-            >
-              Criar Conta
-            </button>
+            {paywallUser ? (
+              <>
+                <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-slate-300 bg-white/5 px-3 py-1.5 rounded-xl border border-white/5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="truncate max-w-[140px]">{paywallUser.nome || 'Lojista'}</span>
+                </div>
+                {onCheckPayment && (
+                  <button
+                    onClick={handleVerifyPayment}
+                    disabled={checkingPayment}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${checkingPayment ? 'animate-spin' : ''}`} />
+                    <span>{checkingPayment ? 'A verificar...' : 'Verificar Pagamento'}</span>
+                  </button>
+                )}
+                {onLogout && (
+                  <button
+                    onClick={onLogout}
+                    className="text-xs font-bold text-slate-400 hover:text-rose-400 px-2.5 py-2 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
+                  >
+                    Sair
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button 
+                  onClick={() => {
+                    setAuthMode('login');
+                    setShowAuthModal(true);
+                  }}
+                  className="text-xs font-bold text-slate-300 hover:text-white px-2.5 sm:px-3 py-2 rounded-xl hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  Entrar
+                </button>
+                <button 
+                  onClick={() => {
+                    setAuthMode('register');
+                    setShowAuthModal(true);
+                  }}
+                  className="text-xs font-bold text-emerald-400 hover:text-emerald-300 px-3 sm:px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition-all cursor-pointer hidden xs:inline-flex"
+                >
+                  Criar Conta
+                </button>
+              </>
+            )}
             <a 
-              href="https://checkout.escalepay.com/9729350"
+              href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-3.5 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
             >
-              <span>Assinar Pro</span>
+              <span>Assinar Pro (297 MT)</span>
               <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
             </a>
           </div>
         </div>
       </nav>
+
+      {/* Paywall Banner for authenticated users needing subscription */}
+      {paywallUser && (
+        <div className="bg-gradient-to-r from-emerald-950/95 via-slate-900 to-amber-950/85 border-b border-emerald-500/30 p-4 sticky top-20 z-40 backdrop-blur-xl shadow-2xl">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 text-left w-full md:w-auto">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-lg">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-bold text-sm text-white">
+                    Assinatura Pendente: {paywallUser.nome || 'Lojista'}
+                  </h4>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-mono border border-emerald-500/30 font-bold">
+                    🔒 Dados 100% Salvos na App
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  A tua conta está conectada ({paywallUser.email}). Para liberar o painel do DroopFlow, conclui o pagamento do plano Pro no EscalePay.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 justify-end">
+              <a
+                href={`https://checkout.escalepay.com/9729350${paywallUser.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 md:flex-initial bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5"
+              >
+                <span>Pagar no EscalePay (297 MT)</span>
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </a>
+              {onCheckPayment && (
+                <button
+                  onClick={handleVerifyPayment}
+                  disabled={checkingPayment}
+                  className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${checkingPayment ? 'animate-spin' : ''}`} />
+                  <span>{checkingPayment ? 'A verificar...' : 'Já Paguei'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= HERO SECTION ================= */}
       <section className="relative pt-12 pb-20 md:py-24 max-w-7xl mx-auto px-4 sm:px-6 text-center">

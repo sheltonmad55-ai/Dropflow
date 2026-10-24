@@ -46,6 +46,8 @@ function AppContent() {
     isLoadingAuth, 
     isAdmin, 
     profile, 
+    hasActiveAccess,
+    checkPaymentStatus,
     triggerMockUpgrade, 
     logout, 
     activeToast, 
@@ -120,12 +122,24 @@ function AppContent() {
     );
   }
 
-  // 2. Landing Page & Onboarding Flow
+  // 2. Landing Page for Unauthenticated Visitors
   if (!isAuthenticated) {
     return <LandingPageView />;
   }
 
-  // 3. Main Dashboard & PWA App Skeleton
+  // 3. Subscription Gate: If user is logged in but has no active paid Pro/VIP/Admin plan,
+  // return them to the Landing Page with the Paywall banner without losing any data in the app!
+  if (!hasActiveAccess) {
+    return (
+      <LandingPageView 
+        paywallUser={profile} 
+        onCheckPayment={checkPaymentStatus} 
+        onLogout={logout} 
+      />
+    );
+  }
+
+  // 4. Main Dashboard & PWA App Skeleton
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col md:flex-row relative" id="app_root_layout">
       

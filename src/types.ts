@@ -19,6 +19,7 @@ export interface HistoricoMeta {
 
 export interface Profile {
   id: string; // matches user auth id
+  email?: string;
   nome: string;
   pais: string;
   moeda: string;

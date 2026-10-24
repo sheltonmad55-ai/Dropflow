@@ -46,6 +46,8 @@ interface AppContextType {
   logout: () => void;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   triggerMockUpgrade: () => Promise<void>;
+  hasActiveAccess: boolean;
+  checkPaymentStatus: () => Promise<boolean>;
 
   // Admin and Metas/Relatorios
   isAdmin: boolean;
@@ -997,6 +999,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       const newProfile: Profile = {
         id: user.uid,
+        email: normalizedEmail,
         nome,
         pais: pais || 'Moçambique',
         moeda: moeda || 'MT',
@@ -1099,6 +1102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         userProfile = {
           id: user.uid,
+          email: googleEmail,
           nome: user.displayName || 'Empreendedor DroopFlow',
           pais: 'Moçambique',
           moeda: 'MT',
@@ -2418,12 +2422,56 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }
 
+  const userEmail = (auth.currentUser?.email || profile?.email || '').toLowerCase().trim();
+  const isSheltonSam = userEmail === 'sheltonsam2.0@gmail.com';
+  const isAdminUser = userEmail === 'sheltonmad55@gmail.com' || profile?.id === 'admin';
+  const isPro = profile?.plano === 'pro';
+
+  // Only VIP, Admin, and Pro (paid users) have access to the SaaS app!
+  const hasActiveAccess = isSheltonSam || isAdminUser || isPro;
+
+  async function checkPaymentStatus(): Promise<boolean> {
+    const user = auth.currentUser;
+    if (!user || !user.email) return false;
+
+    const email = user.email.toLowerCase().trim();
+    if (email === 'sheltonsam2.0@gmail.com' || email === 'sheltonmad55@gmail.com') {
+      return true;
+    }
+
+    try {
+      const cleanEmail = email.replace(/[^a-zA-Z0-9_@.-]/g, '_');
+      const subSnap = await getDoc(doc(fDb, 'paid_subscribers', cleanEmail));
+      if (subSnap.exists()) {
+        const subData = subSnap.data();
+        if (subData?.plano === 'pro' || subData?.status === 'pro') {
+          await updateDoc(doc(fDb, 'profiles', user.uid), {
+            plano: 'pro',
+            plano_atualizado_em: new Date().toISOString()
+          });
+          if (profile) {
+            setProfile({ ...profile, plano: 'pro' });
+          }
+          triggerToast('Plano Pro Confirmado! 🚀', 'O seu pagamento no EscalePay foi verificado com sucesso.', 'success');
+          return true;
+        }
+      }
+      triggerToast('Aguardando Pagamento', 'Ainda não identificamos a confirmação do pagamento no EscalePay para este e-mail. Se já efetuou o pagamento, aguarde 1 minuto.', 'info');
+      return false;
+    } catch (err) {
+      console.warn('Erro ao verificar pagamento:', err);
+      return false;
+    }
+  }
+
   return (
     <AppContext.Provider value={{
       profile,
       token,
       isAuthenticated,
       isLoadingAuth,
+      hasActiveAccess,
+      checkPaymentStatus,
       login,
       register,
       loginGoogle,
