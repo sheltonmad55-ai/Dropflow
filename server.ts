@@ -9,7 +9,7 @@ import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3005;
 const DB_FILE = path.join(process.cwd(), 'server_db.json');
 
 // Ensure JSON parser handles bodies
