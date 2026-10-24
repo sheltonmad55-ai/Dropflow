@@ -524,7 +524,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
               </div>
             </div>
             <img 
-              src="/assets/screenshots/painel-dashboard.png" 
+              src="/assets/screenshots/painel-dashboard.webp" 
               alt="DroopFlow Painel de Controlo Real" 
               className="w-full h-auto object-cover" 
             />
@@ -970,7 +970,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-emerald-500/40 transition-all">
               <img 
-                src="/assets/screenshots/detalhamento-lucro-real.png" 
+                src="/assets/screenshots/detalhamento-lucro-real.webp" 
                 alt="Detalhamento Financeiro e Lucro Líquido Real" 
                 className="w-full h-auto rounded-xl object-cover"
               />
@@ -983,7 +983,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7 order-2 lg:order-1">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-emerald-500/40 transition-all">
               <img 
-                src="/assets/screenshots/gestao-pockets.png" 
+                src="/assets/screenshots/gestao-pockets.webp" 
                 alt="Gestão de Pockets e Caixinhas DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
@@ -1046,7 +1046,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-sky-500/40 transition-all">
               <img 
-                src="/assets/screenshots/campanhas-roas.png" 
+                src="/assets/screenshots/campanhas-roas.webp" 
                 alt="Campanhas de Anúncios e ROAS DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
@@ -1059,7 +1059,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7 order-2 lg:order-1">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-emerald-500/40 transition-all">
               <img 
-                src="/assets/screenshots/produtos-margens.png" 
+                src="/assets/screenshots/produtos-margens.webp" 
                 alt="Lista de Produtos e Margens Brutas DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
@@ -1122,7 +1122,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-emerald-500/40 transition-all">
               <img 
-                src="/assets/screenshots/modal-registar-venda.png" 
+                src="/assets/screenshots/modal-registar-venda.webp" 
                 alt="Registo Inteligente de Venda DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
@@ -1135,7 +1135,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7 order-2 lg:order-1">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-teal-500/40 transition-all">
               <img 
-                src="/assets/screenshots/saldos-carteiras-bancos.png" 
+                src="/assets/screenshots/saldos-carteiras-bancos.webp" 
                 alt="Saldos de Carteiras e Bancos DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
@@ -1198,7 +1198,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           <div className="lg:col-span-7">
             <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-rose-500/40 transition-all">
               <img 
-                src="/assets/screenshots/lista-saidas-despesas.png" 
+                src="/assets/screenshots/lista-saidas-despesas.webp" 
                 alt="Lista de Saídas e Despesas DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
