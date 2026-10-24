@@ -1092,9 +1092,56 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
           </div>
         </div>
 
-        {/* 5. Saldos Unificados de Carteiras (M-Pesa, e-Mola e Bancos) */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-10">
+        {/* 5. Registo Inteligente de Venda com Alocação para Metas */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-20">
           <div className="lg:col-span-5 space-y-4 text-left">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+              <Plus className="w-3.5 h-3.5" /> Entrada Rápida de Pedidos
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black text-white font-display">
+              Registo Inteligente de Venda com Alocação para Metas
+            </h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Cada venda no DroopFlow faz muito mais do que somar faturamento. No momento do registo:
+            </p>
+            <ul className="space-y-2 text-xs text-slate-300 font-medium">
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Escolhe o método de recebimento (M-Pesa ou e-Mola) e a zona com motoboy.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span><strong>Alocar para Meta:</strong> Reserva na hora uma fatia do pedido para a Meta Diária, Semanal ou Mensal.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Resumo visual imediato de quanto foi para o Fornecedor e quanto sobrou de Lucro Limpo.</span>
+              </li>
+            </ul>
+          </div>
+          <div className="lg:col-span-7">
+            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-emerald-500/40 transition-all">
+              <img 
+                src="/assets/screenshots/modal-registar-venda.png" 
+                alt="Registo Inteligente de Venda DroopFlow" 
+                className="w-full h-auto rounded-xl object-cover"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* 6. Saldos Unificados de Carteiras (M-Pesa, e-Mola e Bancos) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-20">
+          <div className="lg:col-span-7 order-2 lg:order-1">
+            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-teal-500/40 transition-all">
+              <img 
+                src="/assets/screenshots/saldos-carteiras-bancos.png" 
+                alt="Saldos de Carteiras e Bancos DroopFlow" 
+                className="w-full h-auto rounded-xl object-cover"
+              />
+            </div>
+          </div>
+          <div className="lg:col-span-5 order-1 lg:order-2 space-y-4 text-left">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-teal-500/10 text-teal-400 text-xs font-bold border border-teal-500/20">
               <Wallet className="w-3.5 h-3.5" /> Conexão Financeira Real
             </div>
@@ -1119,11 +1166,40 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
               </li>
             </ul>
           </div>
+        </div>
+
+        {/* 7. Gestão de Saídas Operacionais & Ferramentas */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-10">
+          <div className="lg:col-span-5 space-y-4 text-left">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/10 text-rose-400 text-xs font-bold border border-rose-500/20">
+              <ArrowDownRight className="w-3.5 h-3.5" /> Controle de Custos
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black text-white font-display">
+              Gestão de Saídas Operacionais com Estorno Automático
+            </h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Tem o registo minucioso de onde o dinheiro da empresa está saindo, com categorização completa:
+            </p>
+            <ul className="space-y-2 text-xs text-slate-300 font-medium">
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Controle de assinaturas de IA e ferramentas (Claude, ElevenLabs, CapCut).</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Dedução precisa da caixinha (Pocket) e carteira móvel correspondente.</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>Estorno com 1 clique se a compra for cancelada ou digitada com erro.</span>
+              </li>
+            </ul>
+          </div>
           <div className="lg:col-span-7">
-            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-teal-500/40 transition-all">
+            <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-2 shadow-2xl hover:border-rose-500/40 transition-all">
               <img 
-                src="/assets/screenshots/saldos-carteiras-bancos.png" 
-                alt="Saldos de Carteiras e Bancos DroopFlow" 
+                src="/assets/screenshots/lista-saidas-despesas.png" 
+                alt="Lista de Saídas e Despesas DroopFlow" 
                 className="w-full h-auto rounded-xl object-cover"
               />
             </div>
