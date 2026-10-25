@@ -53,7 +53,8 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [selectedUpsellIds, setSelectedUpsellIds] = useState<string[]>([]);
 
   const selectedProd = produtos.find(p => p.id === produtoId);
-  const isPlrProd = isPlr || selectedProd?.tipo === 'digital_plr';
+  const isPlrItem = isPlr || selectedProd?.tipo === 'digital_plr';
+  const isPlrProd = isPlrItem;
 
   // Update unit price and total when product, quantity, order bumps, or upsells change
   useEffect(() => {

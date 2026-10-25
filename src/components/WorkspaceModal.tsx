@@ -18,6 +18,7 @@ interface WorkspaceModalProps {
     taxa_saque_tipo?: 'percentual' | 'fixo';
     taxa_saque_padrao?: number;
     compartilhar_caixinhas?: boolean;
+    compartilhar_contas?: boolean;
     plataforma_nome?: string;
     cor?: string;
     icone?: string;
@@ -76,6 +77,7 @@ export default function WorkspaceModal({
   const [taxaSaqueTipo, setTaxaSaqueTipo] = useState<'percentual' | 'fixo'>('percentual');
   const [taxaSaquePadrao, setTaxaSaquePadrao] = useState('0');
   const [compartilharCaixinhas, setCompartilharCaixinhas] = useState(false);
+  const [compartilharContas, setCompartilharContas] = useState(false);
   const [cor, setCor] = useState('#10B981');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -93,6 +95,7 @@ export default function WorkspaceModal({
       setTaxaSaqueTipo(workspaceToEdit.taxa_saque_tipo || 'percentual');
       setTaxaSaquePadrao(workspaceToEdit.taxa_saque_padrao ? String(workspaceToEdit.taxa_saque_padrao) : '0');
       setCompartilharCaixinhas(Boolean(workspaceToEdit.compartilhar_caixinhas));
+      setCompartilharContas(Boolean(workspaceToEdit.compartilhar_contas));
       setCor(workspaceToEdit.cor || '#10B981');
     } else {
       setNome('');
@@ -107,6 +110,7 @@ export default function WorkspaceModal({
       setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('0');
       setCompartilharCaixinhas(false);
+      setCompartilharContas(false);
       setCor('#10B981');
     }
   }, [workspaceToEdit, isOpen]);
@@ -202,6 +206,7 @@ export default function WorkspaceModal({
         taxa_saque_tipo: taxaSaqueTipo,
         taxa_saque_padrao: parseFloat(taxaSaquePadrao) || 0,
         compartilhar_caixinhas: compartilharCaixinhas,
+        compartilhar_contas: compartilharContas,
         plataforma_nome: plataformaNome.trim() || undefined,
         cor,
         icone: tipo === 'plr_infoproduto' ? 'Laptop' : tipo === 'ecommerce_drop' ? 'Store' : 'ShoppingBag'
@@ -445,6 +450,33 @@ export default function WorkspaceModal({
                 type="checkbox"
                 checked={compartilharCaixinhas}
                 onChange={(e) => setCompartilharCaixinhas(e.target.checked)}
+                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {/* Compartilhar Contas Bancárias & Carteiras Móveis */}
+          <div className="p-3.5 bg-slate-50/90 dark:bg-slate-950/90 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-2" id="field_ws_compartilhar_contas">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className={`p-2 rounded-xl ${compartilharContas ? 'bg-amber-100 dark:bg-amber-950 text-amber-600' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600'}`}>
+                  <Wallet className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Contas Bancárias & Carteiras Móveis
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    {compartilharContas
+                      ? 'Juntar Tudo: As receitas e despesas entram nas mesmas contas e carteiras globais'
+                      : 'Separar Carteiras (Recomendado): Cada negócio tem suas próprias contas e carteiras (M-Pesa, Bancos ou Gateways independentes)'}
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={compartilharContas}
+                onChange={(e) => setCompartilharContas(e.target.checked)}
                 className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
               />
             </div>

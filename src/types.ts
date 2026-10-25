@@ -33,6 +33,7 @@ export interface Workspace {
   taxa_saque_tipo?: 'percentual' | 'fixo'; // '%' ou fixo
   taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5% ou 50 MT)
   compartilhar_caixinhas?: boolean; // se true, compartilha caixinhas/saldo global; se false, caixinhas 100% isoladas deste negócio
+  compartilhar_contas?: boolean;    // se true, compartilha carteiras/contas bancárias globais; se false, carteiras 100% isoladas deste negócio
   plataforma_nome?: string;   // ex: "DroopCod", "Lojou", "Txapilog", "Zenofi", "Kiwify", "Shopify"
   cor?: string;
   icone?: string;

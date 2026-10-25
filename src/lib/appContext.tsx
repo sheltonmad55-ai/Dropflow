@@ -1090,15 +1090,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
       const userContas = dbContas.filter(c => c.user_id === userId);
+      const sanitizedContas = userContas.map(c => {
+        if (!c.workspace_id && primaryWsId) {
+          const updated = { ...c, workspace_id: primaryWsId };
+          void db.putItem('contas_bancarias', updated);
+          return updated;
+        }
+        return c;
+      });
       const seededKey = `dropflow_contas_seeded_${userId}`;
       const hasSeeded = localStorage.getItem(seededKey) === 'true';
 
-      if (userContas.length > 0) {
+      if (sanitizedContas.length > 0) {
         localStorage.setItem(seededKey, 'true');
-        setContasBancarias(userContas);
+        setContasBancarias(sanitizedContas);
       } else if (!hasSeeded) {
         localStorage.setItem(seededKey, 'true');
-        seedDefaultContas(userId);
+        seedDefaultContas(userId, primaryWsId);
       } else {
         setContasBancarias([]);
       }
@@ -1119,7 +1127,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function seedDefaultContas(userId: string) {
+  async function seedDefaultContas(userId: string, workspaceId?: string) {
     const seededKey = `dropflow_contas_seeded_${userId}`;
     localStorage.setItem(seededKey, 'true');
 
@@ -1127,6 +1135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {
         id: `conta_emola_${userId}`,
         user_id: userId,
+        workspace_id: workspaceId,
         nome: 'e-Mola',
         tipo: 'carteira_movel',
         saldo_atual: 0,
@@ -1138,6 +1147,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       {
         id: `conta_mpesa_${userId}`,
         user_id: userId,
+        workspace_id: workspaceId,
         nome: 'M-Pesa',
         tipo: 'carteira_movel',
         saldo_atual: 0,
@@ -2429,6 +2439,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...contaData,
       id: crypto.randomUUID(),
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: contaData.workspace_id || activeWorkspace?.id,
       editavel: true,
       criado_em: new Date().toISOString()
     };
@@ -2982,6 +2993,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setCaixinhas(prev => [...prev, ...defaultNewCaixinhas]);
     }
 
+    // Se o negócio tiver contas/carteiras isoladas, cria contas padrão para ele
+    if (newWs.compartilhar_contas !== true) {
+      const defaultNewContas: ContaBancaria[] = [];
+      if (newWs.tipo === 'plr_infoproduto') {
+        defaultNewContas.push(
+          {
+            id: `conta_gw_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: newWs.id,
+            nome: `${newWs.plataforma_nome || 'Lojou'} Gateway`,
+            tipo: 'gateway',
+            saldo_atual: 0,
+            cor: 'bg-purple-600',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: `conta_saque_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: newWs.id,
+            nome: 'M-Pesa Saques',
+            tipo: 'carteira_movel',
+            saldo_atual: 0,
+            cor: 'bg-rose-500',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          }
+        );
+      } else {
+        defaultNewContas.push(
+          {
+            id: `conta_emola_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: newWs.id,
+            nome: 'e-Mola',
+            tipo: 'carteira_movel',
+            saldo_atual: 0,
+            cor: 'bg-amber-500',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: `conta_mpesa_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: newWs.id,
+            nome: 'M-Pesa',
+            tipo: 'carteira_movel',
+            saldo_atual: 0,
+            cor: 'bg-rose-500',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          }
+        );
+      }
+
+      for (const c of defaultNewContas) {
+        await db.putItem('contas_bancarias', c);
+        await enqueueMutation({ type: 'conta_bancaria', action: 'create', data: c });
+      }
+      setContasBancarias(prev => [...prev, ...defaultNewContas]);
+    }
+
     if (profile) {
       const updatedProfile: Profile = {
         ...profile,
@@ -3152,6 +3229,91 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return [];
   }, [caixinhas, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
+  const filteredContasBancarias = useMemo(() => {
+    if (!activeWorkspace) return contasBancarias;
+    const isShared = activeWorkspace.compartilhar_contas === true;
+    if (isShared) {
+      return contasBancarias.filter(c => !c.workspace_id || (primaryWorkspace && c.workspace_id === primaryWorkspace.id));
+    }
+    const wsContas = contasBancarias.filter(c => c.workspace_id === activeWorkspace.id);
+    if (wsContas.length > 0) return wsContas;
+    if (isPrimaryActive) {
+      return contasBancarias.filter(c => !c.workspace_id || (primaryWorkspace && c.workspace_id === primaryWorkspace.id));
+    }
+    return [];
+  }, [contasBancarias, activeWorkspace, isPrimaryActive, primaryWorkspace]);
+
+  // Se o workspace ativo for isolado e ainda não tiver contas (ex: workspace criado anteriormente), inicializa contas padrão para ele
+  useEffect(() => {
+    if (!activeWorkspace || activeWorkspace.is_primary || activeWorkspace.compartilhar_contas === true) return;
+    const hasAccounts = contasBancarias.some(c => c.workspace_id === activeWorkspace.id);
+    if (!hasAccounts && contasBancarias.length > 0) {
+      const userId = auth.currentUser?.uid || profile?.id || 'offline_user';
+      const defaultNewContas: ContaBancaria[] = [];
+      if (activeWorkspace.tipo === 'plr_infoproduto') {
+        defaultNewContas.push(
+          {
+            id: `conta_gw_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: activeWorkspace.id,
+            nome: `${activeWorkspace.plataforma_nome || 'Lojou'} Gateway`,
+            tipo: 'gateway',
+            saldo_atual: 0,
+            cor: 'bg-purple-600',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: `conta_saque_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: activeWorkspace.id,
+            nome: 'M-Pesa Saques',
+            tipo: 'carteira_movel',
+            saldo_atual: 0,
+            cor: 'bg-rose-500',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          }
+        );
+      } else {
+        defaultNewContas.push(
+          {
+            id: `conta_emola_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: activeWorkspace.id,
+            nome: 'e-Mola',
+            tipo: 'carteira_movel',
+            saldo_atual: 0,
+            cor: 'bg-amber-500',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: `conta_mpesa_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: activeWorkspace.id,
+            nome: 'M-Pesa',
+            tipo: 'carteira_movel',
+            saldo_atual: 0,
+            cor: 'bg-rose-500',
+            editavel: true,
+            status_liberdade: 'livre',
+            criado_em: new Date().toISOString()
+          }
+        );
+      }
+
+      for (const c of defaultNewContas) {
+        void db.putItem('contas_bancarias', c);
+        void enqueueMutation({ type: 'conta_bancaria', action: 'create', data: c });
+      }
+      setContasBancarias(prev => [...prev, ...defaultNewContas]);
+    }
+  }, [activeWorkspace?.id, activeWorkspace?.compartilhar_contas, contasBancarias.length]);
+
   return (
     <AppContext.Provider value={{
       profile,
@@ -3189,7 +3351,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateUserProfileByAdmin,
 
       caixinhas: filteredCaixinhas,
-      contasBancarias,
+      contasBancarias: filteredContasBancarias,
       vendas: filteredVendas,
       despesas: filteredDespesas,
       produtos: filteredProdutos,
