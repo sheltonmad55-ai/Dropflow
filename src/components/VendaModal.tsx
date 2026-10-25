@@ -414,11 +414,13 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
 
       await addProduto({
         nome: fastProdNome,
-        categoria: 'Geral',
-        fornecedor_id: supplierId,
-        preco_compra: parseFloat(fastProdCompra),
-        preco_venda: parseFloat(fastProdVenda),
-        quantidade: 100
+        categoria: isPlr ? 'Infoprodutos' : 'Geral',
+        fornecedor_id: isPlr ? undefined : supplierId,
+        preco_compra: isPlr ? 0 : (parseFloat(fastProdCompra) || 0),
+        preco_venda: parseFloat(fastProdVenda) || 0,
+        quantidade: isPlr ? 999999 : 100,
+        tipo: isPlr ? 'digital_plr' : 'fisico',
+        workspace_id: activeWorkspace?.id
       });
 
       // Clear fast states
@@ -505,27 +507,39 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-2.5" id="fast_product_form">
                 <input
                   type="text"
-                  placeholder="Nome do produto"
+                  placeholder={isPlr ? "Nome do infoproduto / PLR" : "Nome do produto"}
                   value={fastProdNome}
                   onChange={(e) => setFastProdNome(e.target.value)}
                   className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    placeholder={`Custo de compra (${currency})`}
-                    value={fastProdCompra}
-                    onChange={(e) => setFastProdCompra(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
-                  />
-                  <input
-                    type="number"
-                    placeholder={`Preço de venda (${currency})`}
-                    value={fastProdVenda}
-                    onChange={(e) => setFastProdVenda(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
-                  />
-                </div>
+                {isPlr ? (
+                  <div>
+                    <input
+                      type="number"
+                      placeholder={`Preço de venda (${currency})`}
+                      value={fastProdVenda}
+                      onChange={(e) => setFastProdVenda(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs font-bold text-slate-900"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder={`Custo de compra (${currency})`}
+                      value={fastProdCompra}
+                      onChange={(e) => setFastProdCompra(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
+                    />
+                    <input
+                      type="number"
+                      placeholder={`Preço de venda (${currency})`}
+                      value={fastProdVenda}
+                      onChange={(e) => setFastProdVenda(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
+                    />
+                  </div>
+                )}
                 <div className="flex justify-end space-x-2 pt-1">
                   <button
                     type="button"
@@ -552,11 +566,16 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                 className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
               >
                 <option value="">Selecionar Produto...</option>
-                {produtos.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome} (Custo: {p.preco_compra} {currency} | Venda: {p.preco_venda} {currency})
-                  </option>
-                ))}
+                {produtos.map(p => {
+                  const isDigital = isPlr || p.tipo === 'digital_plr';
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {isDigital 
+                        ? `${p.nome} (Digital / PLR • Venda: ${p.preco_venda} ${currency})` 
+                        : `${p.nome} (Custo: ${p.preco_compra} ${currency} | Venda: ${p.preco_venda} ${currency})`}
+                    </option>
+                  );
+                })}
               </select>
             )}
           </div>

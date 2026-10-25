@@ -26,7 +26,8 @@ import {
   Wallet,
   Sparkles,
   Laptop,
-  Package
+  Package,
+  Store
 } from 'lucide-react';
 
 export default function VendasView() {
@@ -410,7 +411,15 @@ export default function VendasView() {
           {subTab === 'produtos' && (
             <button
               id="btn_open_add_product"
-              onClick={() => setShowAddProd(true)}
+              onClick={() => {
+                const isPlr = activeWorkspace?.tipo === 'plr_infoproduto';
+                setProdTipo(isPlr ? 'digital_plr' : 'fisico');
+                setProdWorkspaceId(activeWorkspace?.id || '');
+                setProdNome('');
+                setProdCompra('');
+                setProdVenda('');
+                setShowAddProd(true);
+              }}
               className="bg-emerald-600 text-white font-extrabold px-3.5 rounded-xl hover:bg-emerald-500 transition-colors flex items-center justify-center text-xs space-x-1 shadow-sm"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -867,7 +876,7 @@ export default function VendasView() {
                         onClick={() => {
                           setEditingProd(p);
                           setEditProdWorkspaceId(p.workspace_id || activeWorkspace?.id || '');
-                          setEditProdTipo(p.tipo || 'fisico');
+                          setEditProdTipo(p.tipo || (activeWorkspace?.tipo === 'plr_infoproduto' ? 'digital_plr' : 'fisico'));
                           setEditProdNome(p.nome);
                           setEditProdCat(p.categoria);
                           setEditProdSuppId(p.fornecedor_id || '');

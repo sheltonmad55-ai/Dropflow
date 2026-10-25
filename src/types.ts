@@ -132,7 +132,7 @@ export interface Caixinha {
   valor_distribuicao?: number; // valor fixo ou percentual dependendo do modo
 }
 
-export type ContaTipo = 'carteira_movel' | 'banco' | 'caixa_fisico' | 'caixa' | 'outros';
+export type ContaTipo = 'carteira_movel' | 'banco' | 'gateway' | 'banco_pessoal' | 'caixa_fisico' | 'caixa' | 'outros';
 
 export interface RetiradaHistoricoItem {
   id: string;

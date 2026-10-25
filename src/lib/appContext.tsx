@@ -972,7 +972,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           primaryWs = {
             id: defaultWsId,
             user_id: userId,
-            nome: currentUserProfile?.empresa || 'Negócio Principal (Drop)',
+            nome: currentUserProfile?.nome ? `${currentUserProfile.nome} (Drop)` : 'Negócio Principal (Drop)',
             tipo: 'ecommerce_drop',
             moeda: 'MT',
             custo_envio_ativo: true,
@@ -993,7 +993,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           primaryWs = {
             id: defaultWsId,
             user_id: userId,
-            nome: currentUserProfile?.empresa || 'Negócio Principal (Drop)',
+            nome: currentUserProfile?.nome ? `${currentUserProfile.nome} (Drop)` : 'Negócio Principal (Drop)',
             tipo: currentUserProfile?.tipo_negocio || 'ecommerce_drop',
             moeda: currentUserProfile?.moeda || 'MT',
             custo_envio_ativo: currentUserProfile?.custo_envio_ativo !== false,
