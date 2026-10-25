@@ -85,6 +85,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     fornecedores,
     zonasEntrega,
     isAdmin,
+    allProfiles,
+    updateUserProfileByAdmin,
     modoFoco,
     toggleModoFoco,
     formatMoney,
@@ -606,6 +608,207 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const sonsGlobais = profile?.ativarSons !== false;
   const somMetasAtivo = profile?.somMetas !== false;
   const somRelatoriosAtivo = profile?.somRelatorios !== false;
+
+  const [isNormalizingPlans, setIsNormalizingPlans] = useState(false);
+  const [normalizeMsg, setNormalizeMsg] = useState('');
+
+  const handleNormalizarPlanosAntigos = async () => {
+    const confirm = window.confirm(
+      "Desejas normalizar todas as contas no Firestore agora?\n\nTodas as contas com plano 'PRO' serão alteradas para 'TRIAL' (15 dias), COM EXCEÇÃO da conta sheltonsam2.0@gmail.com e da conta de admin."
+    );
+    if (!confirm) return;
+
+    try {
+      setIsNormalizingPlans(true);
+      setNormalizeMsg('');
+      let updatedCount = 0;
+      for (const u of (allProfiles || [])) {
+        const uEmail = (u.email || '').toLowerCase().trim();
+        if (uEmail === 'sheltonsam2.0@gmail.com' || uEmail === 'sheltonmad55@gmail.com') {
+          continue;
+        }
+        if (u.plano === 'pro') {
+          const trialExpiry = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+          await updateUserProfileByAdmin(u.id, {
+            plano: 'trial',
+            trial_expires_at: trialExpiry,
+            plano_expira_em: trialExpiry
+          });
+          updatedCount++;
+        }
+      }
+      setNormalizeMsg(`Sucesso! ${updatedCount} conta(s) foram migradas de PRO para TRIAL.`);
+      setTimeout(() => setNormalizeMsg(''), 5000);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao normalizar planos.');
+    } finally {
+      setIsNormalizingPlans(false);
+    }
+  };
+
+  // Dedicated Super Admin Settings View (NEVER show merchant shop, freight, or mobile wallets to admin)
+  if (isAdmin) {
+    return (
+      <div className="space-y-6 animate-fade-in pb-12" id="definicoes_admin_view">
+        {/* Header */}
+        <div>
+          <div className="flex items-center space-x-2">
+            <span className="p-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-400">
+              <Shield className="w-5 h-5 stroke-[2.5]" />
+            </span>
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 font-display">
+              Definições do Sistema & Super Admin
+            </h2>
+          </div>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+            Gestão global de credenciais de administração, preferências do painel e manutenção da base de dados.
+          </p>
+        </div>
+
+        {/* 1. Admin Account Card */}
+        <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+              <Key className="w-4 h-4 mr-1.5 text-indigo-600 dark:text-indigo-400" /> Credenciais de Administrador
+            </h3>
+            <span className="text-[9px] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              SUPER ADMIN ROOT
+            </span>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-11 h-11 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-extrabold text-base shadow-lg shadow-indigo-600/30">
+                <Shield className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div>
+                <p className="text-xs font-black text-slate-900 dark:text-slate-100">{profile?.nome || 'Super Administrador'}</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                  {currentUser?.email || 'sheltonmad55@gmail.com'}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-200/50 dark:border-slate-800/50 pt-3 grid grid-cols-2 gap-3 text-[10px]">
+              <div>
+                <span className="text-slate-400 font-semibold uppercase tracking-wider block text-[9px]">Privilégios</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black block">Acesso Global Irrestrito</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-semibold uppercase tracking-wider block text-[9px]">Servidor Firestore</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-black block flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Sincronizado
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Theme & Appearance Card */}
+        <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm">
+          <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+            <Sun className="w-4 h-4 mr-1.5 text-amber-500" /> Tema e Aparência do Painel
+          </h3>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleThemeChange('light')}
+              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-2 cursor-pointer transition-all ${
+                theme === 'light'
+                  ? 'border-indigo-600 bg-indigo-50/50 text-indigo-900 ring-1 ring-indigo-600'
+                  : 'border-slate-200/60 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <Sun className="w-5 h-5 text-amber-500" />
+              <span className="text-xs font-bold">Modo Claro</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleThemeChange('dark')}
+              className={`p-4 rounded-2xl border flex flex-col items-center justify-center space-y-2 cursor-pointer transition-all ${
+                theme === 'dark'
+                  ? 'border-indigo-500 bg-indigo-950/40 text-indigo-200 ring-1 ring-indigo-500'
+                  : 'border-slate-200/60 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Moon className="w-5 h-5 text-indigo-400" />
+              <span className="text-xs font-bold">Modo Escuro</span>
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800">
+            <div>
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">Modo Foco / Privacidade</span>
+              <span className="text-[10px] text-slate-400 block">Oculta valores de saldo e faturamento na interface</span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleModoFoco}
+              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
+                modoFoco 
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' 
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+              }`}
+            >
+              {modoFoco ? 'Foco ATIVO' : 'Desativado'}
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Manutenção e Correção de Planos na Base de Dados */}
+        <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+              <Database className="w-4 h-4 mr-1.5 text-indigo-600" /> Manutenção da Base de Dados
+            </h3>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono font-bold">
+              {allProfiles?.length || 0} contas no sistema
+            </span>
+          </div>
+
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+            Corrige contas antigas criadas no modelo anterior que ficaram gravadas como "PRO" sem pagamento. 
+            Esta operação migra todas as contas para <strong>TRIAL</strong>, preservando exclusivamente <strong>sheltonsam2.0@gmail.com</strong> e a conta de administração.
+          </p>
+
+          {normalizeMsg && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+              {normalizeMsg}
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={isNormalizingPlans}
+            onClick={handleNormalizarPlanosAntigos}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs py-3 px-4 rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>{isNormalizingPlans ? 'A normalizar contas no Firestore...' : '⚡ Corrigir Todos os Planos: Mudar PRO Antigo para TRIAL (Exceto sheltonsam2.0@gmail.com)'}</span>
+          </button>
+        </div>
+
+        {/* 4. Terminar Sessão */}
+        <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 shadow-sm flex items-center justify-between">
+          <div>
+            <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100">Sessão de Administrador</h4>
+            <p className="text-[10px] text-slate-400">Encerra a sessão ativa de segurança neste dispositivo</p>
+          </div>
+          <button
+            type="button"
+            onClick={logout}
+            className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 font-bold text-xs py-2 px-4 rounded-xl transition-colors flex items-center space-x-1.5 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Terminar Sessão</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in pb-12" id="definicoes_view">
