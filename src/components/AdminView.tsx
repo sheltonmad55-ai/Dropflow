@@ -3,16 +3,48 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import Papa from 'papaparse';
 import { useApp } from '../lib/appContext.tsx';
-import { Users, Megaphone, Shield, Search, Settings, AlertTriangle, Play, CheckCircle2, Lock, Unlock, RefreshCw } from 'lucide-react';
+import { 
+  Users, 
+  Megaphone, 
+  Shield, 
+  Search, 
+  Settings, 
+  AlertTriangle, 
+  CheckCircle2, 
+  Lock, 
+  Unlock, 
+  RefreshCw,
+  Clock,
+  Activity,
+  TrendingUp,
+  DollarSign,
+  Calendar,
+  Smartphone,
+  Laptop,
+  Download,
+  Flame,
+  Sparkles,
+  Filter,
+  ArrowUpRight,
+  UserCheck,
+  ShoppingBag,
+  Info
+} from 'lucide-react';
 import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
 import { db as fDb } from '../lib/firebase.ts';
 
 export default function AdminView() {
-  const { allProfiles, broadcasts, addBroadcast, updateUserProfileByAdmin, vendas } = useApp();
+  const { allProfiles, broadcasts, addBroadcast, updateUserProfileByAdmin } = useApp();
   
+  // Search & Filter States
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterTab, setFilterTab] = useState<'todos' | 'hoje' | 'ativos' | 'vendas' | 'pro' | 'trial'>('todos');
+  const [sortBy, setSortBy] = useState<'recentes' | 'faturamento' | 'ativos' | 'nome'>('recentes');
+
+  // Announcement Form State
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementTarget, setAnnouncementTarget] = useState<'todos' | 'trial_expira_2d'>('todos');
   const [announcementTitle, setAnnouncementTitle] = useState('');
@@ -20,11 +52,13 @@ export default function AdminView() {
   const [announcementImage, setAnnouncementImage] = useState('');
   const [announcementType, setAnnouncementType] = useState<'aviso' | 'novidade'>('novidade');
   
+  // User Config Modal State
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
-  const [newPlan, setNewPlan] = useState<'trial' | 'pro' | 'free'>('trial');
+  const [newPlan, setNewPlan] = useState<'trial' | 'pro' | 'free' | 'expired'>('trial');
   const [isSuspended, setIsSuspended] = useState(false);
   const [trialExpiresDays, setTrialExpiresDays] = useState('15');
   
+  // Admin Audit Logs
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
   const [isSendingAnnounce, setIsSendingAnnounce] = useState(false);
   const [announceSuccess, setAnnounceSuccess] = useState('');
@@ -45,21 +79,194 @@ export default function AdminView() {
     }
   }, []);
 
-  // Filter users based on search
-  const filteredUsers = allProfiles.filter(user => {
-    const term = searchTerm.toLowerCase();
-    return (
-      (user.nome || '').toLowerCase().includes(term) ||
-      (user.pais || '').toLowerCase().includes(term) ||
-      (user.id || '').toLowerCase().includes(term)
-    );
-  });
+  // Helper: Format exact ISO Date and Time
+  const formatExactDateTime = (isoString?: string) => {
+    if (!isoString) return 'Data não registada';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return 'Data inválida';
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const seconds = String(d.getSeconds()).padStart(2, '0');
+      return `${day}/${month}/${year} às ${hours}:${minutes}:${seconds}`;
+    } catch {
+      return isoString;
+    }
+  };
 
-  // Global metrics calculations
+  // Helper: Format relative friendly time
+  const formatRelativeTime = (isoString?: string) => {
+    if (!isoString) return 'Desconhecido';
+    try {
+      const d = new Date(isoString);
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      const diffSec = Math.floor(diffMs / 1000);
+      const diffMin = Math.floor(diffSec / 60);
+      const diffHours = Math.floor(diffMin / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffSec < 60) return 'Agora mesmo';
+      if (diffMin < 60) return `Há ${diffMin} min`;
+      if (diffHours < 24 && d.getDate() === now.getDate()) {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `Hoje às ${hh}:${mm}`;
+      }
+      if (diffDays === 1) {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `Ontem às ${hh}:${mm}`;
+      }
+      if (diffDays < 7) return `Há ${diffDays} dias`;
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${day}/${month}/${d.getFullYear()}`;
+    } catch {
+      return '---';
+    }
+  };
+
+  // Helper: Activity indicator
+  const getUserActivityStatus = (user: any) => {
+    const lastActive = user.ultimo_acesso_em || user.criado_em;
+    if (!lastActive) return { label: 'Sem registo', color: 'text-slate-400', bg: 'bg-slate-100 dark:bg-slate-800', dot: 'bg-slate-400' };
+    
+    const d = new Date(lastActive);
+    const now = new Date();
+    const diffMinutes = Math.floor((now.getTime() - d.getTime()) / 60000);
+
+    if (diffMinutes <= 10) {
+      return { label: 'Online agora', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/40', dot: 'bg-emerald-500 animate-pulse' };
+    }
+    if (diffMinutes <= 1440 && d.getDate() === now.getDate()) {
+      return { label: 'Ativo hoje', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/40', dot: 'bg-amber-500' };
+    }
+    if (diffMinutes <= 4320) {
+      return { label: 'Ativo recente (2-3d)', color: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-50 dark:bg-sky-950/40', dot: 'bg-sky-400' };
+    }
+    const days = Math.floor(diffMinutes / 1440);
+    return { label: `Inativo (${days}d)`, color: 'text-slate-400 dark:text-slate-500', bg: 'bg-slate-100 dark:bg-slate-800', dot: 'bg-slate-400' };
+  };
+
+  // KPI Calculations
   const totalUsers = allProfiles.length;
   const proUsersCount = allProfiles.filter(u => u.plano === 'pro').length;
-  const trialUsersCount = allProfiles.filter(u => u.plano === 'trial').length;
+  const trialUsersCount = allProfiles.filter(u => u.plano === 'trial' || (!u.plano && u.trial_expires_at)).length;
   const suspendedCount = allProfiles.filter(u => u.suspenso === true).length;
+
+  const todayStr = new Date().toDateString();
+  const usersJoinedToday = allProfiles.filter(u => u.criado_em && new Date(u.criado_em).toDateString() === todayStr);
+  const usersJoinedLast48h = allProfiles.filter(u => {
+    if (!u.criado_em) return false;
+    const diffHours = (Date.now() - new Date(u.criado_em).getTime()) / (1000 * 60 * 60);
+    return diffHours <= 48;
+  });
+
+  const usersActiveToday = allProfiles.filter(u => {
+    const last = u.ultimo_acesso_em || u.criado_em;
+    if (!last) return false;
+    return new Date(last).toDateString() === todayStr;
+  });
+
+  const usersWithSales = allProfiles.filter(u => (u.total_vendas_count || 0) > 0 || (u.total_faturamento || 0) > 0);
+  const totalFaturamentoGeral = allProfiles.reduce((sum, u) => sum + (u.total_faturamento || 0), 0);
+  const totalVendasGeral = allProfiles.reduce((sum, u) => sum + (u.total_vendas_count || 0), 0);
+
+  // Filtered and Sorted Users List
+  const filteredAndSortedUsers = useMemo(() => {
+    let list = allProfiles.filter(user => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = (
+        (user.nome || '').toLowerCase().includes(term) ||
+        (user.email || '').toLowerCase().includes(term) ||
+        (user.pais || '').toLowerCase().includes(term) ||
+        (user.id || '').toLowerCase().includes(term)
+      );
+
+      if (!matchesSearch) return false;
+
+      if (filterTab === 'hoje') {
+        return user.criado_em && new Date(user.criado_em).toDateString() === todayStr;
+      }
+      if (filterTab === 'ativos') {
+        const last = user.ultimo_acesso_em || user.criado_em;
+        return last && new Date(last).toDateString() === todayStr;
+      }
+      if (filterTab === 'vendas') {
+        return (user.total_vendas_count || 0) > 0 || (user.total_faturamento || 0) > 0;
+      }
+      if (filterTab === 'pro') {
+        return user.plano === 'pro';
+      }
+      if (filterTab === 'trial') {
+        return user.plano === 'trial' || (!user.plano && user.trial_expires_at);
+      }
+      return true;
+    });
+
+    // Sorting
+    list = [...list].sort((a, b) => {
+      if (sortBy === 'recentes') {
+        return (b.criado_em || '').localeCompare(a.criado_em || '');
+      }
+      if (sortBy === 'faturamento') {
+        return (b.total_faturamento || 0) - (a.total_faturamento || 0);
+      }
+      if (sortBy === 'ativos') {
+        return (b.ultimo_acesso_em || b.criado_em || '').localeCompare(a.ultimo_acesso_em || a.criado_em || '');
+      }
+      if (sortBy === 'nome') {
+        return (a.nome || '').localeCompare(b.nome || '');
+      }
+      return 0;
+    });
+
+    return list;
+  }, [allProfiles, searchTerm, filterTab, sortBy, todayStr]);
+
+  // Export Users CSV
+  const handleExportUsersCsv = () => {
+    if (allProfiles.length === 0) {
+      alert("Não há utilizadores registados para exportar.");
+      return;
+    }
+
+    const exportRows = allProfiles.map(u => {
+      const status = getUserActivityStatus(u);
+      return {
+        'Nome': u.nome || 'Sem nome',
+        'Email': u.email || 'Não informado',
+        'ID Usuário': u.id,
+        'Horário Exato de Adesão': formatExactDateTime(u.criado_em),
+        'Data ISO Adesão': u.criado_em || '',
+        'Plano Atual': u.plano || 'trial',
+        'Expiração Trial': u.trial_expires_at || '',
+        'Status Atividade': status.label,
+        'Último Acesso': formatExactDateTime(u.ultimo_acesso_em),
+        'Última Ação': u.ultimo_evento || '---',
+        'Dispositivo': u.dispositivo || '---',
+        'Total de Vendas Registadas': u.total_vendas_count || 0,
+        'Faturamento Total': u.total_faturamento || 0,
+        'País': u.pais || 'Moçambique',
+        'Moeda': u.moeda || 'MT',
+        'Conta Suspensa': u.suspenso ? 'Sim' : 'Não'
+      };
+    });
+
+    const csv = Papa.unparse(exportRows);
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `dropflow_utilizadores_admin_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handleBroadcastSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,7 +306,7 @@ export default function AdminView() {
       const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
       setTrialExpiresDays(days.toString());
     } else {
-      setTrialExpiresDays('7');
+      setTrialExpiresDays('15');
     }
   };
 
@@ -107,7 +314,7 @@ export default function AdminView() {
     if (!selectedUser) return;
     try {
       const trialExpiry = new Date();
-      trialExpiry.setDate(trialExpiry.getDate() + parseInt(trialExpiresDays || '7'));
+      trialExpiry.setDate(trialExpiry.getDate() + parseInt(trialExpiresDays || '15'));
 
       await updateUserProfileByAdmin(selectedUser.id, {
         plano: newPlan,
@@ -123,252 +330,491 @@ export default function AdminView() {
   return (
     <div className="space-y-6 animate-fade-in" id="admin_dashboard">
       
-      {/* Title */}
-      <div className="flex justify-between items-center">
+      {/* HEADER SECTION */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900 font-display flex items-center gap-2">
-            <Shield className="w-5 h-5 text-indigo-600" />
-            <span>Painel Administrativo</span>
-          </h2>
-          <p className="text-[10px] text-slate-500">Gestão global do ecossistema DroopFlow</p>
+          <div className="flex items-center space-x-2">
+            <span className="p-2 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-400">
+              <Shield className="w-5 h-5 stroke-[2.5]" />
+            </span>
+            <h2 className="text-xl font-black text-slate-900 dark:text-slate-50 font-display">
+              Painel de Controlo do Administrador
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Monitorização em tempo real de adesão, horários de entrada, planos ativos, métricas de vendas e engajamento.
+          </p>
         </div>
-        <span className="bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
-          Acesso Total
-        </span>
-      </div>
-
-      {/* Global Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" id="admin_stats_grid">
-        <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm space-y-1">
-          <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Total Utilizadores</span>
-          <span className="text-2xl font-black text-slate-900 block">{totalUsers}</span>
-        </div>
-        <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm space-y-1">
-          <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Assinantes PRO</span>
-          <span className="text-2xl font-black text-emerald-600 block">{proUsersCount}</span>
-        </div>
-        <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm space-y-1">
-          <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Em Trial</span>
-          <span className="text-2xl font-black text-indigo-600 block">{trialUsersCount}</span>
-        </div>
-        <div className="bg-white border border-slate-100 p-4 rounded-2xl shadow-sm space-y-1">
-          <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Suspensos</span>
-          <span className="text-2xl font-black text-rose-600 block">{suspendedCount}</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6" id="admin_modules_grid">
         
-        {/* Users Management List (Col-span 2) */}
-        <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4 md:col-span-2" id="user_management_panel">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <h3 className="font-extrabold text-sm text-slate-900 font-display flex items-center gap-2">
-              <Users className="w-4 h-4 text-slate-600" />
-              <span>Gerir Subscritores</span>
-            </h3>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleExportUsersCsv}
+            className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold py-2.5 px-3.5 rounded-2xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Descarregar relatório de utilizadores em CSV"
+          >
+            <Download className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Exportar Utilizadores (CSV)</span>
+          </button>
+          
+          <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/40 px-3 py-2 rounded-2xl text-[10px] font-black uppercase tracking-wider flex items-center space-x-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Admin Master</span>
+          </span>
+        </div>
+      </div>
 
-            {/* Search Input */}
-            <div className="relative">
-              <input 
-                type="text"
-                placeholder="Pesquisar por nome..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full md:w-56 bg-slate-50 border border-slate-200/60 pl-8 pr-3 py-1.5 rounded-xl text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
-              />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+      {/* ORGANIC CAMPAIGN TRACKING HERO BANNER */}
+      <div className="p-5 rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-radial from-indigo-500/20 to-transparent pointer-events-none"></div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1 max-w-xl">
+            <div className="flex items-center space-x-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950 flex items-center space-x-1">
+                <Flame className="w-3 h-3 fill-current" />
+                <span>Mini Campanha Orgânica Ativa</span>
+              </span>
+              <span className="text-[10px] text-indigo-200 flex items-center space-x-1">
+                <Clock className="w-3 h-3" />
+                <span>Atualizado em tempo real</span>
+              </span>
+            </div>
+            <h3 className="text-base font-black text-white">
+              {usersJoinedToday.length > 0 
+                ? `🚀 ${usersJoinedToday.length} novo(s) utilizador(es) entraram hoje através da tua campanha!`
+                : `📈 ${usersJoinedLast48h.length} novos utilizadores entraram nas últimas 48 horas.`}
+            </h3>
+            <p className="text-xs text-indigo-200/80 leading-relaxed">
+              Vê abaixo o horário exato de adesão de cada contato que recebeu o teu link, o plano atual e se já começaram a registrar faturamento ou adicionar vendas.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 p-3 rounded-2xl text-center min-w-[90px]">
+              <span className="text-[9px] font-bold text-indigo-200 uppercase block">Hoje</span>
+              <span className="text-xl font-black text-white">+{usersJoinedToday.length}</span>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 p-3 rounded-2xl text-center min-w-[90px]">
+              <span className="text-[9px] font-bold text-indigo-200 uppercase block">Últimas 48h</span>
+              <span className="text-xl font-black text-emerald-400">+{usersJoinedLast48h.length}</span>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 p-3 rounded-2xl text-center min-w-[110px]">
+              <span className="text-[9px] font-bold text-indigo-200 uppercase block">Com Vendas</span>
+              <span className="text-xl font-black text-amber-300">{usersWithSales.length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* GLOBAL STAT CARDS */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3" id="admin_stats_grid">
+        
+        {/* Total Cadastros */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-3xl shadow-sm space-y-1 relative overflow-hidden">
+          <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase block">Total Utilizadores</span>
+          <div className="flex items-baseline space-x-1.5">
+            <span className="text-2xl font-black text-slate-900 dark:text-slate-50">{totalUsers}</span>
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md">
+              +{usersJoinedToday.length} hoje
+            </span>
+          </div>
+          <span className="text-[9px] text-slate-400 block">Cadastros totais no sistema</span>
+        </div>
+
+        {/* Em Trial */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-3xl shadow-sm space-y-1 relative overflow-hidden">
+          <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase block">Em Teste Grátis</span>
+          <div className="flex items-baseline space-x-1.5">
+            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{trialUsersCount}</span>
+            <span className="text-[10px] font-bold text-slate-400">
+              ({totalUsers > 0 ? ((trialUsersCount / totalUsers) * 100).toFixed(0) : 0}%)
+            </span>
+          </div>
+          <span className="text-[9px] text-slate-400 block">Trial de 15 dias ativo</span>
+        </div>
+
+        {/* Assinantes PRO */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-3xl shadow-sm space-y-1 relative overflow-hidden">
+          <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase block">Assinantes PRO</span>
+          <div className="flex items-baseline space-x-1.5">
+            <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{proUsersCount}</span>
+            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md">
+              {totalUsers > 0 ? ((proUsersCount / totalUsers) * 100).toFixed(0) : 0}% conv.
+            </span>
+          </div>
+          <span className="text-[9px] text-slate-400 block">Plano Premium ilimitado</span>
+        </div>
+
+        {/* A Usar de Facto / Vendas */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-3xl shadow-sm space-y-1 relative overflow-hidden">
+          <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase block">A Usar de Facto</span>
+          <div className="flex items-baseline space-x-1.5">
+            <span className="text-2xl font-black text-amber-500">{usersWithSales.length}</span>
+            <span className="text-[10px] font-bold text-slate-400">
+              com vendas
+            </span>
+          </div>
+          <span className="text-[9px] text-slate-400 block">
+            {totalVendasGeral} vendas registadas
+          </span>
+        </div>
+
+        {/* Facturação Global Registada */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-3xl shadow-sm space-y-1 relative overflow-hidden col-span-2 lg:col-span-1">
+          <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase block">Facturação Geral</span>
+          <div className="flex items-baseline space-x-1">
+            <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+              +{totalFaturamentoGeral.toLocaleString()}
+            </span>
+            <span className="text-[10px] font-extrabold text-slate-400">MT</span>
+          </div>
+          <span className="text-[9px] text-slate-400 block">Movimentação nos negócios</span>
+        </div>
+      </div>
+
+      {/* MAIN ADMIN MANAGEMENT GRID */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6" id="admin_modules_grid">
+        
+        {/* USERS MONITOR PANEL (COL-SPAN 2) */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4 xl:col-span-2" id="user_management_panel">
+          
+          {/* Header & Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-50 font-display flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
+                <span>Utilizadores & Horários de Entrada ({filteredAndSortedUsers.length})</span>
+              </h3>
+              <p className="text-[10px] text-slate-400">
+                Acompanha a adesão exata da campanha e atividade de cada conta.
+              </p>
+            </div>
+
+            {/* Search and Sort */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input 
+                  type="text"
+                  placeholder="Pesquisar por nome ou email..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="w-full sm:w-56 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 pl-8 pr-3 py-2 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              </div>
+
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                className="bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none"
+              >
+                <option value="recentes">Mais Recentes</option>
+                <option value="ativos">Mais Ativos</option>
+                <option value="faturamento">Maior Facturação</option>
+                <option value="nome">Nome (A-Z)</option>
+              </select>
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-slate-100 rounded-2xl">
-            <table className="w-full min-w-[600px] text-[11px] text-left">
-              <thead className="bg-slate-50 text-slate-400 uppercase font-black tracking-wider text-[9px] border-b border-slate-100">
+          {/* Filter Tabs */}
+          <div className="flex flex-wrap gap-1.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+            {[
+              { id: 'todos', label: `Todos (${totalUsers})` },
+              { id: 'hoje', label: `Entraram Hoje (${usersJoinedToday.length})`, highlight: usersJoinedToday.length > 0 },
+              { id: 'ativos', label: `Ativos Hoje (${usersActiveToday.length})` },
+              { id: 'vendas', label: `Com Vendas (${usersWithSales.length})` },
+              { id: 'pro', label: `Plano PRO (${proUsersCount})` },
+              { id: 'trial', label: `Em Trial (${trialUsersCount})` },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setFilterTab(tab.id as any)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  filterTab === tab.id
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : tab.highlight
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Table List of Users */}
+          <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-2xl">
+            <table className="w-full min-w-[700px] text-[11px] text-left">
+              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-400 uppercase font-black tracking-wider text-[9px] border-b border-slate-100 dark:border-slate-800">
                 <tr>
-                  <th className="px-4 py-3">Nome</th>
-                  <th className="px-4 py-3">País</th>
-                  <th className="px-4 py-3">Plano</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3 text-right">Ações</th>
+                  <th className="px-4 py-3">Utilizador & Contato</th>
+                  <th className="px-4 py-3">Horário de Adesão</th>
+                  <th className="px-4 py-3">Plano & Teste</th>
+                  <th className="px-4 py-3">Atividade / Uso</th>
+                  <th className="px-4 py-3 text-right">Vendas & Facturação</th>
+                  <th className="px-4 py-3 text-center">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-bold">
-                {filteredUsers.length === 0 ? (
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-bold">
+                {filteredAndSortedUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-6 text-slate-400">Nenhum utilizador encontrado.</td>
+                    <td colSpan={6} className="text-center py-10 text-slate-400">
+                      Nenhum utilizador encontrado com os filtros selecionados.
+                    </td>
                   </tr>
                 ) : (
-                  filteredUsers.map(user => (
-                    <tr key={user.id} className="hover:bg-slate-50/50">
-                      <td className="px-4 py-3">
-                        <span className="text-slate-900 block truncate max-w-[150px]">{user.nome}</span>
-                        <span className="text-[9px] text-slate-400 font-medium block truncate max-w-[150px]">{user.id}</span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">{user.pais || '---'} ({user.moeda || 'MT'})</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase tracking-wider font-black ${user.plano === 'pro' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
-                          {user.plano}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {user.suspenso ? (
-                          <span className="text-rose-600 text-[10px] flex items-center gap-1">
-                            <Lock className="w-3 h-3" /> Suspenso
-                          </span>
-                        ) : (
-                          <span className="text-emerald-600 text-[10px] flex items-center gap-1">
-                            <Unlock className="w-3 h-3" /> Ativo
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleOpenUserConfig(user)}
-                          className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-2.5 py-1 rounded-lg text-[9px] transition-all cursor-pointer inline-flex items-center gap-1"
-                        >
-                          <Settings className="w-3 h-3" /> Ajustar
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredAndSortedUsers.map(user => {
+                    const activity = getUserActivityStatus(user);
+                    const isNewToday = user.criado_em && new Date(user.criado_em).toDateString() === todayStr;
+                    const vendasCount = user.total_vendas_count || 0;
+                    const faturamento = user.total_faturamento || 0;
+
+                    return (
+                      <tr key={user.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors">
+                        
+                        {/* 1. Utilizador & Contato */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-400 text-white flex items-center justify-center text-xs font-black shrink-0">
+                              {(user.nome || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-slate-900 dark:text-slate-50 font-black truncate max-w-[150px]">
+                                  {user.nome || 'Sem nome'}
+                                </span>
+                                {isNewToday && (
+                                  <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                    Novo
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400 block truncate max-w-[160px]">
+                                {user.email || user.id}
+                              </span>
+                              <span className="text-[9px] text-slate-400">
+                                {user.pais || 'Moçambique'} ({user.moeda || 'MT'})
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. Horário de Adesão */}
+                        <td className="px-4 py-3.5">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center space-x-1 text-slate-800 dark:text-slate-200">
+                              <Calendar className="w-3 h-3 text-indigo-500" />
+                              <span className="font-black text-[11px]">{formatRelativeTime(user.criado_em)}</span>
+                            </div>
+                            <span className="text-[9px] text-slate-400 font-mono block">
+                              {formatExactDateTime(user.criado_em)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* 3. Plano & Teste Grátis */}
+                        <td className="px-4 py-3.5">
+                          <div className="space-y-1">
+                            {user.plano === 'pro' ? (
+                              <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[9px] uppercase tracking-wider font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 border border-emerald-100 dark:border-emerald-900/40">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>Plano PRO</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[9px] uppercase tracking-wider font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 border border-indigo-100 dark:border-indigo-900/40">
+                                <Clock className="w-2.5 h-2.5" />
+                                <span>Trial 15 Dias</span>
+                              </span>
+                            )}
+
+                            {user.suspenso && (
+                              <span className="inline-flex items-center space-x-0.5 text-[9px] text-rose-500 font-black block">
+                                <Lock className="w-2.5 h-2.5" />
+                                <span>Suspenso</span>
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Atividade / Uso Real */}
+                        <td className="px-4 py-3.5">
+                          <div className="space-y-1">
+                            <span className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${activity.bg} ${activity.color}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${activity.dot}`}></span>
+                              <span>{activity.label}</span>
+                            </span>
+                            
+                            {user.ultimo_evento && (
+                              <span className="text-[9px] text-slate-500 dark:text-slate-400 block truncate max-w-[130px]" title={user.ultimo_evento}>
+                                {user.ultimo_evento}
+                              </span>
+                            )}
+
+                            {user.ultimo_acesso_em && (
+                              <span className="text-[8px] text-slate-400 block font-mono">
+                                Último: {formatRelativeTime(user.ultimo_acesso_em)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 5. Vendas & Facturação */}
+                        <td className="px-4 py-3.5 text-right">
+                          {vendasCount > 0 || faturamento > 0 ? (
+                            <div>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-black text-xs block">
+                                +{faturamento.toLocaleString()} {user.moeda || 'MT'}
+                              </span>
+                              <span className="text-[9px] text-slate-400 block">
+                                {vendasCount} venda(s) registada(s)
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">
+                              Sem vendas ainda
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 6. Ações */}
+                        <td className="px-4 py-3.5 text-center">
+                          <button
+                            onClick={() => handleOpenUserConfig(user)}
+                            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center space-x-1"
+                          >
+                            <Settings className="w-3 h-3 text-slate-500" />
+                            <span>Ajustar</span>
+                          </button>
+                        </td>
+
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Global Warning Broadcast Panel */}
-        <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4" id="warning_broadcast_panel">
-          <h3 className="font-extrabold text-sm text-slate-900 font-display flex items-center gap-2 pb-2 border-b border-slate-100">
-            <Megaphone className="w-4 h-4 text-indigo-600" />
-            <span>Transmitir Novidade ou Banner</span>
-          </h3>
+        {/* SIDE PANELS: BROADCAST & AUDIT LOGS */}
+        <div className="space-y-6">
+          
+          {/* BROADCAST / NOTIFICATION TO USERS */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4" id="warning_broadcast_panel">
+            <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-50 font-display flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <Megaphone className="w-4 h-4 text-indigo-600" />
+              <span>Comunicado em Banner</span>
+            </h3>
 
-          <p className="text-[10px] text-slate-500 leading-relaxed">
-            Adicione uma novidade, aviso ou promoção. É possível enviar em formato de banner completo contendo imagens, links de ação e títulos destacados para chamar a atenção dos utilizadores.
-          </p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              Envia comunicados ou novidades com imagens e links de ação destacados para todos os utilizadores da plataforma.
+            </p>
 
-          <form onSubmit={handleBroadcastSubmit} className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">Tipo de Banner</label>
-              <select
-                value={announcementType}
-                onChange={e => setAnnouncementType(e.target.value as any)}
-                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
-              >
-                <option value="novidade">🎉 Novidade (Destaque em Banner)</option>
-                <option value="aviso">⚠️ Aviso Importante (Simples)</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">Título do Banner (Opcional)</label>
-              <input
-                type="text"
-                placeholder="Ex: Nova Funcionalidade Liberada!"
-                value={announcementTitle}
-                onChange={e => setAnnouncementTitle(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">Texto / Mensagem</label>
-              <textarea
-                rows={2}
-                placeholder="Escreva a mensagem do comunicado ou descrição da novidade..."
-                value={announcementText}
-                onChange={e => setAnnouncementText(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 p-3 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">Link da Novidade / Ação (Opcional)</label>
-              <input
-                type="url"
-                placeholder="Ex: https://dropflow-lake.vercel.app/novas-metas"
-                value={announcementLink}
-                onChange={e => setAnnouncementLink(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">URL da Imagem / Mídia (Opcional)</label>
-              <input
-                type="url"
-                placeholder="Ex: https://images.unsplash.com/... ou link de imagem"
-                value={announcementImage}
-                onChange={e => setAnnouncementImage(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black text-slate-400 uppercase block">Público Alvo</label>
-              <select
-                value={announcementTarget}
-                onChange={e => setAnnouncementTarget(e.target.value as any)}
-                className="w-full bg-slate-50 border border-slate-200/60 px-3 py-2 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold transition-all"
-              >
-                <option value="todos">Todos os Utilizadores</option>
-                <option value="trial_expira_2d">Trial Expira em 2 dias ou menos</option>
-              </select>
-            </div>
-
-            {announceSuccess && (
-              <p className="text-[10px] font-bold text-emerald-600 bg-emerald-50 p-2.5 rounded-xl text-center">
-                {announceSuccess}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={isSendingAnnounce}
-              className="w-full bg-indigo-600 text-white font-extrabold text-xs py-3 px-4 rounded-2xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/15"
-            >
-              <Megaphone className="w-4 h-4" />
-              <span>{isSendingAnnounce ? 'A transmitir...' : 'Emitir Aviso 📢'}</span>
-            </button>
-          </form>
-        </div>
-
-      </div>
-
-      {/* Footer Audit Logs & User Config Modal overlay */}
-      <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-3" id="admin_audit_logs">
-        <h4 className="font-extrabold text-xs text-slate-900 flex items-center gap-2 pb-2 border-b border-slate-100 font-display">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-          <span>Registo de Ações Administrativas</span>
-        </h4>
-        
-        <div className="space-y-2.5 max-h-48 overflow-y-auto pr-2" id="audit_logs_list">
-          {adminLogs.length === 0 ? (
-            <p className="text-[10px] text-slate-400 py-4 text-center">Sem registos recentes.</p>
-          ) : (
-            adminLogs.map(log => (
-              <div key={log.id} className="flex justify-between items-start text-[10px] p-2 bg-slate-50 rounded-xl border border-slate-200/30" id={`log_${log.id}`}>
-                <div className="space-y-0.5">
-                  <span className="font-black text-indigo-600">{log.adminEmail}</span>
-                  <span className="text-slate-700 block font-bold">{log.acao}</span>
-                  <span className="text-slate-400 text-[8px] font-medium block">Alvo: {log.utilizadorAfetado}</span>
-                </div>
-                <span className="text-slate-400 text-[8px] font-medium shrink-0">
-                  {new Date(log.timestamp).toLocaleTimeString()}
-                </span>
+            <form onSubmit={handleBroadcastSubmit} className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Tipo de Mensagem</label>
+                <select
+                  value={announcementType}
+                  onChange={e => setAnnouncementType(e.target.value as any)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
+                >
+                  <option value="novidade">🎉 Novidade (Banner em Destaque)</option>
+                  <option value="aviso">⚠️ Aviso Importante</option>
+                </select>
               </div>
-            ))
-          )}
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Título (Opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Nova Função de CSV Disponível!"
+                  value={announcementTitle}
+                  onChange={e => setAnnouncementTitle(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Mensagem</label>
+                <textarea
+                  rows={2}
+                  required
+                  placeholder="Escreve aqui o texto do aviso ou da novidade..."
+                  value={announcementText}
+                  onChange={e => setAnnouncementText(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 p-3 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Público Alvo</label>
+                <select
+                  value={announcementTarget}
+                  onChange={e => setAnnouncementTarget(e.target.value as any)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 px-3 py-2 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
+                >
+                  <option value="todos">Todos os Utilizadores</option>
+                  <option value="trial_expira_2d">Trial a expirar em 2 dias</option>
+                </select>
+              </div>
+
+              {announceSuccess && (
+                <p className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 p-2.5 rounded-xl text-center">
+                  {announceSuccess}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSendingAnnounce}
+                className="w-full bg-indigo-600 text-white font-extrabold text-xs py-3 px-4 rounded-2xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-indigo-600/15"
+              >
+                <Megaphone className="w-4 h-4" />
+                <span>{isSendingAnnounce ? 'A transmitir...' : 'Publicar Comunicado'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* AUDIT LOGS */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-3" id="admin_audit_logs">
+            <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-50 flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800 font-display">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+              <span>Registo de Ações Administrativas</span>
+            </h4>
+            
+            <div className="space-y-2.5 max-h-48 overflow-y-auto pr-2" id="audit_logs_list">
+              {adminLogs.length === 0 ? (
+                <p className="text-[10px] text-slate-400 py-4 text-center">Sem registos recentes.</p>
+              ) : (
+                adminLogs.map(log => (
+                  <div key={log.id} className="flex justify-between items-start text-[10px] p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/30 dark:border-slate-700/40" id={`log_${log.id}`}>
+                    <div className="space-y-0.5">
+                      <span className="font-black text-indigo-600 dark:text-indigo-400">{log.adminEmail}</span>
+                      <span className="text-slate-700 dark:text-slate-300 block font-bold">{log.acao}</span>
+                      <span className="text-slate-400 text-[8px] font-medium block">Alvo: {log.utilizadorAfetado}</span>
+                    </div>
+                    <span className="text-slate-400 text-[8px] font-medium shrink-0">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
         </div>
+
       </div>
 
-      {/* User configuration popup modal */}
+      {/* USER CONFIGURATION MODAL OVERLAY */}
       {selectedUser && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-4 border border-slate-100 shadow-2xl animate-scale-in">
-            <div className="border-b border-slate-100 pb-2">
-              <h4 className="font-black text-slate-900 text-sm">Ajustar Utilizador</h4>
-              <p className="text-[10px] text-slate-500 truncate">{selectedUser.nome}</p>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-5 space-y-4 border border-slate-100 dark:border-slate-800 shadow-2xl animate-scale-in">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
+              <h4 className="font-black text-slate-900 dark:text-slate-50 text-sm">Ajustar Utilizador</h4>
+              <p className="text-[10px] text-slate-500 truncate">{selectedUser.nome} ({selectedUser.email || selectedUser.id})</p>
+              <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
+                Entrou em: {formatExactDateTime(selectedUser.criado_em)}
+              </p>
             </div>
 
             <div className="space-y-4">
@@ -377,35 +823,36 @@ export default function AdminView() {
                 <select
                   value={newPlan}
                   onChange={e => setNewPlan(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 p-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
                 >
                   <option value="trial">Trial (Teste Grátis)</option>
-                  <option value="pro">Pro (Premium)</option>
-                  <option value="free">Free (Gratuito)</option>
+                  <option value="pro">Pro (Premium Ilimitado)</option>
+                  <option value="free">Free (Gratuito Limitado)</option>
+                  <option value="expired">Expirado</option>
                 </select>
               </div>
 
               {newPlan === 'trial' && (
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase block">Dias Restantes de Trial</label>
+                  <label className="text-[9px] font-black text-slate-400 uppercase block">Dias de Trial a Contar de Hoje</label>
                   <input
                     type="number"
                     value={trialExpiresDays}
                     onChange={e => setTrialExpiresDays(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 p-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
                   />
                 </div>
               )}
 
-              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                 <div>
-                  <span className="text-xs font-bold text-slate-900 block">Suspender Conta</span>
-                  <span className="text-[8px] text-slate-400 block">Impedir acesso imediato à plataforma</span>
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-50 block">Suspender Conta</span>
+                  <span className="text-[8px] text-slate-400 block">Bloquear acesso do utilizador</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsSuspended(!isSuspended)}
-                  className={`w-10 h-5 rounded-full p-0.5 transition-colors cursor-pointer ${isSuspended ? 'bg-rose-500 flex justify-end' : 'bg-slate-300 flex justify-start'}`}
+                  className={`w-10 h-5 rounded-full p-0.5 transition-colors cursor-pointer ${isSuspended ? 'bg-rose-500 flex justify-end' : 'bg-slate-300 dark:bg-slate-700 flex justify-start'}`}
                 >
                   <span className="w-4 h-4 bg-white rounded-full shadow-md" />
                 </button>
@@ -415,7 +862,7 @@ export default function AdminView() {
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() => setSelectedUser(null)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition-all cursor-pointer"
+                className="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 rounded-xl transition-all cursor-pointer"
               >
                 Cancelar
               </button>
@@ -423,7 +870,7 @@ export default function AdminView() {
                 onClick={handleSaveUserConfig}
                 className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs py-2.5 rounded-xl transition-all cursor-pointer shadow-md shadow-indigo-600/10"
               >
-                Salvar
+                Guardar
               </button>
             </div>
           </div>

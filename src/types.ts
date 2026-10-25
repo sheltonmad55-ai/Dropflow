@@ -88,6 +88,13 @@ export interface Profile {
   somMetas?: boolean;
   somRelatorios?: boolean;
   contas_seeded?: boolean;
+  // Activity and analytics tracking
+  ultimo_acesso_em?: string;
+  tempo_ativo_minutos?: number;
+  total_vendas_count?: number;
+  total_faturamento?: number;
+  ultimo_evento?: string;
+  dispositivo?: string;
 }
 
 export interface Broadcast {

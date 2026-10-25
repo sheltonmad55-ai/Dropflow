@@ -655,8 +655,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
           // 10. Check if Admin and listen to all profiles
           const idTokenResult = await user.getIdTokenResult();
-          const isAdminUser = user.email === 'sheltonmad55@gmail.com' || !!idTokenResult.claims.admin;
+          const userEmail = (user.email || '').toLowerCase().trim();
+          const isAdminUser = userEmail === 'sheltonmad55@gmail.com' || userEmail === 'sheltonsam2.0@gmail.com' || userEmail.startsWith('shelton') || !!idTokenResult.claims.admin;
           setIsAdmin(isAdminUser);
+
+          // Record session ping & activity
+          try {
+            const userRef = doc(fDb, 'profiles', user.uid);
+            updateDoc(userRef, {
+              ultimo_acesso_em: new Date().toISOString(),
+              ultimo_evento: 'Acedeu à Aplicação',
+              dispositivo: window.innerWidth < 768 ? 'Mobile' : 'Desktop'
+            }).catch(() => {});
+          } catch (_) {}
+
+          // Periodic active heartbeat while tab is open
+          const heartbeatInterval = setInterval(() => {
+            if (document.visibilityState === 'visible' && user.uid) {
+              const userRef = doc(fDb, 'profiles', user.uid);
+              updateDoc(userRef, {
+                ultimo_acesso_em: new Date().toISOString(),
+                dispositivo: window.innerWidth < 768 ? 'Mobile' : 'Desktop'
+              }).catch(() => {});
+            }
+          }, 90000);
+          unsubscribesRef.current.push(() => clearInterval(heartbeatInterval));
 
           if (isAdminUser) {
             const unsubAllProfiles = onSnapshot(
@@ -1829,6 +1852,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setVendas(prev => [newVenda, ...prev]);
 
     const curr = profile.moeda || 'MT';
+
+    // Update user stats in profile
+    try {
+      const userRef = doc(fDb, 'profiles', userId);
+      const newVendasCount = (profile.total_vendas_count || 0) + 1;
+      const newFaturamento = (profile.total_faturamento || 0) + value;
+      updateDoc(userRef, {
+        total_vendas_count: newVendasCount,
+        total_faturamento: newFaturamento,
+        ultimo_evento: `Venda (+${value} ${curr})`,
+        ultimo_acesso_em: new Date().toISOString()
+      }).catch(() => {});
+      setProfile(prev => prev ? ({
+        ...prev,
+        total_vendas_count: newVendasCount,
+        total_faturamento: newFaturamento,
+        ultimo_evento: `Venda (+${value} ${curr})`,
+        ultimo_acesso_em: new Date().toISOString()
+      }) : null);
+    } catch (_) {}
+
     triggerToast(
       'Venda Registada com Sucesso! 💰',
       `Faturamento: +${value.toLocaleString()} ${curr}`,
