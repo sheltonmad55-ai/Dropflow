@@ -119,7 +119,7 @@ interface AppContextType {
   editContaBancaria: (id: string, updates: Partial<ContaBancaria>) => Promise<void>;
   deleteContaBancaria: (id: string) => Promise<void>;
   limparContasDuplicadas: () => Promise<void>;
-  retirarDaConta: (contaId: string, valor: number, motivo?: string, taxaSaquePercent?: number) => Promise<void>;
+  retirarDaConta: (contaId: string, valor: number, motivo?: string, taxaSaqueValor?: number, taxaSaqueTipo?: 'percentual' | 'fixo') => Promise<void>;
   transferirEntreContas: (deContaId: string, paraContaId: string, valor: number) => Promise<void>;
 
   // Campanhas management
@@ -2428,7 +2428,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void syncWithServer();
   }
 
-  async function retirarDaConta(contaId: string, valor: number, motivo?: string, taxaSaquePercent?: number) {
+  async function retirarDaConta(
+    contaId: string, 
+    valor: number, 
+    motivo?: string, 
+    taxaSaqueValorInput?: number, 
+    taxaSaqueTipo: 'percentual' | 'fixo' = 'percentual'
+  ) {
     if (!profile || valor <= 0) return;
 
     const targets = contaId === 'todas'
@@ -2438,10 +2444,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const totalBalance = usableTargets.reduce((sum, account) => sum + account.saldo_atual, 0);
     if (totalBalance < valor) throw new Error('Saldo insuficiente para esta retirada.');
 
-    const taxaSaqueValor = (taxaSaquePercent && taxaSaquePercent > 0)
-      ? Math.round(valor * (taxaSaquePercent / 100) * 100) / 100
-      : 0;
-    const valorLiquido = Math.round((valor - taxaSaqueValor) * 100) / 100;
+    const curr = activeWorkspace?.moeda || profile.moeda || 'MT';
+    let taxaSaqueValor = 0;
+    if (taxaSaqueValorInput && taxaSaqueValorInput > 0) {
+      if (taxaSaqueTipo === 'percentual') {
+        taxaSaqueValor = Math.round(valor * (taxaSaqueValorInput / 100) * 100) / 100;
+      } else {
+        taxaSaqueValor = Math.min(valor, taxaSaqueValorInput);
+      }
+    }
+    const valorLiquido = Math.max(0, Math.round((valor - taxaSaqueValor) * 100) / 100);
 
     let allocated = 0;
     const updatedAccounts = contasBancarias.map(account => {
@@ -2465,9 +2477,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: crypto.randomUUID(),
             data: new Date().toISOString(),
             valor: portion,
+            taxa_saque_tipo: taxaSaqueTipo,
             taxa_saque_valor: itemTaxa,
             valor_liquido: itemLiquido,
-            motivo: motivo || (taxaSaqueValor > 0 ? `Levantamento com taxa de saque (${taxaSaquePercent}%)` : 'Retirada Direta')
+            motivo: motivo || (taxaSaqueValor > 0 
+              ? `Levantamento com taxa (${taxaSaqueTipo === 'percentual' ? `${taxaSaqueValorInput}%` : `${taxaSaqueValorInput} ${curr}`})` 
+              : 'Retirada Direta')
           }
         ];
       }
@@ -2477,9 +2492,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return updated;
     });
     setContasBancarias(updatedAccounts);
-    const curr = activeWorkspace?.moeda || profile.moeda || 'MT';
     if (taxaSaqueValor > 0) {
-      triggerToast('Levantamento Efetuado! 💸', `Bruto: ${valor.toLocaleString()} ${curr} | Taxa: -${taxaSaqueValor.toLocaleString()} ${curr} | Líquido: ${valorLiquido.toLocaleString()} ${curr}`, 'info');
+      triggerToast('Levantamento Efetuado! 💸', `Bruto: ${valor.toLocaleString()} ${curr} | Taxa: -${taxaSaqueValor.toLocaleString()} ${curr} (${taxaSaqueTipo === 'percentual' ? `${taxaSaqueValorInput}%` : 'Fixo'}) | Líquido: ${valorLiquido.toLocaleString()} ${curr}`, 'info');
     } else {
       triggerToast('Levantamento de Conta!', `Retirado ${valor.toLocaleString()} ${curr}`, 'info');
     }
@@ -2767,6 +2781,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         taxa_venda_ativa: targetWs.taxa_venda_ativa,
         taxa_venda_tipo: targetWs.taxa_venda_tipo,
         taxa_venda_padrao: targetWs.taxa_venda_padrao,
+        taxa_venda_fixa_padrao: targetWs.taxa_venda_fixa_padrao,
+        taxa_saque_tipo: targetWs.taxa_saque_tipo,
         taxa_saque_padrao: targetWs.taxa_saque_padrao
       };
       setProfile(updatedProfile);
@@ -2803,6 +2819,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         taxa_venda_ativa: newWs.taxa_venda_ativa,
         taxa_venda_tipo: newWs.taxa_venda_tipo,
         taxa_venda_padrao: newWs.taxa_venda_padrao,
+        taxa_venda_fixa_padrao: newWs.taxa_venda_fixa_padrao,
+        taxa_saque_tipo: newWs.taxa_saque_tipo,
         taxa_saque_padrao: newWs.taxa_saque_padrao
       };
       setProfile(updatedProfile);
@@ -2833,6 +2851,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           taxa_venda_ativa: Boolean(target?.taxa_venda_ativa),
           taxa_venda_tipo: target?.taxa_venda_tipo || 'percentual',
           taxa_venda_padrao: target?.taxa_venda_padrao || 0,
+          taxa_venda_fixa_padrao: target?.taxa_venda_fixa_padrao || 0,
+          taxa_saque_tipo: target?.taxa_saque_tipo || 'percentual',
           taxa_saque_padrao: target?.taxa_saque_padrao || 0
         } : {})
       };

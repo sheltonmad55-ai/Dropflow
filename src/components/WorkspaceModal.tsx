@@ -12,8 +12,10 @@ interface WorkspaceModalProps {
     moeda: string;
     custo_envio_ativo: boolean;
     taxa_venda_ativa: boolean;
-    taxa_venda_tipo?: 'percentual' | 'fixo';
+    taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado';
     taxa_venda_padrao?: number;
+    taxa_venda_fixa_padrao?: number;
+    taxa_saque_tipo?: 'percentual' | 'fixo';
     taxa_saque_padrao?: number;
     plataforma_nome?: string;
     cor?: string;
@@ -69,6 +71,7 @@ export default function WorkspaceModal({
   const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo' | 'combinado'>('percentual');
   const [taxaVendaPadrao, setTaxaVendaPadrao] = useState('0');
   const [taxaVendaFixaPadrao, setTaxaVendaFixaPadrao] = useState('0');
+  const [taxaSaqueTipo, setTaxaSaqueTipo] = useState<'percentual' | 'fixo'>('percentual');
   const [taxaSaquePadrao, setTaxaSaquePadrao] = useState('0');
   const [cor, setCor] = useState('#10B981');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,6 +87,7 @@ export default function WorkspaceModal({
       setTaxaVendaTipo(workspaceToEdit.taxa_venda_tipo || 'percentual');
       setTaxaVendaPadrao(workspaceToEdit.taxa_venda_padrao ? String(workspaceToEdit.taxa_venda_padrao) : '0');
       setTaxaVendaFixaPadrao(workspaceToEdit.taxa_venda_fixa_padrao ? String(workspaceToEdit.taxa_venda_fixa_padrao) : '0');
+      setTaxaSaqueTipo(workspaceToEdit.taxa_saque_tipo || 'percentual');
       setTaxaSaquePadrao(workspaceToEdit.taxa_saque_padrao ? String(workspaceToEdit.taxa_saque_padrao) : '0');
       setCor(workspaceToEdit.cor || '#10B981');
     } else {
@@ -96,6 +100,7 @@ export default function WorkspaceModal({
       setTaxaVendaTipo('percentual');
       setTaxaVendaPadrao('0');
       setTaxaVendaFixaPadrao('0');
+      setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('0');
       setCor('#10B981');
     }
@@ -110,6 +115,7 @@ export default function WorkspaceModal({
       setTaxaVendaTipo('percentual');
       setTaxaVendaPadrao('10');
       setTaxaVendaFixaPadrao('0');
+      setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('5');
     } else if (novoTipo === 'plataforma') {
       setCustoEnvioAtivo(false);
@@ -117,14 +123,18 @@ export default function WorkspaceModal({
       setTaxaVendaTipo('combinado');
       setTaxaVendaPadrao('5');
       setTaxaVendaFixaPadrao('10');
+      setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('5');
     } else if (novoTipo === 'ecommerce_drop') {
       setCustoEnvioAtivo(true);
       setTaxaVendaAtiva(false);
+      setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('0');
     } else if (novoTipo === 'servicos') {
       setCustoEnvioAtivo(false);
       setTaxaVendaAtiva(false);
+      setTaxaSaqueTipo('percentual');
+      setTaxaSaquePadrao('0');
     }
   };
 
@@ -135,25 +145,29 @@ export default function WorkspaceModal({
       setTaxaVendaTipo('combinado');
       setTaxaVendaPadrao('5');
       setTaxaVendaFixaPadrao('10');
-      setTaxaSaquePadrao('5');
+      setTaxaSaqueTipo('fixo');
+      setTaxaSaquePadrao('50');
       setMoeda('MT');
     } else if (plat === 'Kiwify') {
       setTaxaVendaAtiva(true);
       setTaxaVendaTipo('combinado');
       setTaxaVendaPadrao('8.99');
       setTaxaVendaFixaPadrao('2.49');
+      setTaxaSaqueTipo('fixo');
       setTaxaSaquePadrao('3.67');
       setMoeda('BRL');
     } else if (plat === 'DroopCod') {
       setTaxaVendaAtiva(true);
       setTaxaVendaTipo('percentual');
       setTaxaVendaPadrao('5');
+      setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('5');
       setMoeda('MT');
     } else if (plat === 'Zenofi') {
       setTaxaVendaAtiva(true);
       setTaxaVendaTipo('percentual');
       setTaxaVendaPadrao('10');
+      setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('5');
     }
   };
@@ -171,6 +185,7 @@ export default function WorkspaceModal({
         taxa_venda_tipo: taxaVendaTipo,
         taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0,
         taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0,
+        taxa_saque_tipo: taxaSaqueTipo,
         taxa_saque_padrao: parseFloat(taxaSaquePadrao) || 0,
         plataforma_nome: plataformaNome.trim() || undefined,
         cor,
@@ -522,7 +537,7 @@ export default function WorkspaceModal({
           </div>
 
           {/* Taxa de Saque / Payout da Plataforma */}
-          <div className="p-3.5 bg-slate-50/90 dark:bg-slate-950/90 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-2" id="field_ws_taxa_saque">
+          <div className="p-3.5 bg-slate-50/90 dark:bg-slate-950/90 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-2.5" id="field_ws_taxa_saque">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 bg-amber-100 dark:bg-amber-950 text-amber-600 rounded-xl">
@@ -530,25 +545,54 @@ export default function WorkspaceModal({
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Taxa de Saque / Payout da Plataforma (%)
+                    Taxa de Saque / Payout da Plataforma
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Taxa descontada na retirada para a sua conta bancária (ex: 5%)
+                    {taxaSaqueTipo === 'percentual' 
+                      ? 'Desconto percentual na retirada (ex: 5%)'
+                      : `Taxa fixa deduzida por saque (ex: 50 ${moeda} Lojoo)`}
                   </p>
                 </div>
               </div>
-              <div className="w-24 relative">
+              <div className="flex rounded-lg bg-amber-100/60 dark:bg-amber-900/40 p-0.5 border border-amber-200/60 dark:border-amber-800/40">
+                <button
+                  type="button"
+                  onClick={() => setTaxaSaqueTipo('percentual')}
+                  className={`px-2 py-0.5 text-[9px] font-black rounded-md transition-colors cursor-pointer ${
+                    taxaSaqueTipo === 'percentual' ? 'bg-amber-600 text-white shadow-xs' : 'text-amber-700 dark:text-amber-300'
+                  }`}
+                >
+                  %
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTaxaSaqueTipo('fixo')}
+                  className={`px-2 py-0.5 text-[9px] font-black rounded-md transition-colors cursor-pointer ${
+                    taxaSaqueTipo === 'fixo' ? 'bg-amber-600 text-white shadow-xs' : 'text-amber-700 dark:text-amber-300'
+                  }`}
+                >
+                  {moeda} (Fixo)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-200/40 dark:border-slate-800">
+              <span className="text-[11px] font-medium text-slate-500">
+                {taxaSaqueTipo === 'percentual' ? 'Percentual por saque:' : `Valor fixo por saque (${moeda}):`}
+              </span>
+              <div className="w-28 relative">
                 <input
                   type="number"
                   step="any"
                   min="0"
-                  max="100"
                   value={taxaSaquePadrao}
                   onChange={(e) => setTaxaSaquePadrao(e.target.value)}
                   placeholder="0"
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none text-right pr-6"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none text-right pr-7"
                 />
-                <span className="absolute right-2 top-1.5 text-xs font-bold text-slate-400">%</span>
+                <span className="absolute right-2 top-1.5 text-xs font-bold text-amber-600">
+                  {taxaSaqueTipo === 'percentual' ? '%' : moeda}
+                </span>
               </div>
             </div>
           </div>

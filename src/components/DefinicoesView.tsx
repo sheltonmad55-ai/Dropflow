@@ -109,6 +109,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo' | 'combinado'>(profile?.taxa_venda_tipo || 'percentual');
   const [taxaVendaPadrao, setTaxaVendaPadrao] = useState<string>((profile?.taxa_venda_padrao ?? (profile?.tipo_negocio === 'plr_infoproduto' ? 10 : 0)).toString());
   const [taxaVendaFixaPadrao, setTaxaVendaFixaPadrao] = useState<string>((profile?.taxa_venda_fixa_padrao ?? 0).toString());
+  const [taxaSaqueTipo, setTaxaSaqueTipo] = useState<'percentual' | 'fixo'>(profile?.taxa_saque_tipo || 'percentual');
+  const [taxaSaquePadrao, setTaxaSaquePadrao] = useState<string>((profile?.taxa_saque_padrao ?? 0).toString());
 
   // Contas Bancárias & Carteiras state
   const [showAddConta, setShowAddConta] = useState(false);
@@ -138,6 +140,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const [retiradaContaIdSelected, setRetiradaContaIdSelected] = useState('');
   const [retiradaContaValor, setRetiradaContaValor] = useState('');
   const [retiradaContaMotivo, setRetiradaContaMotivo] = useState('');
+  const [retiradaContaTaxaSaqueTipo, setRetiradaContaTaxaSaqueTipo] = useState<'percentual' | 'fixo'>('percentual');
   const [retiradaContaTaxaSaque, setRetiradaContaTaxaSaque] = useState('');
 
   // Workspaces Modal in Definições
@@ -222,7 +225,13 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
 
     try {
       const taxaSaque = parseFloat(retiradaContaTaxaSaque) || 0;
-      await retirarDaConta(retiradaContaIdSelected, val, retiradaContaMotivo || 'Levantamento de Saldo', taxaSaque);
+      await retirarDaConta(
+        retiradaContaIdSelected, 
+        val, 
+        retiradaContaMotivo || 'Levantamento de Saldo', 
+        taxaSaque, 
+        retiradaContaTaxaSaqueTipo
+      );
       setRetiradaContaValor('');
       setRetiradaContaMotivo('');
       setRetiradaContaTaxaSaque('');
@@ -268,6 +277,9 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
       setTaxaVendaAtiva(profile.taxa_venda_ativa ?? (profile.tipo_negocio === 'plr_infoproduto'));
       setTaxaVendaTipo(profile.taxa_venda_tipo || 'percentual');
       setTaxaVendaPadrao((profile.taxa_venda_padrao ?? (profile.tipo_negocio === 'plr_infoproduto' ? 10 : 0)).toString());
+      setTaxaVendaFixaPadrao((profile.taxa_venda_fixa_padrao ?? 0).toString());
+      setTaxaSaqueTipo(profile.taxa_saque_tipo || 'percentual');
+      setTaxaSaquePadrao((profile.taxa_saque_padrao ?? 0).toString());
     }
   }, [profile]);
 
@@ -316,7 +328,9 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         taxa_venda_ativa: taxaVendaAtiva,
         taxa_venda_tipo: taxaVendaTipo,
         taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0,
-        taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0
+        taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0,
+        taxa_saque_tipo: taxaSaqueTipo,
+        taxa_saque_padrao: parseFloat(taxaSaquePadrao) || 0
       });
       if (activeWorkspace) {
         await updateWorkspace(activeWorkspace.id, {
@@ -326,7 +340,9 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
           taxa_venda_ativa: taxaVendaAtiva,
           taxa_venda_tipo: taxaVendaTipo,
           taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0,
-          taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0
+          taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0,
+          taxa_saque_tipo: taxaSaqueTipo,
+          taxa_saque_padrao: parseFloat(taxaSaquePadrao) || 0
         });
       }
       alert('Perfil e configurações do negócio atualizados com sucesso!');
@@ -920,6 +936,51 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   </div>
                 )}
               </div>
+
+              {/* Configuração de Taxa de Saque / Payout Padrão */}
+              <div className="border-t border-slate-200/50 dark:border-slate-800/80 pt-2.5 space-y-2">
+                <div className="space-y-0.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                    🏧 Taxa de Saque / Payout da Plataforma
+                  </label>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    Taxa cobrada pela plataforma (ex: Lojoo 50 {moeda} fixo, ou percentual padrão) ao transferir o saldo para a sua conta bancária.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center bg-white dark:bg-slate-900 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800 w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setTaxaSaqueTipo('percentual')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded ${taxaSaqueTipo === 'percentual' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
+                    >
+                      % (Percentual)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaxaSaqueTipo('fixo')}
+                      className={`px-2 py-1 text-[10px] font-bold rounded ${taxaSaqueTipo === 'fixo' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
+                    >
+                      {moeda} (Fixo - ex: Lojoo)
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder={taxaSaqueTipo === 'percentual' ? "Taxa de saque padrão (ex: 2.5)" : `Valor fixo por saque (ex: 50 ${moeda})`}
+                      value={taxaSaquePadrao}
+                      onChange={(e) => setTaxaSaquePadrao(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                    />
+                    <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
+                      {taxaSaqueTipo === 'percentual' ? '%' : moeda}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1190,6 +1251,10 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                     id={`btn_retirar_conta_${conta.id}`}
                     onClick={() => {
                       setRetiradaContaIdSelected(conta.id);
+                      const defaultTipo = activeWorkspace?.taxa_saque_tipo || profile?.taxa_saque_tipo || 'percentual';
+                      setRetiradaContaTaxaSaqueTipo(defaultTipo);
+                      const defaultTaxa = activeWorkspace?.taxa_saque_padrao ?? profile?.taxa_saque_padrao ?? 0;
+                      setRetiradaContaTaxaSaque(defaultTaxa > 0 ? String(defaultTaxa) : '');
                       setShowRetiradaContaModal(true);
                     }}
                     className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 border border-rose-200/60 dark:border-rose-800/50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
@@ -2235,30 +2300,49 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 <div className="space-y-1.5 bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-2xl border border-amber-200/60 dark:border-amber-900/40" id="field_retirada_taxa_saque">
                   <div className="flex justify-between items-center">
                     <label className="text-[11px] text-amber-900 dark:text-amber-200 font-bold">
-                      Taxa de Saque da Plataforma (%)
+                      Taxa de Saque da Plataforma
                     </label>
-                    <span className="text-[10px] text-amber-600 font-medium">Opcional</span>
+                    <div className="flex items-center bg-white dark:bg-slate-900 rounded-lg p-0.5 border border-amber-300 dark:border-amber-800">
+                      <button
+                        type="button"
+                        onClick={() => setRetiradaContaTaxaSaqueTipo('percentual')}
+                        className={`px-2 py-0.5 text-[9px] font-bold rounded ${retiradaContaTaxaSaqueTipo === 'percentual' ? 'bg-amber-600 text-white' : 'text-slate-500'}`}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRetiradaContaTaxaSaqueTipo('fixo')}
+                        className={`px-2 py-0.5 text-[9px] font-bold rounded ${retiradaContaTaxaSaqueTipo === 'fixo' ? 'bg-amber-600 text-white' : 'text-slate-500'}`}
+                      >
+                        {moeda} (Fixo)
+                      </button>
+                    </div>
                   </div>
                   <div className="relative">
                     <input
                       type="number"
                       step="any"
                       min="0"
-                      max="100"
-                      placeholder="Ex: 5"
+                      max={retiradaContaTaxaSaqueTipo === 'percentual' ? '100' : undefined}
+                      placeholder={retiradaContaTaxaSaqueTipo === 'percentual' ? "Ex: 2.5 (%)" : `Ex: 50 (${moeda})`}
                       value={retiradaContaTaxaSaque}
                       onChange={(e) => setRetiradaContaTaxaSaque(e.target.value)}
-                      className="w-full bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none pr-7"
+                      className="w-full bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none pr-9"
                     />
-                    <span className="absolute right-3 top-2 text-xs font-bold text-amber-600">%</span>
+                    <span className="absolute right-3 top-2 text-xs font-bold text-amber-600">
+                      {retiradaContaTaxaSaqueTipo === 'percentual' ? '%' : moeda}
+                    </span>
                   </div>
 
                   {(() => {
                     const gross = parseFloat(retiradaContaValor) || 0;
-                    const taxaPct = parseFloat(retiradaContaTaxaSaque) || 0;
-                    if (gross > 0 && taxaPct > 0) {
-                      const taxaVal = Math.round(gross * (taxaPct / 100) * 100) / 100;
-                      const liquido = Math.round((gross - taxaVal) * 100) / 100;
+                    const taxaInput = parseFloat(retiradaContaTaxaSaque) || 0;
+                    if (gross > 0 && taxaInput > 0) {
+                      const taxaVal = retiradaContaTaxaSaqueTipo === 'percentual'
+                        ? Math.round(gross * (taxaInput / 100) * 100) / 100
+                        : Math.min(gross, taxaInput);
+                      const liquido = Math.max(0, Math.round((gross - taxaVal) * 100) / 100);
                       return (
                         <div className="pt-2 text-[10px] space-y-1 border-t border-amber-200/40 dark:border-amber-900/30">
                           <div className="flex justify-between text-slate-500">
@@ -2266,7 +2350,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                             <span className="font-bold">{gross.toLocaleString()} {moeda}</span>
                           </div>
                           <div className="flex justify-between text-rose-600 font-bold">
-                            <span>Taxa Deduzida ({taxaPct}%):</span>
+                            <span>Taxa Deduzida {retiradaContaTaxaSaqueTipo === 'percentual' ? `(${taxaInput}%)` : `(Fixa)`}:</span>
                             <span>-{taxaVal.toLocaleString()} {moeda}</span>
                           </div>
                           <div className="flex justify-between text-emerald-600 font-black text-xs pt-0.5">
@@ -2360,6 +2444,14 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                           {new Date(item.data).toLocaleString('pt-MZ', { dateStyle: 'short', timeStyle: 'short' })}
                         </span>
                       </div>
+                      {item.taxa_saque_valor > 0 && (
+                        <div className="flex items-center justify-between text-[10px] bg-amber-50/80 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2.5 py-1 rounded-lg border border-amber-200/50 dark:border-amber-900/40 font-medium">
+                          <span>Taxa Plataforma: {item.taxa_saque_tipo === 'fixo' ? `${item.taxa_saque_valor} ${moeda} (Fixo)` : `${item.taxa_saque_valor}%`}</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            Líquido: {(item.valor_liquido ?? (item.taxa_saque_tipo === 'fixo' ? Math.max(0, item.valor - item.taxa_saque_valor) : Math.max(0, item.valor * (1 - item.taxa_saque_valor / 100)))).toLocaleString()} {moeda}
+                          </span>
+                        </div>
+                      )}
                       <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/60 mt-1">
                         💬 <strong>Motivo:</strong> {item.motivo}
                       </p>

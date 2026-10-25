@@ -30,7 +30,8 @@ export interface Workspace {
   taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado';
   taxa_venda_padrao?: number; // taxa por venda (ex: 5% ou 10%)
   taxa_venda_fixa_padrao?: number; // taxa fixa complementar quando combinado (ex: +10 MT na Lojoo)
-  taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5%)
+  taxa_saque_tipo?: 'percentual' | 'fixo'; // '%' ou fixo
+  taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5% ou 50 MT)
   plataforma_nome?: string;   // ex: "DroopCod", "Zenofi", "Kiwify", "ChatPilog", "Shopify"
   cor?: string;
   icone?: string;
@@ -56,7 +57,8 @@ export interface Profile {
   taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado'; // '%' ou 'fixo' ou 'combinado'
   taxa_venda_padrao?: number;  // Valor padrão da taxa (ex: 10% ou 50 MT)
   taxa_venda_fixa_padrao?: number; // Valor fixo adicional quando combinado (ex: 10 MT)
-  taxa_saque_padrao?: number;  // Valor padrão da taxa de saque (ex: 5%)
+  taxa_saque_tipo?: 'percentual' | 'fixo'; // '%' ou 'fixo'
+  taxa_saque_padrao?: number;  // Valor padrão da taxa de saque (ex: 5% ou 50 MT)
   workspaces?: Workspace[];    // Lista de workspaces / negócios cadastrados
   active_workspace_id?: string; // ID do workspace ativo atualmente
   anuncios_percent: number; // e.g. 50% of remainder
@@ -133,7 +135,8 @@ export interface RetiradaHistoricoItem {
   data: string; // ISO date string
   valor: number;
   motivo: string;
-  taxa_saque_valor?: number; // taxa retida na retirada/saque (ex: 5% da plataforma)
+  taxa_saque_tipo?: 'percentual' | 'fixo';
+  taxa_saque_valor?: number; // taxa retida na retirada/saque (ex: 5% ou valor fixo da plataforma)
   valor_liquido?: number;    // valor líquido recebido
   despesa_descricao?: string;
   despesa_id?: string;
