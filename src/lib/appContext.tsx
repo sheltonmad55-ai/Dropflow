@@ -58,6 +58,7 @@ interface AppContextType {
   addBroadcast: (texto: string, publicoAlvo: 'todos' | 'trial_expira_2d', titulo?: string, link?: string, imagemUrl?: string, tipo?: 'aviso' | 'novidade') => Promise<void>;
   addRelatorio: (tipo: 'diario' | 'semanal' | 'mensal', totalVendido: number, totalGasto: number, balanco: number, progressoMetas: string, metasAtingidas: string[]) => Promise<void>;
   updateUserProfileByAdmin: (targetUserId: string, updates: Partial<Profile>) => Promise<void>;
+  deleteUserProfileByAdmin: (targetUserId: string) => Promise<void>;
 
   // Data State
   caixinhas: Caixinha[];
@@ -416,6 +417,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
                 // VIP & Admin auto-upgrade checks
                 const userEmail = (user.email || '').toLowerCase().trim();
+
+                // Auto-sync missing or outdated email in Firestore profile document
+                if (userEmail && (!reconciledProfile.email || reconciledProfile.email !== userEmail)) {
+                  void updateDoc(doc(fDb, 'profiles', user.uid), { email: userEmail });
+                  reconciledProfile.email = userEmail;
+                }
+
                 const isSheltonSam = userEmail === 'sheltonsam2.0@gmail.com';
                 const isAdminEmail = userEmail === 'sheltonmad55@gmail.com';
 
@@ -685,7 +693,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const unsubAllProfiles = onSnapshot(
               collection(fDb, 'profiles'),
               (snapshot) => {
-                const data = snapshot.docs.map(doc => doc.data() as Profile);
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Profile) }));
                 setAllProfiles(data.sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || '')));
               },
               (error) => console.error("AllProfiles real-time listener error:", error)
@@ -1565,6 +1573,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     } catch (e) {
       console.error("Error updating user profile by admin:", e);
+      throw e;
+    }
+  }
+
+  async function deleteUserProfileByAdmin(targetUserId: string) {
+    if (!profile || !isAdmin) return;
+    try {
+      await deleteDoc(doc(fDb, 'profiles', targetUserId));
+      await setDoc(doc(collection(fDb, 'admin_logs')), {
+        adminEmail: auth.currentUser?.email || 'admin',
+        acao: `Eliminou perfil de utilizador ${targetUserId} do Firestore`,
+        utilizadorAfetado: targetUserId,
+        timestamp: new Date().toISOString()
+      });
+      setAllProfiles(prev => prev.filter(u => u.id !== targetUserId));
+      triggerToast('Conta Eliminada', 'O registo foi removido do Firestore com sucesso.', 'info');
+    } catch (e) {
+      console.error("Error deleting user profile by admin:", e);
       throw e;
     }
   }
@@ -3393,6 +3419,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addBroadcast,
       addRelatorio,
       updateUserProfileByAdmin,
+      deleteUserProfileByAdmin,
 
       caixinhas: filteredCaixinhas,
       contasBancarias: filteredContasBancarias,

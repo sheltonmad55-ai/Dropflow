@@ -68,7 +68,18 @@ function AppContent() {
   } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'metas' | 'admin' | 'definicoes'
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    return isAdmin ? 'admin' : 'dashboard';
+  });
+
+  // Strict Admin Isolation: Admin account is exclusively for platform administration, never merchant financing
+  React.useEffect(() => {
+    if (isAdmin) {
+      if (activeTab === 'dashboard' || activeTab === 'caixinhas' || activeTab === 'vendas' || activeTab === 'metas' || activeTab === 'campanhas') {
+        setActiveTab('admin');
+      }
+    }
+  }, [isAdmin, activeTab]);
 
   // Workspaces Modal State
   const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
@@ -186,27 +197,23 @@ function AppContent() {
           </div>
 
           {/* Alternador de Negócios OU Cartão de Super Admin */}
-          {activeTab === 'admin' ? (
-            <div className="p-3.5 bg-gradient-to-br from-indigo-950/90 via-slate-900 to-indigo-900/70 border border-indigo-500/30 rounded-2xl shadow-xl space-y-2.5">
+          {isAdmin ? (
+            <div className="p-4 bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border border-indigo-500/30 rounded-2xl shadow-xl space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2.5">
                   <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/40">
                     <Shield className="w-4 h-4 stroke-[2.5]" />
                   </div>
                   <div>
-                    <span className="text-[11px] font-black text-white block tracking-tight">Super Admin Master</span>
+                    <span className="text-xs font-black text-white block tracking-tight">Super Admin Master</span>
                     <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-wider block">Sistema Central</span>
                   </div>
                 </div>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Sistema Online" />
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('dashboard')}
-                className="w-full text-center py-1.5 px-2.5 bg-white/10 hover:bg-white/15 text-indigo-200 hover:text-white rounded-xl text-[10px] font-black transition-colors flex items-center justify-center space-x-1.5 border border-white/5 cursor-pointer"
-              >
-                <span>← Voltar às Minhas Lojas</span>
-              </button>
+              <p className="text-[9px] text-slate-400 leading-tight">
+                Ambiente exclusivo de administração e supervisão global da plataforma DroopFlow.
+              </p>
             </div>
           ) : (
             <WorkspaceSwitcher
@@ -221,16 +228,19 @@ function AppContent() {
  
           {/* Navigation Links */}
           <nav className="space-y-1" id="sidebar_nav">
-            {[
+            {(isAdmin ? [
+              { id: 'admin', label: 'Painel Master (Subscritores)', icon: Shield, isIndigo: true },
+              { id: 'relatorios', label: 'Relatórios do Sistema', icon: BarChart2 },
+              { id: 'definicoes', label: 'Definições do Sistema', icon: Settings },
+            ] : [
               { id: 'dashboard', label: 'Painel', icon: TrendingUp },
               { id: 'caixinhas', label: 'Pockets', icon: Layers },
               { id: 'vendas', label: 'Vendas', icon: DollarSign },
               { id: 'campanhas', label: 'Campanhas', icon: Megaphone },
               { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
               { id: 'metas', label: 'Metas', icon: Target },
-              ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, isIndigo: true }] : []),
               { id: 'definicoes', label: 'Definições', icon: Settings },
-            ].map(tab => {
+            ]).map(tab => {
               const isActive = activeTab === tab.id;
               const Icon = tab.icon;
               return (
@@ -275,7 +285,7 @@ function AppContent() {
         </div>
 
         {/* Desktop Quick Actions Panel inside Sidebar */}
-        {activeTab === 'admin' ? (
+        {isAdmin ? (
           <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800" id="sidebar_actions">
             <span className="text-[10px] font-black tracking-wider text-indigo-400 uppercase block px-1">Segurança do Sistema</span>
             <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/80 to-purple-50/40 dark:from-indigo-950/40 dark:to-slate-900 border border-indigo-200/60 dark:border-indigo-800/40 text-[10px] space-y-1.5 shadow-sm">
@@ -507,60 +517,65 @@ function AppContent() {
           </AnimatePresence>
         </main>
 
-        {/* Floating Action Menu (PWA style center button - Mobile Only) */}
-        <div className="fixed bottom-24 right-4 z-40 md:hidden" id="quick_floating_wrapper">
-          <div className="relative" id="quick_floating_relative">
-            {/* Quick options popup */}
-            {showQuickMenu && (
-              <div className="absolute bottom-16 right-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-2.5 rounded-2xl shadow-xl flex flex-col space-y-2 w-40 text-center animate-fade-in animate-none" id="quick_menu_pop">
-                <button
-                  id="btn_pop_venda"
-                  onClick={() => {
-                    setIsVendaOpen(true);
-                    setShowQuickMenu(false);
-                  }}
-                  className="py-2 px-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-bold text-emerald-600 flex items-center space-x-1.5 justify-start transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>Nova Venda</span>
-                </button>
-                <button
-                  id="btn_pop_despesa"
-                  onClick={() => {
-                    setIsDespesaOpen(true);
-                    setShowQuickMenu(false);
-                  }}
-                  className="py-2 px-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-bold text-rose-600 flex items-center space-x-1.5 justify-start transition-colors cursor-pointer"
-                >
-                  <ArrowDownRight className="w-4 h-4" />
-                  <span>Nova Despesa</span>
-                </button>
-              </div>
-            )}
+        {/* Floating Action Menu (PWA style center button - Mobile Only, Merchants Only) */}
+        {!isAdmin && (
+          <div className="fixed bottom-24 right-4 z-40 md:hidden" id="quick_floating_wrapper">
+            <div className="relative" id="quick_floating_relative">
+              {/* Quick options popup */}
+              {showQuickMenu && (
+                <div className="absolute bottom-16 right-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-2.5 rounded-2xl shadow-xl flex flex-col space-y-2 w-40 text-center animate-fade-in animate-none" id="quick_menu_pop">
+                  <button
+                    id="btn_pop_venda"
+                    onClick={() => {
+                      setIsVendaOpen(true);
+                      setShowQuickMenu(false);
+                    }}
+                    className="py-2 px-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-bold text-emerald-600 flex items-center space-x-1.5 justify-start transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                    <span>Nova Venda</span>
+                  </button>
+                  <button
+                    id="btn_pop_despesa"
+                    onClick={() => {
+                      setIsDespesaOpen(true);
+                      setShowQuickMenu(false);
+                    }}
+                    className="py-2 px-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl text-xs font-bold text-rose-600 flex items-center space-x-1.5 justify-start transition-colors cursor-pointer"
+                  >
+                    <ArrowDownRight className="w-4 h-4" />
+                    <span>Nova Despesa</span>
+                  </button>
+                </div>
+              )}
 
-            {/* Central Button */}
-            <button
-              id="btn_main_quick_add"
-              onClick={() => setShowQuickMenu(!showQuickMenu)}
-              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform cursor-pointer ${showQuickMenu ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 rotate-45 border border-slate-200 dark:border-slate-700 shadow-slate-100' : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20'}`}
-            >
-              <Plus className="w-7 h-7 stroke-[2.5]" />
-            </button>
+              {/* Central Button */}
+              <button
+                id="btn_main_quick_add"
+                onClick={() => setShowQuickMenu(!showQuickMenu)}
+                className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform cursor-pointer ${showQuickMenu ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 rotate-45 border border-slate-200 dark:border-slate-700 shadow-slate-100' : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20'}`}
+              >
+                <Plus className="w-7 h-7 stroke-[2.5]" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Bottom PWA Navigation Bar - Mobile Only */}
         <nav className="fixed bottom-0 left-0 right-0 h-20 bg-white/95 dark:bg-slate-900/95 border-t border-slate-100 dark:border-slate-800 px-4 z-40 flex items-center overflow-x-auto scrollbar-none flex-nowrap space-x-2 shadow-lg md:hidden" id="app_navbar">
-          {[
+          {(isAdmin ? [
+            { id: 'admin', label: 'Admin Master', icon: Shield, isIndigo: true },
+            { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
+            { id: 'definicoes', label: 'Definições', icon: Settings },
+          ] : [
             { id: 'dashboard', label: 'Painel', icon: TrendingUp },
             { id: 'caixinhas', label: 'Pockets', icon: Layers },
             { id: 'vendas', label: 'Vendas', icon: DollarSign },
             { id: 'campanhas', label: 'Campanhas', icon: Megaphone },
             { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
             { id: 'metas', label: 'Metas', icon: Target },
-            ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, isIndigo: true }] : []),
             { id: 'definicoes', label: 'Definições', icon: Settings },
-          ].map(tab => {
+          ]).map(tab => {
             const isActive = activeTab === tab.id;
             const Icon = tab.icon;
             return (

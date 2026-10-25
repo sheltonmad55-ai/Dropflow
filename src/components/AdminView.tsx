@@ -31,13 +31,14 @@ import {
   ArrowUpRight,
   UserCheck,
   ShoppingBag,
-  Info
+  Info,
+  Trash2
 } from 'lucide-react';
 import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
 import { db as fDb } from '../lib/firebase.ts';
 
 export default function AdminView() {
-  const { allProfiles, broadcasts, addBroadcast, updateUserProfileByAdmin } = useApp();
+  const { allProfiles, broadcasts, addBroadcast, updateUserProfileByAdmin, deleteUserProfileByAdmin } = useApp();
   
   // Search & Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,6 +58,9 @@ export default function AdminView() {
   const [newPlan, setNewPlan] = useState<'trial' | 'pro' | 'free' | 'expired'>('trial');
   const [isSuspended, setIsSuspended] = useState(false);
   const [trialExpiresDays, setTrialExpiresDays] = useState('15');
+  const [editNome, setEditNome] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
   
   // Admin Audit Logs
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
@@ -176,6 +180,29 @@ export default function AdminView() {
   const totalFaturamentoGeral = allProfiles.reduce((sum, u) => sum + (u.total_faturamento || 0), 0);
   const totalVendasGeral = allProfiles.reduce((sum, u) => sum + (u.total_vendas_count || 0), 0);
 
+  // Helper to detect potential duplicate accounts (same name or same email)
+  const duplicateMap = useMemo(() => {
+    const nameCounts: Record<string, number> = {};
+    const emailCounts: Record<string, number> = {};
+    for (const u of allProfiles) {
+      const cleanName = (u.nome || '').trim().toLowerCase();
+      if (cleanName && cleanName !== 'sem nome') {
+        nameCounts[cleanName] = (nameCounts[cleanName] || 0) + 1;
+      }
+      const cleanEmail = (u.email || '').trim().toLowerCase();
+      if (cleanEmail) {
+        emailCounts[cleanEmail] = (emailCounts[cleanEmail] || 0) + 1;
+      }
+    }
+    return { nameCounts, emailCounts };
+  }, [allProfiles]);
+
+  const isPotentialDuplicate = (user: any) => {
+    const cleanName = (user.nome || '').trim().toLowerCase();
+    const cleanEmail = (user.email || '').trim().toLowerCase();
+    return (cleanName && duplicateMap.nameCounts[cleanName] > 1) || (cleanEmail && duplicateMap.emailCounts[cleanEmail] > 1);
+  };
+
   // Filtered and Sorted Users List
   const filteredAndSortedUsers = useMemo(() => {
     let list = allProfiles.filter(user => {
@@ -183,8 +210,7 @@ export default function AdminView() {
       const matchesSearch = (
         (user.nome || '').toLowerCase().includes(term) ||
         (user.email || '').toLowerCase().includes(term) ||
-        (user.pais || '').toLowerCase().includes(term) ||
-        (user.id || '').toLowerCase().includes(term)
+        (user.pais || '').toLowerCase().includes(term)
       );
 
       if (!matchesSearch) return false;
@@ -198,6 +224,9 @@ export default function AdminView() {
       }
       if (filterTab === 'vendas') {
         return (user.total_vendas_count || 0) > 0 || (user.total_faturamento || 0) > 0;
+      }
+      if (filterTab === 'duplicados') {
+        return isPotentialDuplicate(user);
       }
       if (filterTab === 'pro') {
         return user.plano === 'pro';
@@ -226,7 +255,7 @@ export default function AdminView() {
     });
 
     return list;
-  }, [allProfiles, searchTerm, filterTab, sortBy, todayStr]);
+  }, [allProfiles, searchTerm, filterTab, sortBy, todayStr, duplicateMap]);
 
   // Export Users CSV
   const handleExportUsersCsv = () => {
@@ -300,6 +329,8 @@ export default function AdminView() {
     setSelectedUser(user);
     setNewPlan(user.plano || 'trial');
     setIsSuspended(!!user.suspenso);
+    setEditNome(user.nome || '');
+    setEditEmail(user.email || '');
     
     if (user.trial_expires_at) {
       const diff = new Date(user.trial_expires_at).getTime() - Date.now();
@@ -317,6 +348,8 @@ export default function AdminView() {
       trialExpiry.setDate(trialExpiry.getDate() + parseInt(trialExpiresDays || '15'));
 
       await updateUserProfileByAdmin(selectedUser.id, {
+        nome: editNome.trim() || selectedUser.nome || 'Sem nome',
+        email: editEmail.trim().toLowerCase(),
         plano: newPlan,
         suspenso: isSuspended,
         trial_expires_at: trialExpiry.toISOString()
@@ -324,6 +357,26 @@ export default function AdminView() {
       setSelectedUser(null);
     } catch (err) {
       console.error(err);
+      alert('Erro ao guardar alterações.');
+    }
+  };
+
+  const handleDeleteUser = async (userToDelete: any) => {
+    if (!userToDelete) return;
+    const confirmDelete = window.confirm(
+      `Tens a certeza que desejas eliminar a conta de "${userToDelete.nome || userToDelete.id}"?\n\nEsta ação removerá este registo definitivamente da base de dados Firestore.`
+    );
+    if (!confirmDelete) return;
+
+    try {
+      setIsDeletingUser(true);
+      await deleteUserProfileByAdmin(userToDelete.id);
+      setSelectedUser(null);
+    } catch (err) {
+      console.error("Erro ao eliminar conta:", err);
+      alert('Erro ao eliminar conta.');
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -522,6 +575,7 @@ export default function AdminView() {
               { id: 'hoje', label: `Entraram Hoje (${usersJoinedToday.length})`, highlight: usersJoinedToday.length > 0 },
               { id: 'ativos', label: `Ativos Hoje (${usersActiveToday.length})` },
               { id: 'vendas', label: `Com Vendas (${usersWithSales.length})` },
+              { id: 'duplicados', label: 'Possíveis Duplicados', isAlert: true },
               { id: 'pro', label: `Plano PRO (${proUsersCount})` },
               { id: 'trial', label: `Em Trial (${trialUsersCount})` },
             ].map(tab => (
@@ -531,9 +585,11 @@ export default function AdminView() {
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   filterTab === tab.id
                     ? 'bg-indigo-600 text-white shadow-sm'
-                    : tab.highlight
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    : (tab as any).isAlert
+                      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                      : tab.highlight
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                        : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
                 {tab.label}
@@ -585,6 +641,11 @@ export default function AdminView() {
                                 {isNewToday && (
                                   <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
                                     Novo
+                                  </span>
+                                )}
+                                {isPotentialDuplicate(user) && (
+                                  <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" title="Possível registo duplicado (mesmo nome ou e-mail)">
+                                    Duplicado?
                                   </span>
                                 )}
                               </div>
@@ -683,13 +744,23 @@ export default function AdminView() {
 
                         {/* 6. Ações */}
                         <td className="px-4 py-3.5 text-center">
-                          <button
-                            onClick={() => handleOpenUserConfig(user)}
-                            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center space-x-1"
-                          >
-                            <Settings className="w-3 h-3 text-slate-500" />
-                            <span>Ajustar</span>
-                          </button>
+                          <div className="flex items-center justify-center space-x-1">
+                            <button
+                              onClick={() => handleOpenUserConfig(user)}
+                              className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition-colors cursor-pointer inline-flex items-center space-x-1"
+                              title="Configurar utilizador"
+                            >
+                              <Settings className="w-3 h-3 text-slate-500" />
+                              <span>Ajustar</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              title="Eliminar utilizador ou registo de teste do Firestore"
+                              className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
 
                       </tr>
@@ -825,7 +896,34 @@ export default function AdminView() {
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">Nome do Utilizador / Loja</label>
+                <input
+                  type="text"
+                  value={editNome}
+                  onChange={e => setEditNome(e.target.value)}
+                  placeholder="Nome do utilizador ou loja"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 p-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-slate-400 uppercase block">E-mail</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={e => setEditEmail(e.target.value)}
+                  placeholder="Ex: cliente@gmail.com"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 p-2.5 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-50 focus:outline-none"
+                />
+                {!editEmail && (
+                  <span className="text-[9px] text-amber-600 dark:text-amber-400 block font-normal">
+                    * Sem e-mail gravado no perfil. Podes associar o e-mail aqui.
+                  </span>
+                )}
+              </div>
+
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-400 uppercase block">Plano de Subscrição</label>
                 <select
@@ -863,6 +961,18 @@ export default function AdminView() {
                   className={`w-10 h-5 rounded-full p-0.5 transition-colors cursor-pointer ${isSuspended ? 'bg-rose-500 flex justify-end' : 'bg-slate-300 dark:bg-slate-700 flex justify-start'}`}
                 >
                   <span className="w-4 h-4 bg-white rounded-full shadow-md" />
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  disabled={isDeletingUser}
+                  onClick={() => handleDeleteUser(selectedUser)}
+                  className="w-full bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 font-bold text-xs py-2 rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{isDeletingUser ? 'A eliminar...' : 'Eliminar Registo do Firestore'}</span>
                 </button>
               </div>
             </div>
