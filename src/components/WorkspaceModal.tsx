@@ -43,6 +43,7 @@ const CORES_PALETA = [
 
 const PLATAFORMAS_SUGESTOES = [
   'DroopCod',
+  'Lojoo',
   'Zenofi',
   'Kiwify',
   'ChatPilog',
@@ -65,8 +66,9 @@ export default function WorkspaceModal({
   const [plataformaNome, setPlataformaNome] = useState('');
   const [custoEnvioAtivo, setCustoEnvioAtivo] = useState(true);
   const [taxaVendaAtiva, setTaxaVendaAtiva] = useState(false);
-  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo'>('percentual');
+  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo' | 'combinado'>('percentual');
   const [taxaVendaPadrao, setTaxaVendaPadrao] = useState('0');
+  const [taxaVendaFixaPadrao, setTaxaVendaFixaPadrao] = useState('0');
   const [taxaSaquePadrao, setTaxaSaquePadrao] = useState('0');
   const [cor, setCor] = useState('#10B981');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +83,7 @@ export default function WorkspaceModal({
       setTaxaVendaAtiva(Boolean(workspaceToEdit.taxa_venda_ativa));
       setTaxaVendaTipo(workspaceToEdit.taxa_venda_tipo || 'percentual');
       setTaxaVendaPadrao(workspaceToEdit.taxa_venda_padrao ? String(workspaceToEdit.taxa_venda_padrao) : '0');
+      setTaxaVendaFixaPadrao(workspaceToEdit.taxa_venda_fixa_padrao ? String(workspaceToEdit.taxa_venda_fixa_padrao) : '0');
       setTaxaSaquePadrao(workspaceToEdit.taxa_saque_padrao ? String(workspaceToEdit.taxa_saque_padrao) : '0');
       setCor(workspaceToEdit.cor || '#10B981');
     } else {
@@ -92,6 +95,7 @@ export default function WorkspaceModal({
       setTaxaVendaAtiva(false);
       setTaxaVendaTipo('percentual');
       setTaxaVendaPadrao('0');
+      setTaxaVendaFixaPadrao('0');
       setTaxaSaquePadrao('0');
       setCor('#10B981');
     }
@@ -105,12 +109,14 @@ export default function WorkspaceModal({
       setTaxaVendaAtiva(true);
       setTaxaVendaTipo('percentual');
       setTaxaVendaPadrao('10');
+      setTaxaVendaFixaPadrao('0');
       setTaxaSaquePadrao('5');
     } else if (novoTipo === 'plataforma') {
       setCustoEnvioAtivo(false);
       setTaxaVendaAtiva(true);
-      setTaxaVendaTipo('percentual');
-      setTaxaVendaPadrao('8');
+      setTaxaVendaTipo('combinado');
+      setTaxaVendaPadrao('5');
+      setTaxaVendaFixaPadrao('10');
       setTaxaSaquePadrao('5');
     } else if (novoTipo === 'ecommerce_drop') {
       setCustoEnvioAtivo(true);
@@ -119,6 +125,36 @@ export default function WorkspaceModal({
     } else if (novoTipo === 'servicos') {
       setCustoEnvioAtivo(false);
       setTaxaVendaAtiva(false);
+    }
+  };
+
+  const handleSelectPlataforma = (plat: string) => {
+    setPlataformaNome(plat);
+    if (plat === 'Lojoo') {
+      setTaxaVendaAtiva(true);
+      setTaxaVendaTipo('combinado');
+      setTaxaVendaPadrao('5');
+      setTaxaVendaFixaPadrao('10');
+      setTaxaSaquePadrao('5');
+      setMoeda('MT');
+    } else if (plat === 'Kiwify') {
+      setTaxaVendaAtiva(true);
+      setTaxaVendaTipo('combinado');
+      setTaxaVendaPadrao('8.99');
+      setTaxaVendaFixaPadrao('2.49');
+      setTaxaSaquePadrao('3.67');
+      setMoeda('BRL');
+    } else if (plat === 'DroopCod') {
+      setTaxaVendaAtiva(true);
+      setTaxaVendaTipo('percentual');
+      setTaxaVendaPadrao('5');
+      setTaxaSaquePadrao('5');
+      setMoeda('MT');
+    } else if (plat === 'Zenofi') {
+      setTaxaVendaAtiva(true);
+      setTaxaVendaTipo('percentual');
+      setTaxaVendaPadrao('10');
+      setTaxaSaquePadrao('5');
     }
   };
 
@@ -134,6 +170,7 @@ export default function WorkspaceModal({
         taxa_venda_ativa: taxaVendaAtiva,
         taxa_venda_tipo: taxaVendaTipo,
         taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0,
+        taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0,
         taxa_saque_padrao: parseFloat(taxaSaquePadrao) || 0,
         plataforma_nome: plataformaNome.trim() || undefined,
         cor,
@@ -316,7 +353,7 @@ export default function WorkspaceModal({
                 <button
                   key={plat}
                   type="button"
-                  onClick={() => setPlataformaNome(plat)}
+                  onClick={() => handleSelectPlataforma(plat)}
                   className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors cursor-pointer ${
                     plataformaNome === plat
                       ? 'bg-emerald-600 text-white'
@@ -368,7 +405,7 @@ export default function WorkspaceModal({
                     Taxa da Plataforma / Gateway por Venda
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Desconta taxa de intermediação (ex: 10% Kiwify/Zenofi)
+                    Desconta taxa por transação (ex: 5% + 10 MT Lojoo, 8.99% + 2.49 Kiwify)
                   </p>
                 </div>
               </div>
@@ -381,16 +418,16 @@ export default function WorkspaceModal({
             </div>
 
             {taxaVendaAtiva && (
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-purple-100 dark:border-purple-900/30">
+              <div className="space-y-2.5 pt-1 border-t border-purple-100 dark:border-purple-900/30">
                 <div>
                   <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    Tipo de Taxa
+                    Modelo de Cobrança da Taxa
                   </label>
-                  <div className="flex rounded-xl bg-purple-100/60 dark:bg-purple-900/40 p-1">
+                  <div className="grid grid-cols-3 gap-1 rounded-xl bg-purple-100/60 dark:bg-purple-900/40 p-1">
                     <button
                       type="button"
                       onClick={() => setTaxaVendaTipo('percentual')}
-                      className={`flex-1 py-1 text-[10px] font-black rounded-lg transition-colors cursor-pointer ${
+                      className={`py-1 text-[10px] font-black rounded-lg transition-colors cursor-pointer text-center ${
                         taxaVendaTipo === 'percentual' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-700 dark:text-purple-300'
                       }`}
                     >
@@ -399,34 +436,87 @@ export default function WorkspaceModal({
                     <button
                       type="button"
                       onClick={() => setTaxaVendaTipo('fixo')}
-                      className={`flex-1 py-1 text-[10px] font-black rounded-lg transition-colors cursor-pointer ${
+                      className={`py-1 text-[10px] font-black rounded-lg transition-colors cursor-pointer text-center ${
                         taxaVendaTipo === 'fixo' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-700 dark:text-purple-300'
                       }`}
                     >
                       {moeda} Fixo
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaxaVendaTipo('combinado')}
+                      className={`py-1 text-[10px] font-black rounded-lg transition-colors cursor-pointer text-center ${
+                        taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-700 dark:text-purple-300'
+                      }`}
+                    >
+                      % + {moeda} (Lojoo)
+                    </button>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    Taxa Padrão
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={taxaVendaPadrao}
-                      onChange={(e) => setTaxaVendaPadrao(e.target.value)}
-                      placeholder="Ex: 10"
-                      className="w-full bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
-                    />
-                    <span className="absolute right-2.5 top-1.5 text-xs font-bold text-purple-600">
-                      {taxaVendaTipo === 'percentual' ? '%' : moeda}
-                    </span>
+                {taxaVendaTipo === 'combinado' ? (
+                  <div className="space-y-1">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                          Percentual (%)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={taxaVendaPadrao}
+                            onChange={(e) => setTaxaVendaPadrao(e.target.value)}
+                            placeholder="Ex: 5"
+                            className="w-full bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                          />
+                          <span className="absolute right-2.5 top-1.5 text-xs font-bold text-purple-600">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                          + Valor Fixo ({moeda})
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={taxaVendaFixaPadrao}
+                            onChange={(e) => setTaxaVendaFixaPadrao(e.target.value)}
+                            placeholder="Ex: 10"
+                            className="w-full bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                          />
+                          <span className="absolute right-2.5 top-1.5 text-xs font-bold text-purple-600">{moeda}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-purple-700 dark:text-purple-300 font-medium pt-0.5">
+                      💡 Cobra <strong>{taxaVendaPadrao || '0'}%</strong> do pedido + <strong>{taxaVendaFixaPadrao || '0'} {moeda}</strong> fixos por venda.
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                      Taxa Padrão
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={taxaVendaPadrao}
+                        onChange={(e) => setTaxaVendaPadrao(e.target.value)}
+                        placeholder="Ex: 10"
+                        className="w-full bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none"
+                      />
+                      <span className="absolute right-2.5 top-1.5 text-xs font-bold text-purple-600">
+                        {taxaVendaTipo === 'percentual' ? '%' : moeda}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

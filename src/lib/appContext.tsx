@@ -1554,13 +1554,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       distribution[deliveryCx.id] = shippingCost;
     }
 
-    // Calculate fee per sale (gateway / platform % or fixed)
+    // Calculate fee per sale (gateway / platform % or fixed or compound)
     let taxaVendaDeduction = 0;
     if (vendaData.taxa_venda_total !== undefined && vendaData.taxa_venda_total > 0) {
       taxaVendaDeduction = vendaData.taxa_venda_total;
     } else if (vendaData.taxa_venda_valor && vendaData.taxa_venda_valor > 0) {
       if (vendaData.taxa_venda_tipo === 'percentual') {
         taxaVendaDeduction = Math.round((value * (vendaData.taxa_venda_valor / 100)) * 100) / 100;
+      } else if (vendaData.taxa_venda_tipo === 'combinado') {
+        const pctPart = Math.round((value * (vendaData.taxa_venda_valor / 100)) * 100) / 100;
+        const fixedPart = Number(vendaData.taxa_venda_fixa) || 0;
+        taxaVendaDeduction = pctPart + fixedPart;
       } else {
         taxaVendaDeduction = vendaData.taxa_venda_valor;
       }

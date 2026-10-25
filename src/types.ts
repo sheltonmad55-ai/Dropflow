@@ -27,8 +27,9 @@ export interface Workspace {
   moeda: string; // 'MT' | 'USD' | 'BRL' | 'ZAR' | 'EUR'
   custo_envio_ativo: boolean; // se tem custos de entrega/envio
   taxa_venda_ativa: boolean;  // se tem taxa percentual ou fixa por venda (gateway/plataforma)
-  taxa_venda_tipo?: 'percentual' | 'fixo';
+  taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado';
   taxa_venda_padrao?: number; // taxa por venda (ex: 5% ou 10%)
+  taxa_venda_fixa_padrao?: number; // taxa fixa complementar quando combinado (ex: +10 MT na Lojoo)
   taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5%)
   plataforma_nome?: string;   // ex: "DroopCod", "Zenofi", "Kiwify", "ChatPilog", "Shopify"
   cor?: string;
@@ -52,8 +53,9 @@ export interface Profile {
   tipo_negocio?: TipoNegocio; // 'ecommerce_drop' | 'plr_infoproduto' | 'plataforma' | 'servicos' | 'pessoal' | 'hibrido'
   custo_envio_ativo?: boolean; // Se custos de entrega/envio estão ativos (padrão true para drop, false para plr)
   taxa_venda_ativa?: boolean;  // Se taxa percentual/fixa por venda (gateway/plataforma) está ativa
-  taxa_venda_tipo?: 'percentual' | 'fixo'; // '%' ou 'fixo'
+  taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado'; // '%' ou 'fixo' ou 'combinado'
   taxa_venda_padrao?: number;  // Valor padrão da taxa (ex: 10% ou 50 MT)
+  taxa_venda_fixa_padrao?: number; // Valor fixo adicional quando combinado (ex: 10 MT)
   taxa_saque_padrao?: number;  // Valor padrão da taxa de saque (ex: 5%)
   workspaces?: Workspace[];    // Lista de workspaces / negócios cadastrados
   active_workspace_id?: string; // ID do workspace ativo atualmente
@@ -190,8 +192,9 @@ export interface Venda {
   produto_id: string;
   fornecedor_id: string;
   zona_entrega_id?: string; // opcional para infoprodutos / quando custo de envio está desligado
-  taxa_venda_tipo?: 'percentual' | 'fixo'; // tipo de taxa da plataforma/gateway (% ou valor fixo)
+  taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado'; // tipo de taxa da plataforma/gateway (% ou valor fixo ou combinado)
   taxa_venda_valor?: number; // porcentagem ou valor fixo configurado na venda
+  taxa_venda_fixa?: number;  // valor fixo adicional quando combinado (ex: +10 MT na Lojoo)
   taxa_venda_total?: number; // valor final deduzido na moeda local (MT)
   forma_pagamento: string;
   observacao: string;

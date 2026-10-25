@@ -106,8 +106,9 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const [tipoNegocio, setTipoNegocio] = useState<'ecommerce_drop' | 'plr_infoproduto' | 'hibrido'>(profile?.tipo_negocio || 'ecommerce_drop');
   const [custoEnvioAtivo, setCustoEnvioAtivo] = useState<boolean>(profile?.custo_envio_ativo ?? (profile?.tipo_negocio !== 'plr_infoproduto'));
   const [taxaVendaAtiva, setTaxaVendaAtiva] = useState<boolean>(profile?.taxa_venda_ativa ?? (profile?.tipo_negocio === 'plr_infoproduto'));
-  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo'>(profile?.taxa_venda_tipo || 'percentual');
+  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo' | 'combinado'>(profile?.taxa_venda_tipo || 'percentual');
   const [taxaVendaPadrao, setTaxaVendaPadrao] = useState<string>((profile?.taxa_venda_padrao ?? (profile?.tipo_negocio === 'plr_infoproduto' ? 10 : 0)).toString());
+  const [taxaVendaFixaPadrao, setTaxaVendaFixaPadrao] = useState<string>((profile?.taxa_venda_fixa_padrao ?? 0).toString());
 
   // Contas Bancárias & Carteiras state
   const [showAddConta, setShowAddConta] = useState(false);
@@ -314,7 +315,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         custo_envio_ativo: custoEnvioAtivo,
         taxa_venda_ativa: taxaVendaAtiva,
         taxa_venda_tipo: taxaVendaTipo,
-        taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0
+        taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0,
+        taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0
       });
       if (activeWorkspace) {
         await updateWorkspace(activeWorkspace.id, {
@@ -323,7 +325,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
           custo_envio_ativo: custoEnvioAtivo,
           taxa_venda_ativa: taxaVendaAtiva,
           taxa_venda_tipo: taxaVendaTipo,
-          taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0
+          taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0,
+          taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0
         });
       }
       alert('Perfil e configurações do negócio atualizados com sucesso!');
@@ -844,8 +847,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 </div>
 
                 {taxaVendaAtiva && (
-                  <div className="pl-0 sm:pl-2 pt-1 flex items-center gap-2 animate-fade-in">
-                    <div className="flex items-center bg-white dark:bg-slate-900 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800">
+                  <div className="pl-0 sm:pl-2 pt-1 space-y-2 animate-fade-in">
+                    <div className="flex items-center bg-white dark:bg-slate-900 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800 w-fit">
                       <button
                         type="button"
                         onClick={() => setTaxaVendaTipo('percentual')}
@@ -860,21 +863,60 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                       >
                         {moeda} (Fixo)
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaxaVendaTipo('combinado')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded ${taxaVendaTipo === 'combinado' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
+                      >
+                        % + {moeda} (Lojoo)
+                      </button>
                     </div>
 
-                    <div className="relative flex-1">
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Taxa padrão"
-                        value={taxaVendaPadrao}
-                        onChange={(e) => setTaxaVendaPadrao(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
-                      />
-                      <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
-                        {taxaVendaTipo === 'percentual' ? '%' : moeda}
-                      </span>
-                    </div>
+                    {taxaVendaTipo === 'combinado' ? (
+                      <div className="space-y-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder="Percentual (ex: 5%)"
+                              value={taxaVendaPadrao}
+                              onChange={(e) => setTaxaVendaPadrao(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                            />
+                            <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">%</span>
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="any"
+                              placeholder={`Valor fixo (ex: 10 ${moeda})`}
+                              value={taxaVendaFixaPadrao}
+                              onChange={(e) => setTaxaVendaFixaPadrao(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                            />
+                            <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">{moeda}</span>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          Configurado: <strong>{taxaVendaPadrao || '0'}% + {taxaVendaFixaPadrao || '0'} {moeda}</strong> por venda (deduzido automaticamente em cada lançamento).
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Taxa padrão"
+                          value={taxaVendaPadrao}
+                          onChange={(e) => setTaxaVendaPadrao(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                        />
+                        <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
+                          {taxaVendaTipo === 'percentual' ? '%' : moeda}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1615,52 +1657,128 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             : '24 de Novembro de 2026';
 
           return (
-            <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-3" id="pro_status_info">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide flex items-center">
-                  <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
-                </span>
-                <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-mono font-bold border border-emerald-500/20">
-                  {isAdmin ? '👑 Acesso Vitalício Admin' : isVipShelton ? '⭐ VIP Pro (90 Dias)' : profile?.plano === 'trial' ? '🎁 Teste Grátis (15 Dias)' : '🚀 Plano Mensal Pro'}
-                </span>
-              </div>
-              
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                {profile?.plano === 'trial' 
-                  ? 'Estás a usufruir de 15 dias de teste gratuito com acesso ilimitado a lançamentos, caixinhas e relatórios. Quando os 15 dias terminarem, é só assinar o plano Pro para continuar.' 
-                  : 'Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.'}
-              </p>
-
-              {/* Data de Renovação e Aviso de Bloqueio */}
-              <div className="pt-2.5 border-t border-emerald-200/50 dark:border-emerald-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
-                  <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span>
-                    {isAdmin ? (
-                      <strong className="text-emerald-600 dark:text-emerald-400">Sem data de expiração (Acesso irrestrito).</strong>
-                    ) : (
-                      <>
-                        {profile?.plano === 'trial' ? 'Expiração do Teste: ' : 'Data de Renovação: '}
-                        <strong className="text-slate-900 dark:text-white">{dataRenovacaoTexto}</strong>
-                        <span className="ml-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
-                          ({diasRestantesCalculados} {diasRestantesCalculados === 1 ? 'dia restante' : 'dias restantes'})
-                        </span>
-                      </>
-                    )}
+            <>
+              <div className="bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-800 p-4 rounded-2xl space-y-3" id="pro_status_info">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide flex items-center">
+                    <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
+                  </span>
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-mono font-bold border border-emerald-500/20">
+                    {isAdmin ? '👑 Acesso Vitalício Admin' : isVipShelton ? '⭐ VIP Pro (90 Dias)' : profile?.plano === 'trial' ? '🎁 Teste Grátis (15 Dias)' : '🚀 Plano Mensal Pro'}
                   </span>
                 </div>
                 
-                <a
-                  href={`https://checkout.escalepay.com/9729350${userBillingEmail ? `?email=${encodeURIComponent(userBillingEmail)}` : ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition-all shrink-0 justify-center"
-                >
-                  <span>{profile?.plano === 'trial' ? 'Assinar Plano Pro' : 'Renovar no EscalePay'}</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  {profile?.plano === 'trial' 
+                    ? 'Estás a usufruir de 15 dias de teste gratuito com acesso ilimitado a lançamentos, caixinhas e relatórios. Quando os 15 dias terminarem, é só assinar o plano Pro para continuar.' 
+                    : 'Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.'}
+                </p>
+
+                {/* Data de Renovação e Aviso de Bloqueio */}
+                <div className="pt-2.5 border-t border-emerald-200/50 dark:border-emerald-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                    <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      {isAdmin ? (
+                        <strong className="text-emerald-600 dark:text-emerald-400">Sem data de expiração (Acesso irrestrito).</strong>
+                      ) : (
+                        <>
+                          {profile?.plano === 'trial' ? 'Expiração do Teste: ' : 'Data de Renovação: '}
+                          <strong className="text-slate-900 dark:text-white">{dataRenovacaoTexto}</strong>
+                          <span className="ml-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
+                            ({diasRestantesCalculados} {diasRestantesCalculados === 1 ? 'dia restante' : 'dias restantes'})
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  
+                  <a
+                    href={`https://checkout.escalepay.com/9729350${userBillingEmail ? `?email=${encodeURIComponent(userBillingEmail)}` : ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition-all shrink-0 justify-center"
+                  >
+                    <span>{profile?.plano === 'trial' ? 'Assinar Plano Pro' : 'Renovar no EscalePay'}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
-            </div>
+
+              {/* Plano Master - Donos de Plataformas & Sistemas (Em Breve) */}
+              <div className="relative overflow-hidden rounded-3xl border border-purple-500/30 bg-gradient-to-br from-slate-900 via-purple-950/40 to-slate-900 p-5 text-white shadow-xl mt-4">
+                {/* Glow background effects */}
+                <div className="absolute -top-12 -right-12 w-44 h-44 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-12 -left-12 w-44 h-44 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-400 to-purple-400 text-slate-950 shadow-sm">
+                      <Crown className="w-3.5 h-3.5 fill-current" />
+                      Plano Master • Em Breve
+                    </span>
+                    <span className="text-[10px] bg-purple-500/20 text-purple-200 border border-purple-400/30 px-2.5 py-0.5 rounded-full font-mono font-bold">
+                      Para Donos de Plataformas & Sistemas
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-base font-black text-white font-display flex items-center gap-2">
+                      <span>👑 DroopFlow Master: Para Proprietários de Plataformas (Ex: DroopCod)</span>
+                    </h4>
+                    <p className="text-xs text-purple-200/80 mt-1 leading-relaxed">
+                      Pensado para proprietários de plataformas com múltiplos lojistas e afiliados. Monetização em 3 vias com separação contábil invisível para os vendedores.
+                    </p>
+                  </div>
+
+                  {/* 3 Pilares de Monetização Master */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                      <div className="text-[11px] font-black text-amber-300 flex items-center gap-1.5">
+                        <span>📈 1. Take-Rate por Venda</span>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-snug">
+                        Cobrança automática de comissão (ex: 5% por venda) direto na transação de cada vendedor.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                      <div className="text-[11px] font-black text-emerald-300 flex items-center gap-1.5">
+                        <span>🏦 2. Taxa por Saque / Payout</span>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-snug">
+                        Retenção percentual (ex: 5%) sobre os pedidos de saque para M-Pesa, E-Mola ou bancos.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+                      <div className="text-[11px] font-black text-indigo-300 flex items-center gap-1.5">
+                        <span>📦 3. Spread Invisível de Fornecimento</span>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-snug">
+                        Compra no atacado a 200 MT, entrega a 150 MT, fornece a 600 MT e retém 250 MT líquidos na plataforma sem expor custos industriais.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-purple-200 text-[11px]">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Lançamento na próxima atualização • Painel Central do Dono com Relatórios de GMV</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => alert('🎉 Adicionado com sucesso à Lista VIP do Plano Master! Entraremos em contacto para liberação antecipada no seu DroopCod.')}
+                      className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                    >
+                      <span>Entrar na Lista VIP Master</span>
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
           );
         })()}
       </div>

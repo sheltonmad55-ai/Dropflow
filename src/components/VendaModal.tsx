@@ -29,8 +29,9 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const currentTipo = activeWorkspace?.tipo || profile?.tipo_negocio || 'ecommerce_drop';
   const isShippingActive = (activeWorkspace?.custo_envio_ativo ?? profile?.custo_envio_ativo) !== false && currentTipo !== 'plr_infoproduto';
   const isPlr = currentTipo === 'plr_infoproduto';
-  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo'>('percentual');
+  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo' | 'combinado'>('percentual');
   const [taxaVendaValor, setTaxaVendaValor] = useState<string>('');
+  const [taxaVendaFixa, setTaxaVendaFixa] = useState<string>('');
   const [showTaxaOptional, setShowTaxaOptional] = useState<boolean>(false);
 
   // Custom Ads state (Percentual %, Meticais MT, Dólares USD)
@@ -117,6 +118,8 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setTaxaVendaTipo(activeWorkspace?.taxa_venda_tipo || profile.taxa_venda_tipo || 'percentual');
       const defaultTaxa = activeWorkspace?.taxa_venda_padrao ?? profile.taxa_venda_padrao ?? (currentTipo === 'plr_infoproduto' ? 10 : 0);
       setTaxaVendaValor(defaultTaxa > 0 ? defaultTaxa.toString() : '');
+      const defaultFixa = activeWorkspace?.taxa_venda_fixa_padrao ?? profile.taxa_venda_fixa_padrao ?? 0;
+      setTaxaVendaFixa(defaultFixa > 0 ? defaultFixa.toString() : '');
       setShowTaxaOptional(Boolean(activeWorkspace?.taxa_venda_ativa ?? profile.taxa_venda_ativa));
     }
   }, [isOpen, profile, activeWorkspace]);
@@ -164,9 +167,13 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     // Calculate platform / gateway fee per sale (if PLR, or if fee is active or filled)
     let taxaDeduction = 0;
     const taxaNum = parseFloat(taxaVendaValor) || 0;
-    if ((isPlr || profile?.taxa_venda_ativa || showTaxaOptional || !isShippingActive) && taxaNum > 0) {
+    const taxaFixaNum = parseFloat(taxaVendaFixa) || 0;
+    if ((isPlr || profile?.taxa_venda_ativa || showTaxaOptional || !isShippingActive) && (taxaNum > 0 || taxaFixaNum > 0)) {
       if (taxaVendaTipo === 'percentual') {
         taxaDeduction = Math.round(val * (taxaNum / 100) * 100) / 100;
+      } else if (taxaVendaTipo === 'combinado') {
+        const pctPart = Math.round(val * (taxaNum / 100) * 100) / 100;
+        taxaDeduction = pctPart + taxaFixaNum;
       } else {
         taxaDeduction = taxaNum;
       }
@@ -259,6 +266,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     }
 
     const taxaNum = parseFloat(taxaVendaValor) || 0;
+    const taxaFixaNum = parseFloat(taxaVendaFixa) || 0;
     const taxaDeduction = preview.taxaVendaDeduction;
 
     try {
@@ -268,8 +276,9 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
         produto_id: produtoId,
         fornecedor_id: fornecedorId,
         zona_entrega_id: (zonaEntregaId === 'sem_entrega' || !isShippingActive) ? '' : zonaEntregaId,
-        taxa_venda_tipo: taxaNum > 0 ? taxaVendaTipo : undefined,
+        taxa_venda_tipo: (taxaNum > 0 || taxaFixaNum > 0) ? taxaVendaTipo : undefined,
         taxa_venda_valor: taxaNum > 0 ? taxaNum : undefined,
+        taxa_venda_fixa: (taxaVendaTipo === 'combinado' && taxaFixaNum > 0) ? taxaFixaNum : undefined,
         taxa_venda_total: taxaDeduction > 0 ? taxaDeduction : undefined,
         conta_id: contaId || undefined,
         forma_pagamento: formaPagamento,
@@ -605,10 +614,10 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                     onClick={() => setShowTaxaOptional(true)}
                     className="text-[10px] text-purple-600 hover:text-purple-700 font-bold flex items-center gap-1 cursor-pointer"
                   >
-                    <Plus className="w-3 h-3" /> Adicionar taxa de gateway / plataforma (%)
+                    <Plus className="w-3 h-3" /> Adicionar taxa de gateway / plataforma (% ou fixa)
                   </button>
                 ) : (
-                  <div className="bg-purple-50/70 border border-purple-100 rounded-xl p-2.5 space-y-1.5 animate-fade-in">
+                  <div className="bg-purple-50/70 border border-purple-100 rounded-xl p-2.5 space-y-2 animate-fade-in">
                     <div className="flex justify-between items-center">
                       <label className="text-[11px] font-bold text-purple-900">Taxa Gateway por Venda</label>
                       <div className="flex items-center gap-1">
@@ -627,12 +636,20 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                           >
                             {currency}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setTaxaVendaTipo('combinado')}
+                            className={`px-1.5 py-0.5 text-[9px] font-black rounded ${taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white' : 'text-slate-500'}`}
+                          >
+                            % + {currency}
+                          </button>
                         </div>
                         <button
                           type="button"
                           onClick={() => {
                             setShowTaxaOptional(false);
                             setTaxaVendaValor('');
+                            setTaxaVendaFixa('');
                           }}
                           className="text-slate-400 hover:text-rose-500 text-[10px] font-bold ml-1 cursor-pointer"
                         >
@@ -640,19 +657,47 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                         </button>
                       </div>
                     </div>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 5%' : `Ex: 50 ${currency}`}
-                        value={taxaVendaValor}
-                        onChange={(e) => setTaxaVendaValor(e.target.value)}
-                        className="w-full bg-white border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500"
-                      />
-                      <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
-                        {taxaVendaTipo === 'percentual' ? '%' : currency}
-                      </span>
-                    </div>
+
+                    {taxaVendaTipo === 'combinado' ? (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="Ex: 5"
+                            value={taxaVendaValor}
+                            onChange={(e) => setTaxaVendaValor(e.target.value)}
+                            className="w-full bg-white border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500"
+                          />
+                          <span className="absolute right-2 top-1.5 text-[10px] font-bold text-slate-400">%</span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder="Ex: 10"
+                            value={taxaVendaFixa}
+                            onChange={(e) => setTaxaVendaFixa(e.target.value)}
+                            className="w-full bg-white border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500"
+                          />
+                          <span className="absolute right-2 top-1.5 text-[10px] font-bold text-slate-400">{currency}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 5%' : `Ex: 50 ${currency}`}
+                          value={taxaVendaValor}
+                          onChange={(e) => setTaxaVendaValor(e.target.value)}
+                          className="w-full bg-white border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500"
+                        />
+                        <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
+                          {taxaVendaTipo === 'percentual' ? '%' : currency}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -661,7 +706,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
 
           {/* Taxa por Venda (Para PLR / Infoprodutos ou quando envio está desativado) */}
           {!isShippingActive && (
-            <div className="space-y-1.5 bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5" id="field_venda_taxa_plr">
+            <div className="space-y-2 bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5" id="field_venda_taxa_plr">
               <div className="flex justify-between items-center">
                 <div>
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -676,43 +721,95 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                   <button
                     type="button"
                     onClick={() => setTaxaVendaTipo('percentual')}
-                    className={`px-2.5 py-1 text-[10px] font-black rounded-md transition-colors cursor-pointer ${
+                    className={`px-2 py-1 text-[9px] sm:text-[10px] font-black rounded-md transition-colors cursor-pointer ${
                       taxaVendaTipo === 'percentual' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    % (Percentual)
+                    %
                   </button>
                   <button
                     type="button"
                     onClick={() => setTaxaVendaTipo('fixo')}
-                    className={`px-2.5 py-1 text-[10px] font-black rounded-md transition-colors cursor-pointer ${
+                    className={`px-2 py-1 text-[9px] sm:text-[10px] font-black rounded-md transition-colors cursor-pointer ${
                       taxaVendaTipo === 'fixo' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    {currency} (Fixo)
+                    {currency}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTaxaVendaTipo('combinado')}
+                    className={`px-2 py-1 text-[9px] sm:text-[10px] font-black rounded-md transition-colors cursor-pointer ${
+                      taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    % + {currency} (Lojoo)
                   </button>
                 </div>
               </div>
 
-              <div className="relative pt-1">
-                <input
-                  type="number"
-                  step="any"
-                  placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 10% (Kiwify, Hotmart, EscalePay)' : `Ex: 50 ${currency}`}
-                  value={taxaVendaValor}
-                  onChange={(e) => setTaxaVendaValor(e.target.value)}
-                  className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
-                />
-                <span className="absolute right-3 top-3.5 text-xs font-black text-purple-500">
-                  {taxaVendaTipo === 'percentual' ? '%' : currency}
-                </span>
-              </div>
-              <div className="flex justify-between text-[10px] text-slate-500 pt-0.5">
-                <span>Dedução desta venda:</span>
-                <span className="font-bold text-purple-700">
-                  -{preview.taxaVendaDeduction} {currency} {taxaVendaTipo === 'percentual' && taxaVendaValor ? `(${taxaVendaValor}%)` : ''}
-                </span>
-              </div>
+              {taxaVendaTipo === 'combinado' ? (
+                <div className="space-y-1 pt-1">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-1">Percentual (%)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Ex: 5%"
+                          value={taxaVendaValor}
+                          onChange={(e) => setTaxaVendaValor(e.target.value)}
+                          className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs font-black text-purple-500">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 block mb-1">+ Fixo ({currency})</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Ex: 10"
+                          value={taxaVendaFixa}
+                          onChange={(e) => setTaxaVendaFixa(e.target.value)}
+                          className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs font-black text-purple-500">{currency}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-500 pt-0.5">
+                    <span>Dedução desta venda:</span>
+                    <span className="font-bold text-purple-700">
+                      -{preview.taxaVendaDeduction} {currency} {taxaVendaValor ? `(${taxaVendaValor}% + ${taxaVendaFixa || 0} ${currency})` : ''}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1 pt-1">
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 10% (Kiwify, Hotmart, EscalePay)' : `Ex: 50 ${currency}`}
+                      value={taxaVendaValor}
+                      onChange={(e) => setTaxaVendaValor(e.target.value)}
+                      className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                    />
+                    <span className="absolute right-3 top-3.5 text-xs font-black text-purple-500">
+                      {taxaVendaTipo === 'percentual' ? '%' : currency}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-500 pt-0.5">
+                    <span>Dedução desta venda:</span>
+                    <span className="font-bold text-purple-700">
+                      -{preview.taxaVendaDeduction} {currency} {taxaVendaTipo === 'percentual' && taxaVendaValor ? `(${taxaVendaValor}%)` : ''}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
