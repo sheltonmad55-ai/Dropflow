@@ -17,7 +17,24 @@ export interface HistoricoMeta {
   criado_em: string;
 }
 
-export type TipoNegocio = 'ecommerce_drop' | 'plr_infoproduto' | 'hibrido';
+export type TipoNegocio = 'ecommerce_drop' | 'plr_infoproduto' | 'plataforma' | 'servicos' | 'pessoal' | 'hibrido';
+
+export interface Workspace {
+  id: string;
+  user_id: string;
+  nome: string; // Ex: "DroopCod", "Zenofi PLR", "Loja de Cabelos", "Pessoal & Investimentos"
+  tipo: TipoNegocio;
+  moeda: string; // 'MT' | 'USD' | 'BRL' | 'ZAR' | 'EUR'
+  custo_envio_ativo: boolean; // se tem custos de entrega/envio
+  taxa_venda_ativa: boolean;  // se tem taxa percentual ou fixa por venda (gateway/plataforma)
+  taxa_venda_tipo?: 'percentual' | 'fixo';
+  taxa_venda_padrao?: number; // taxa por venda (ex: 5% ou 10%)
+  taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5%)
+  plataforma_nome?: string;   // ex: "DroopCod", "Zenofi", "Kiwify", "ChatPilog", "Shopify"
+  cor?: string;
+  icone?: string;
+  criado_em: string;
+}
 
 export interface Profile {
   id: string; // matches user auth id
@@ -32,11 +49,14 @@ export interface Profile {
   plano_expira_em?: string; // ISO date for subscription expiration
   plano_atualizado_em?: string;
   criado_em: string;
-  tipo_negocio?: TipoNegocio; // 'ecommerce_drop' | 'plr_infoproduto' | 'hibrido'
+  tipo_negocio?: TipoNegocio; // 'ecommerce_drop' | 'plr_infoproduto' | 'plataforma' | 'servicos' | 'pessoal' | 'hibrido'
   custo_envio_ativo?: boolean; // Se custos de entrega/envio estão ativos (padrão true para drop, false para plr)
   taxa_venda_ativa?: boolean;  // Se taxa percentual/fixa por venda (gateway/plataforma) está ativa
   taxa_venda_tipo?: 'percentual' | 'fixo'; // '%' ou 'fixo'
   taxa_venda_padrao?: number;  // Valor padrão da taxa (ex: 10% ou 50 MT)
+  taxa_saque_padrao?: number;  // Valor padrão da taxa de saque (ex: 5%)
+  workspaces?: Workspace[];    // Lista de workspaces / negócios cadastrados
+  active_workspace_id?: string; // ID do workspace ativo atualmente
   anuncios_percent: number; // e.g. 50% of remainder
   lucro_percent: number;    // e.g. 50% of remainder
   metaDiaria?: number;
@@ -91,6 +111,7 @@ export type CaixinhaTipo = 'lucro' | 'anuncios' | 'fornecedores' | 'delivery' | 
 export interface Caixinha {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome: string;
   icone: string; // lucide icon name
   cor: string;  // tailwind color class
@@ -110,6 +131,8 @@ export interface RetiradaHistoricoItem {
   data: string; // ISO date string
   valor: number;
   motivo: string;
+  taxa_saque_valor?: number; // taxa retida na retirada/saque (ex: 5% da plataforma)
+  valor_liquido?: number;    // valor líquido recebido
   despesa_descricao?: string;
   despesa_id?: string;
 }
@@ -117,6 +140,7 @@ export interface RetiradaHistoricoItem {
 export interface ContaBancaria {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome: string;          // ex: "EMPRESA", "e-Mola", "M-Pesa", "BIM", "BCI", "M-Pesa de Sócio"
   tipo: ContaTipo;
   saldo_atual: number;
@@ -132,6 +156,7 @@ export interface ContaBancaria {
 export interface DespesaRecorrente {
   id: string;
   user_id: string;
+  workspace_id?: string;
   descricao: string;
   valor: number;
   caixinha_id: string;
@@ -146,6 +171,7 @@ export interface DespesaRecorrente {
 export interface MetaItem {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome: string;          // ex: "Comprar Celular"
   valor_alvo: number;    // ex: 25000 MT
   valor_atual: number;   // ex: 5000 MT
@@ -159,6 +185,7 @@ export interface MetaItem {
 export interface Venda {
   id: string;
   user_id: string;
+  workspace_id?: string;
   valor_recebido: number;
   produto_id: string;
   fornecedor_id: string;
@@ -191,6 +218,7 @@ export interface Venda {
 export interface Despesa {
   id: string;
   user_id: string;
+  workspace_id?: string;
   valor: number;
   categoria: string;
   caixinha_id: string;
@@ -209,6 +237,7 @@ export interface Despesa {
 export interface Produto {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome: string;
   categoria: string;
   fornecedor_id: string;
@@ -224,6 +253,7 @@ export interface Produto {
 export interface Fornecedor {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome: string;
   telefone: string;
   valor_pendente: number;
@@ -234,6 +264,7 @@ export interface Fornecedor {
 export interface ZonaEntrega {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome_zona: string;
   custo: number;
   criado_em: string;
@@ -269,6 +300,7 @@ export interface MetricaDiaria {
 export interface Campanha {
   id: string;
   user_id: string;
+  workspace_id?: string;
   nome: string;
   plataforma: string;
   orcamento: number;
@@ -302,7 +334,7 @@ export interface Campanha {
 
 export interface SyncQueueItem {
   id: string;
-  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente' | 'meta_item' | 'conta_bancaria';
+  type: 'profile' | 'caixinha' | 'venda' | 'despesa' | 'produto' | 'fornecedor' | 'zona' | 'campanha' | 'despesa_recorrente' | 'meta_item' | 'conta_bancaria' | 'workspace';
   action: 'create' | 'update' | 'delete';
   data: any;
   timestamp: number;

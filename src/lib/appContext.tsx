@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef, useMemo } from 'react';
 import * as db from './db.ts';
-import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem, ContaBancaria, TipoNegocio } from '../types.ts';
+import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem, ContaBancaria, TipoNegocio, Workspace } from '../types.ts';
 import { checkCampaignBudget, startNotificationScheduler, sendNotification } from './notifications.ts';
 import { 
   auth,
@@ -119,7 +119,7 @@ interface AppContextType {
   editContaBancaria: (id: string, updates: Partial<ContaBancaria>) => Promise<void>;
   deleteContaBancaria: (id: string) => Promise<void>;
   limparContasDuplicadas: () => Promise<void>;
-  retirarDaConta: (contaId: string, valor: number, motivo?: string) => Promise<void>;
+  retirarDaConta: (contaId: string, valor: number, motivo?: string, taxaSaquePercent?: number) => Promise<void>;
   transferirEntreContas: (deContaId: string, paraContaId: string, valor: number) => Promise<void>;
 
   // Campanhas management
@@ -132,6 +132,15 @@ interface AppContextType {
   editDespesaRecorrente: (id: string, updates: Partial<DespesaRecorrente>) => Promise<void>;
   deleteDespesaRecorrente: (id: string) => Promise<void>;
   processarDespesaRecorrente: (id: string, dataEfetivacao: string) => Promise<void>;
+
+  // Workspaces / Multi-Negócios Management
+  workspaces: Workspace[];
+  activeWorkspace: Workspace | null;
+  activeWorkspaceId: string;
+  setActiveWorkspaceId: (workspaceId: string) => Promise<void>;
+  createWorkspace: (workspaceData: Omit<Workspace, 'id' | 'user_id' | 'criado_em'>) => Promise<Workspace>;
+  updateWorkspace: (id: string, updates: Partial<Workspace>) => Promise<void>;
+  deleteWorkspace: (id: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -161,6 +170,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [despesasRecorrentes, setDespesasRecorrentes] = useState<DespesaRecorrente[]>([]);
   const [metaItems, setMetaItems] = useState<MetaItem[]>([]);
 
+  // Workspaces State
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string>(() => {
+    return localStorage.getItem('dropflow_active_workspace') || '';
+  });
+
+  const activeWorkspace = useMemo<Workspace | null>(() => {
+    if (!workspaces.length) return null;
+    return workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0];
+  }, [workspaces, activeWorkspaceId]);
+
   // Modo Foco / Privacy State
   const [modoFoco, setModoFocoState] = useState<boolean>(() => {
     return localStorage.getItem('dropflow_modo_foco') === 'true';
@@ -176,11 +196,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const formatMoney = (val: number, customMoeda?: string) => {
-    const m = customMoeda || profile?.moeda || 'MT';
+    const m = (customMoeda || activeWorkspace?.moeda || profile?.moeda || 'MT').toUpperCase();
     if (modoFoco) {
       return `•••••• ${m}`;
     }
-    return `${val.toLocaleString()} ${m}`;
+    const num = Number(val) || 0;
+    switch (m) {
+      case 'USD':
+        return `$ ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'BRL':
+        return `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'ZAR':
+        return `R ${num.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'EUR':
+        return `€ ${num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'MT':
+      case 'MZN':
+      default:
+        return `${num.toLocaleString('pt-MZ', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} MT`;
+    }
   };
 
   const maskValue = (valStr: string) => {
@@ -872,6 +906,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dbDespesasRecorrentes,
         dbMetaItems,
         dbContas,
+        dbWorkspaces,
         queue
       ] = await Promise.all([
         db.getAll<Profile>('profiles'),
@@ -885,12 +920,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
         db.getAll<DespesaRecorrente>('despesas_recorrentes'),
         db.getAll<MetaItem>('meta_items'),
         db.getAll<ContaBancaria>('contas_bancarias'),
+        db.getAll<Workspace>('workspaces'),
         db.getAll<SyncQueueItem>('sync_queue')
       ]);
 
       const currentUserProfile = dbProfiles.find(p => p.id === userId);
       if (currentUserProfile) {
         setProfile(currentUserProfile);
+      }
+
+      // Initialize or reconcile workspaces
+      const userWorkspaces = dbWorkspaces.filter(w => w.user_id === userId);
+      const profileWorkspaces = currentUserProfile?.workspaces || [];
+      const combinedWorkspacesMap = new Map<string, Workspace>();
+      userWorkspaces.forEach(w => combinedWorkspacesMap.set(w.id, w));
+      profileWorkspaces.forEach(w => combinedWorkspacesMap.set(w.id, w));
+
+      let finalWorkspaces = Array.from(combinedWorkspacesMap.values());
+      if (finalWorkspaces.length === 0) {
+        const defaultWsId = `ws_default_${userId}`;
+        const initialWorkspace: Workspace = {
+          id: currentUserProfile?.active_workspace_id || defaultWsId,
+          user_id: userId,
+          nome: currentUserProfile?.empresa || 'Negócio Principal',
+          tipo: currentUserProfile?.tipo_negocio || 'ecommerce_drop',
+          moeda: currentUserProfile?.moeda || 'MT',
+          custo_envio_ativo: currentUserProfile?.custo_envio_ativo !== false,
+          taxa_venda_ativa: Boolean(currentUserProfile?.taxa_venda_ativa),
+          taxa_venda_tipo: currentUserProfile?.taxa_venda_tipo || 'percentual',
+          taxa_venda_padrao: currentUserProfile?.taxa_venda_padrao || 0,
+          taxa_saque_padrao: currentUserProfile?.taxa_saque_padrao || 0,
+          plataforma_nome: '',
+          cor: '#10B981',
+          icone: 'Store',
+          criado_em: currentUserProfile?.criado_em || new Date().toISOString()
+        };
+        finalWorkspaces = [initialWorkspace];
+        void db.putItem('workspaces', initialWorkspace);
+      }
+
+      setWorkspaces(finalWorkspaces);
+      const savedActiveWs = localStorage.getItem('dropflow_active_workspace');
+      if (savedActiveWs && finalWorkspaces.some(w => w.id === savedActiveWs)) {
+        setActiveWorkspaceIdState(savedActiveWs);
+      } else {
+        const fallbackWsId = currentUserProfile?.active_workspace_id || finalWorkspaces[0].id;
+        setActiveWorkspaceIdState(fallbackWsId);
+        localStorage.setItem('dropflow_active_workspace', fallbackWsId);
       }
 
       // Restore the latest local mutations before real-time listeners start.
@@ -1571,6 +1647,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...vendaData,
       id: vendaId,
       user_id: userId,
+      workspace_id: activeWorkspace?.id,
       fornecedor_id: supplierId,
       custo_compra_total: purchaseCost,
       taxa_venda_total: taxaVendaDeduction,
@@ -1741,6 +1818,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...despesaData,
       id: despesaId,
       user_id: userId,
+      workspace_id: activeWorkspace?.id,
       sync_status: 'pending',
       criado_em: new Date().toISOString(),
       distribuicao_caixinhas: {},
@@ -1930,6 +2008,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...metaData,
       id: crypto.randomUUID(),
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace?.id,
       valor_atual: metaData.valor_atual || 0,
       criado_em: new Date().toISOString()
     };
@@ -1940,7 +2019,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     
     triggerToast(
       'Nova Meta Criada! 🎯',
-      `Meta "${newMeta.nome}" de ${newMeta.valor_alvo.toLocaleString()} MT guardada com sucesso!`,
+      `Meta "${newMeta.nome}" guardada com sucesso!`,
       'success'
     );
     setSyncStatus('pending');
@@ -1989,7 +2068,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const pct = Math.min(100, Math.round((newCurrent / target.valor_alvo) * 100));
     triggerToast(
       'Progresso na Meta! 🎉', 
-      `+${valorMT.toLocaleString()} MT transferidos para "${target.nome}"! (${pct}% concluído)`,
+      `+${valorMT.toLocaleString()} transferidos para "${target.nome}"! (${pct}% concluído)`,
       'success'
     );
     setSyncStatus('pending');
@@ -2006,6 +2085,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...produtoData,
       id,
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace?.id,
       margem,
       criado_em: new Date().toISOString()
     };
@@ -2046,6 +2126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...fornecedorData,
       id,
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace?.id,
       criado_em: new Date().toISOString()
     };
 
@@ -2078,6 +2159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...zonaData,
       id,
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace?.id,
       criado_em: new Date().toISOString()
     };
 
@@ -2342,7 +2424,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void syncWithServer();
   }
 
-  async function retirarDaConta(contaId: string, valor: number, motivo?: string) {
+  async function retirarDaConta(contaId: string, valor: number, motivo?: string, taxaSaquePercent?: number) {
     if (!profile || valor <= 0) return;
 
     const targets = contaId === 'todas'
@@ -2351,6 +2433,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const usableTargets = targets.length > 0 ? targets : contasBancarias;
     const totalBalance = usableTargets.reduce((sum, account) => sum + account.saldo_atual, 0);
     if (totalBalance < valor) throw new Error('Saldo insuficiente para esta retirada.');
+
+    const taxaSaqueValor = (taxaSaquePercent && taxaSaquePercent > 0)
+      ? Math.round(valor * (taxaSaquePercent / 100) * 100) / 100
+      : 0;
+    const valorLiquido = Math.round((valor - taxaSaqueValor) * 100) / 100;
 
     let allocated = 0;
     const updatedAccounts = contasBancarias.map(account => {
@@ -2363,14 +2450,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const updates: Partial<ContaBancaria> = {
         saldo_atual: Math.round((account.saldo_atual - portion) * 100) / 100
       };
-      if (motivo || account.status_liberdade === 'emergencia') {
+
+      const itemTaxa = taxaSaqueValor > 0 ? Math.round(taxaSaqueValor * (portion / valor) * 100) / 100 : undefined;
+      const itemLiquido = itemTaxa ? Math.round((portion - itemTaxa) * 100) / 100 : portion;
+
+      if (motivo || account.status_liberdade === 'emergencia' || taxaSaqueValor > 0) {
         updates.historico_retiradas = [
           ...(account.historico_retiradas || []),
           {
             id: crypto.randomUUID(),
             data: new Date().toISOString(),
             valor: portion,
-            motivo: motivo || 'Retirada Direta'
+            taxa_saque_valor: itemTaxa,
+            valor_liquido: itemLiquido,
+            motivo: motivo || (taxaSaqueValor > 0 ? `Levantamento com taxa de saque (${taxaSaquePercent}%)` : 'Retirada Direta')
           }
         ];
       }
@@ -2380,8 +2473,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return updated;
     });
     setContasBancarias(updatedAccounts);
-    const curr = profile.moeda || 'MT';
-    triggerToast('Levantamento de Conta!', `Retirado ${valor.toLocaleString()} ${curr}`, 'info');
+    const curr = activeWorkspace?.moeda || profile.moeda || 'MT';
+    if (taxaSaqueValor > 0) {
+      triggerToast('Levantamento Efetuado! 💸', `Bruto: ${valor.toLocaleString()} ${curr} | Taxa: -${taxaSaqueValor.toLocaleString()} ${curr} | Líquido: ${valorLiquido.toLocaleString()} ${curr}`, 'info');
+    } else {
+      triggerToast('Levantamento de Conta!', `Retirado ${valor.toLocaleString()} ${curr}`, 'info');
+    }
     setSyncStatus('pending');
     void syncWithServer();
   }
@@ -2414,6 +2511,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...campanhaData,
       id,
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace?.id,
       criado_em: new Date().toISOString()
     };
 
@@ -2421,7 +2519,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await enqueueMutation({ type: 'campanha', action: 'create', data: newCampanha });
     setCampanhas(prev => [newCampanha, ...prev].sort((a,b) => b.data.localeCompare(a.data)));
 
-    const currencySymbol = newCampanha.orcamento_usd ? '$' : (profile.moeda || 'MT');
+    const currencySymbol = newCampanha.orcamento_usd ? '$' : (activeWorkspace?.moeda || profile.moeda || 'MT');
     checkCampaignBudget(newCampanha, 0, currencySymbol);
 
     setSyncStatus('pending');
@@ -2437,7 +2535,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await enqueueMutation({ type: 'campanha', action: 'update', data: updated });
     setCampanhas(prev => prev.map(c => c.id === id ? updated : c).sort((a,b) => b.data.localeCompare(a.data)));
 
-    const currencySymbol = updated.orcamento_usd ? '$' : (profile.moeda || 'MT');
+    const currencySymbol = updated.orcamento_usd ? '$' : (activeWorkspace?.moeda || profile.moeda || 'MT');
     checkCampaignBudget(updated, original.gasto, currencySymbol);
 
     setSyncStatus('pending');
@@ -2464,6 +2562,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...despesaRecorrenteData,
       id,
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace?.id,
       criado_em: new Date().toISOString()
     };
 
@@ -2649,6 +2748,162 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Workspace management functions
+  const setActiveWorkspaceId = async (workspaceId: string) => {
+    setActiveWorkspaceIdState(workspaceId);
+    localStorage.setItem('dropflow_active_workspace', workspaceId);
+    const targetWs = workspaces.find(w => w.id === workspaceId);
+    if (profile && targetWs) {
+      const updatedProfile: Profile = { 
+        ...profile, 
+        active_workspace_id: workspaceId,
+        moeda: targetWs.moeda,
+        tipo_negocio: targetWs.tipo,
+        custo_envio_ativo: targetWs.custo_envio_ativo,
+        taxa_venda_ativa: targetWs.taxa_venda_ativa,
+        taxa_venda_tipo: targetWs.taxa_venda_tipo,
+        taxa_venda_padrao: targetWs.taxa_venda_padrao,
+        taxa_saque_padrao: targetWs.taxa_saque_padrao
+      };
+      setProfile(updatedProfile);
+      await db.putItem('profiles', updatedProfile);
+      await enqueueMutation({ type: 'profile', action: 'update', data: updatedProfile });
+    }
+    triggerToast('Negócio Alternado 🔄', `Agora gerindo: ${targetWs?.nome || 'Workspace'} (${targetWs?.moeda || 'MT'})`, 'info');
+  };
+
+  const createWorkspace = async (workspaceData: Omit<Workspace, 'id' | 'user_id' | 'criado_em'>): Promise<Workspace> => {
+    const userId = auth.currentUser?.uid || profile?.id || 'offline_user';
+    const newWs: Workspace = {
+      id: `ws_${crypto.randomUUID()}`,
+      user_id: userId,
+      ...workspaceData,
+      criado_em: new Date().toISOString()
+    };
+    const updated = [...workspaces, newWs];
+    setWorkspaces(updated);
+    setActiveWorkspaceIdState(newWs.id);
+    localStorage.setItem('dropflow_active_workspace', newWs.id);
+
+    await db.putItem('workspaces', newWs);
+    await enqueueMutation({ type: 'workspace', action: 'create', data: newWs });
+
+    if (profile) {
+      const updatedProfile: Profile = {
+        ...profile,
+        workspaces: updated,
+        active_workspace_id: newWs.id,
+        moeda: newWs.moeda,
+        tipo_negocio: newWs.tipo,
+        custo_envio_ativo: newWs.custo_envio_ativo,
+        taxa_venda_ativa: newWs.taxa_venda_ativa,
+        taxa_venda_tipo: newWs.taxa_venda_tipo,
+        taxa_venda_padrao: newWs.taxa_venda_padrao,
+        taxa_saque_padrao: newWs.taxa_saque_padrao
+      };
+      setProfile(updatedProfile);
+      await db.putItem('profiles', updatedProfile);
+      await enqueueMutation({ type: 'profile', action: 'update', data: updatedProfile });
+    }
+    triggerToast('Negócio Criado! 🎉', `${newWs.nome} pronto para registar operações em ${newWs.moeda}.`, 'success');
+    return newWs;
+  };
+
+  const updateWorkspace = async (id: string, updates: Partial<Workspace>) => {
+    const updated = workspaces.map(w => w.id === id ? { ...w, ...updates } : w);
+    setWorkspaces(updated);
+    const target = updated.find(w => w.id === id);
+    if (target) {
+      await db.putItem('workspaces', target);
+      await enqueueMutation({ type: 'workspace', action: 'update', data: target });
+    }
+    if (profile) {
+      const isCurrent = activeWorkspace?.id === id;
+      const updatedProfile: Profile = {
+        ...profile,
+        workspaces: updated,
+        ...(isCurrent ? {
+          moeda: target?.moeda || profile.moeda,
+          tipo_negocio: target?.tipo || profile.tipo_negocio,
+          custo_envio_ativo: target?.custo_envio_ativo !== false,
+          taxa_venda_ativa: Boolean(target?.taxa_venda_ativa),
+          taxa_venda_tipo: target?.taxa_venda_tipo || 'percentual',
+          taxa_venda_padrao: target?.taxa_venda_padrao || 0,
+          taxa_saque_padrao: target?.taxa_saque_padrao || 0
+        } : {})
+      };
+      setProfile(updatedProfile);
+      await db.putItem('profiles', updatedProfile);
+      await enqueueMutation({ type: 'profile', action: 'update', data: updatedProfile });
+    }
+    triggerToast('Configurações Salvas', 'Workspace atualizado com sucesso.', 'info');
+  };
+
+  const deleteWorkspace = async (id: string) => {
+    if (workspaces.length <= 1) {
+      alert('Você precisa ter pelo menos um negócio ativo.');
+      return;
+    }
+    const remaining = workspaces.filter(w => w.id !== id);
+    setWorkspaces(remaining);
+    await db.deleteItem('workspaces', id);
+    await enqueueMutation({ type: 'workspace', action: 'delete', data: { id, user_id: auth.currentUser?.uid || profile?.id } });
+
+    if (activeWorkspaceId === id) {
+      const newActive = remaining[0].id;
+      setActiveWorkspaceIdState(newActive);
+      localStorage.setItem('dropflow_active_workspace', newActive);
+    }
+    if (profile) {
+      const updatedProfile = {
+        ...profile,
+        workspaces: remaining,
+        active_workspace_id: activeWorkspaceId === id ? remaining[0].id : profile.active_workspace_id
+      };
+      setProfile(updatedProfile);
+      await db.putItem('profiles', updatedProfile);
+      await enqueueMutation({ type: 'profile', action: 'update', data: updatedProfile });
+    }
+    triggerToast('Negócio Removido', 'Workspace removido com sucesso.', 'info');
+  };
+
+  // Filter collections by active workspace (while maintaining backward compatibility for unassigned items)
+  const isDefaultWorkspace = !workspaces.length || activeWorkspace?.id === workspaces[0]?.id;
+  const filteredVendas = useMemo(() => {
+    if (!activeWorkspace) return vendas;
+    return vendas.filter(v => v.workspace_id === activeWorkspace.id || (!v.workspace_id && isDefaultWorkspace));
+  }, [vendas, activeWorkspace, isDefaultWorkspace]);
+
+  const filteredDespesas = useMemo(() => {
+    if (!activeWorkspace) return despesas;
+    return despesas.filter(d => d.workspace_id === activeWorkspace.id || (!d.workspace_id && isDefaultWorkspace));
+  }, [despesas, activeWorkspace, isDefaultWorkspace]);
+
+  const filteredProdutos = useMemo(() => {
+    if (!activeWorkspace) return produtos;
+    return produtos.filter(p => p.workspace_id === activeWorkspace.id || (!p.workspace_id && isDefaultWorkspace));
+  }, [produtos, activeWorkspace, isDefaultWorkspace]);
+
+  const filteredCampanhas = useMemo(() => {
+    if (!activeWorkspace) return campanhas;
+    return campanhas.filter(c => c.workspace_id === activeWorkspace.id || (!c.workspace_id && isDefaultWorkspace));
+  }, [campanhas, activeWorkspace, isDefaultWorkspace]);
+
+  const filteredZonas = useMemo(() => {
+    if (!activeWorkspace) return zonasEntrega;
+    return zonasEntrega.filter(z => z.workspace_id === activeWorkspace.id || (!z.workspace_id && isDefaultWorkspace));
+  }, [zonasEntrega, activeWorkspace, isDefaultWorkspace]);
+
+  const filteredDespesasRecorrentes = useMemo(() => {
+    if (!activeWorkspace) return despesasRecorrentes;
+    return despesasRecorrentes.filter(dr => dr.workspace_id === activeWorkspace.id || (!dr.workspace_id && isDefaultWorkspace));
+  }, [despesasRecorrentes, activeWorkspace, isDefaultWorkspace]);
+
+  const filteredMetaItems = useMemo(() => {
+    if (!activeWorkspace) return metaItems;
+    return metaItems.filter(m => m.workspace_id === activeWorkspace.id || (!m.workspace_id && isDefaultWorkspace));
+  }, [metaItems, activeWorkspace, isDefaultWorkspace]);
+
   return (
     <AppContext.Provider value={{
       profile,
@@ -2665,6 +2920,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       triggerMockUpgrade,
 
+      // Workspaces
+      workspaces,
+      activeWorkspace,
+      activeWorkspaceId,
+      setActiveWorkspaceId,
+      createWorkspace,
+      updateWorkspace,
+      deleteWorkspace,
+
       isAdmin,
       broadcasts,
       relatorios,
@@ -2675,14 +2939,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       caixinhas,
       contasBancarias,
-      vendas,
-      despesas,
-      produtos,
+      vendas: filteredVendas,
+      despesas: filteredDespesas,
+      produtos: filteredProdutos,
       fornecedores,
-      zonasEntrega,
-      campanhas,
-      despesasRecorrentes,
-      metaItems,
+      zonasEntrega: filteredZonas,
+      campanhas: filteredCampanhas,
+      despesasRecorrentes: filteredDespesasRecorrentes,
+      metaItems: filteredMetaItems,
 
       modoFoco,
       setModoFoco,

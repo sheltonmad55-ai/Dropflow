@@ -6,7 +6,7 @@
 import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Campanha, DespesaRecorrente } from '../types.ts';
 
 const DB_NAME = 'DroopFlowDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 function createQueueId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -34,6 +34,7 @@ export function initDB(): Promise<IDBDatabase> {
         'despesas_recorrentes',
         'meta_items',
         'contas_bancarias',
+        'workspaces',
         'sync_queue'
       ];
 

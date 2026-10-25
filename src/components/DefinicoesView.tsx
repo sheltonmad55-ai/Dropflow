@@ -52,8 +52,14 @@ import {
   History,
   Eye,
   EyeOff,
-  ExternalLink
+  ExternalLink,
+  Store,
+  Laptop,
+  Globe,
+  ShoppingBag
 } from 'lucide-react';
+import WorkspaceModal from './WorkspaceModal.tsx';
+import { Workspace } from '../types.ts';
 
 interface DefinicoesViewProps {
   onStartTour?: () => void;
@@ -81,7 +87,13 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     isAdmin,
     modoFoco,
     toggleModoFoco,
-    formatMoney
+    formatMoney,
+    workspaces,
+    activeWorkspace,
+    setActiveWorkspaceId,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace
   } = useApp();
 
   // Delete modal state
@@ -125,6 +137,11 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const [retiradaContaIdSelected, setRetiradaContaIdSelected] = useState('');
   const [retiradaContaValor, setRetiradaContaValor] = useState('');
   const [retiradaContaMotivo, setRetiradaContaMotivo] = useState('');
+  const [retiradaContaTaxaSaque, setRetiradaContaTaxaSaque] = useState('');
+
+  // Workspaces Modal in Definições
+  const [showDefWorkspaceModal, setShowDefWorkspaceModal] = useState(false);
+  const [defWorkspaceToEdit, setDefWorkspaceToEdit] = useState<Workspace | null>(null);
 
   const totalSaldoBancos = contasBancarias.reduce((acc, c) => acc + c.saldo_atual, 0);
 
@@ -203,12 +220,14 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
     }
 
     try {
-      await retirarDaConta(retiradaContaIdSelected, val, retiradaContaMotivo || 'Levantamento de Saldo');
+      const taxaSaque = parseFloat(retiradaContaTaxaSaque) || 0;
+      await retirarDaConta(retiradaContaIdSelected, val, retiradaContaMotivo || 'Levantamento de Saldo', taxaSaque);
       setRetiradaContaValor('');
       setRetiradaContaMotivo('');
+      setRetiradaContaTaxaSaque('');
       setShowRetiradaContaModal(false);
-    } catch (e) {
-      alert('Erro ao realizar retirada da conta.');
+    } catch (e: any) {
+      alert(e.message || 'Erro ao realizar retirada da conta.');
     }
   };
 
@@ -297,7 +316,17 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
         taxa_venda_tipo: taxaVendaTipo,
         taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0
       });
-      alert('Perfil e configurações comerciais atualizados com sucesso!');
+      if (activeWorkspace) {
+        await updateWorkspace(activeWorkspace.id, {
+          moeda,
+          tipo: tipoNegocio,
+          custo_envio_ativo: custoEnvioAtivo,
+          taxa_venda_ativa: taxaVendaAtiva,
+          taxa_venda_tipo: taxaVendaTipo,
+          taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0
+        });
+      }
+      alert('Perfil e configurações do negócio atualizados com sucesso!');
     } catch (e) {
       alert('Erro ao atualizar perfil.');
     } finally {
@@ -664,17 +693,45 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
               </select>
             </div>
             <div className="space-y-1" id="field_def_moeda">
-              <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Moeda Padrão</label>
+              <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">Moeda de Operação</label>
               <select
                 value={moeda}
                 onChange={(e) => setMoeda(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 font-semibold focus:outline-none"
               >
-                <option value="MT">MT (Meticais)</option>
-                <option value="ZAR">ZAR (Rands)</option>
-                <option value="USD">USD (Dólares)</option>
-                <option value="EUR">EUR (Euros)</option>
+                <option value="USD">🇺🇸 USD ($) - Dólares Americanos</option>
+                <option value="BRL">🇧🇷 BRL (R$) - Real Brasileiro</option>
+                <option value="ZAR">🇿🇦 ZAR (R) - Rand Sul-Africano</option>
+                <option value="MT">🇲🇿 MT - Metical Moçambicano</option>
+                <option value="EUR">🇪🇺 EUR (€) - Euros</option>
               </select>
+            </div>
+            <div className="col-span-2 pt-1" id="field_def_moeda_chips">
+              <label className="text-[10px] text-slate-400 font-bold block mb-1">Seleção Rápida de Moeda:</label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'USD', flag: '🇺🇸', sym: '$', name: 'Dólar' },
+                  { id: 'BRL', flag: '🇧🇷', sym: 'R$', name: 'Real' },
+                  { id: 'ZAR', flag: '🇿🇦', sym: 'R', name: 'Rand' },
+                  { id: 'MT', flag: '🇲🇿', sym: 'MT', name: 'Metical' },
+                  { id: 'EUR', flag: '🇪🇺', sym: '€', name: 'Euro' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setMoeda(item.id)}
+                    className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                      moeda === item.id
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm ring-1 ring-emerald-500/30'
+                        : 'bg-slate-50 dark:bg-slate-950 border-slate-200/60 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>{item.flag}</span>
+                    <span>{item.id}</span>
+                    <span className="opacity-90 text-[10px]">({item.sym})</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -833,6 +890,112 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             {savingProfile ? 'A guardar...' : 'Guardar Alterações do Perfil'}
           </button>
         </form>
+      </div>
+
+      {/* 1.1b. Meus Negócios & Workspaces Panel */}
+      <div className="bg-white border border-slate-100 dark:bg-slate-900 dark:border-slate-800 rounded-3xl p-5 space-y-4 shadow-sm" id="definicoes_workspaces_panel">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+              <Store className="w-4 h-4 mr-1.5 text-emerald-600 dark:text-emerald-400" /> Meus Negócios & Workspaces ({workspaces.length})
+            </h3>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400">
+              Alterne entre operações independentes (DroopCod, Zenofi, Kiwify, Loja de Cabelos) com moedas e taxas próprias
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDefWorkspaceToEdit(null);
+              setShowDefWorkspaceModal(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl transition-colors flex items-center text-xs space-x-1.5 shadow-sm cursor-pointer self-start sm:self-auto"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>Adicionar Negócio</span>
+          </button>
+        </div>
+
+        {/* Workspaces Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {workspaces.map((ws) => {
+            const isActive = activeWorkspace?.id === ws.id;
+            const wsMoeda = ws.moeda || 'MT';
+            return (
+              <div
+                key={ws.id}
+                className={`p-4 rounded-2xl border transition-all ${
+                  isActive
+                    ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-500/80 shadow-xs'
+                    : 'bg-slate-50/60 dark:bg-slate-950/60 border-slate-200/60 dark:border-slate-800'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <div 
+                      className="w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0"
+                      style={{ backgroundColor: ws.cor || '#10B981' }}
+                    >
+                      <Store className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-1.5">
+                        <h4 className="text-xs font-black text-slate-900 dark:text-slate-100">{ws.nome}</h4>
+                        {isActive && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-black rounded-md bg-emerald-600 text-white">
+                            Ativo
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        {ws.tipo === 'plr_infoproduto' ? 'PLR / Digital' :
+                         ws.tipo === 'plataforma' ? 'Plataforma / Afiliados' :
+                         ws.tipo === 'servicos' ? 'Negócio Próprio / Serviços' : 'E-commerce & Drop Físico'}
+                        {ws.plataforma_nome ? ` • ${ws.plataforma_nome}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-emerald-600">
+                    {wsMoeda}
+                  </span>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-slate-200/40 dark:border-slate-800 flex items-center justify-between text-[10px] text-slate-500">
+                  <div className="space-x-2">
+                    <span>Envio: <strong className={ws.custo_envio_ativo !== false ? 'text-indigo-600' : 'text-slate-400'}>{ws.custo_envio_ativo !== false ? 'Ativo' : '0 Frete'}</strong></span>
+                    {ws.taxa_venda_ativa && (
+                      <span>Taxa: <strong className="text-purple-600">{ws.taxa_venda_padrao}{ws.taxa_venda_tipo === 'fixo' ? ` ${wsMoeda}` : '%'}</strong></span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-1.5">
+                    {!isActive && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveWorkspaceId(ws.id)}
+                        className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-emerald-50 text-slate-700 dark:text-slate-300 hover:text-emerald-700 border border-slate-200 dark:border-slate-700 rounded-lg font-bold transition-colors cursor-pointer"
+                      >
+                        Ativar
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDefWorkspaceToEdit(ws);
+                        setShowDefWorkspaceModal(true);
+                      }}
+                      className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                      title="Editar workspace"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* 1.2. Contas Bancárias & Carteiras Móveis (Empresa, e-Mola, BIM, BCE) Panel */}
@@ -1950,6 +2113,55 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   />
                 </div>
 
+                {/* Taxa de Saque / Payout da Plataforma */}
+                <div className="space-y-1.5 bg-amber-50/60 dark:bg-amber-950/20 p-3 rounded-2xl border border-amber-200/60 dark:border-amber-900/40" id="field_retirada_taxa_saque">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[11px] text-amber-900 dark:text-amber-200 font-bold">
+                      Taxa de Saque da Plataforma (%)
+                    </label>
+                    <span className="text-[10px] text-amber-600 font-medium">Opcional</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      max="100"
+                      placeholder="Ex: 5"
+                      value={retiradaContaTaxaSaque}
+                      onChange={(e) => setRetiradaContaTaxaSaque(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 font-bold focus:outline-none pr-7"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-amber-600">%</span>
+                  </div>
+
+                  {(() => {
+                    const gross = parseFloat(retiradaContaValor) || 0;
+                    const taxaPct = parseFloat(retiradaContaTaxaSaque) || 0;
+                    if (gross > 0 && taxaPct > 0) {
+                      const taxaVal = Math.round(gross * (taxaPct / 100) * 100) / 100;
+                      const liquido = Math.round((gross - taxaVal) * 100) / 100;
+                      return (
+                        <div className="pt-2 text-[10px] space-y-1 border-t border-amber-200/40 dark:border-amber-900/30">
+                          <div className="flex justify-between text-slate-500">
+                            <span>Valor Bruto Solicitado:</span>
+                            <span className="font-bold">{gross.toLocaleString()} {moeda}</span>
+                          </div>
+                          <div className="flex justify-between text-rose-600 font-bold">
+                            <span>Taxa Deduzida ({taxaPct}%):</span>
+                            <span>-{taxaVal.toLocaleString()} {moeda}</span>
+                          </div>
+                          <div className="flex justify-between text-emerald-600 font-black text-xs pt-0.5">
+                            <span>Líquido a Receber:</span>
+                            <span>{liquido.toLocaleString()} {moeda}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
                 <div className="flex space-x-2 pt-2" id="retirada_conta_actions">
                   <button
                     type="button"
@@ -1970,6 +2182,21 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
           </div>
         </ModalPortal>
       )}
+
+      {/* Workspace Modal from Definições */}
+      <WorkspaceModal
+        isOpen={showDefWorkspaceModal}
+        onClose={() => setShowDefWorkspaceModal(false)}
+        workspaceToEdit={defWorkspaceToEdit}
+        onSave={async (data) => {
+          if (defWorkspaceToEdit) {
+            await updateWorkspace(defWorkspaceToEdit.id, data);
+          } else {
+            await createWorkspace(data);
+          }
+        }}
+        onDelete={deleteWorkspace}
+      />
 
       {/* ================= MODAL: HISTÓRICO DE RETIRADAS ================= */}
       {showHistoricoContaModal && historicoContaSelected && (

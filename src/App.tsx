@@ -17,6 +17,9 @@ import AdminView from './components/AdminView.tsx';
 import MetasView from './components/MetasView.tsx';
 import VendaModal from './components/VendaModal.tsx';
 import DespesaModal from './components/DespesaModal.tsx';
+import WorkspaceModal from './components/WorkspaceModal.tsx';
+import WorkspaceSwitcher from './components/WorkspaceSwitcher.tsx';
+import { Workspace } from './types.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import WelcomeTour from './components/WelcomeTour.tsx';
 import dropflowLogo from './assets/images/dropflow-icon.png';
@@ -55,11 +58,31 @@ function AppContent() {
     dismissToast,
     modoFoco,
     toggleModoFoco,
-    updateProfile
+    updateProfile,
+    workspaces,
+    activeWorkspace,
+    setActiveWorkspaceId,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace
   } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'metas' | 'admin' | 'definicoes'
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+
+  // Workspaces Modal State
+  const [isWorkspaceModalOpen, setIsWorkspaceModalOpen] = useState(false);
+  const [workspaceToEdit, setWorkspaceToEdit] = useState<Workspace | null>(null);
+
+  const handleOpenCreateWorkspace = () => {
+    setWorkspaceToEdit(null);
+    setIsWorkspaceModalOpen(true);
+  };
+
+  const handleOpenEditWorkspace = (ws: Workspace) => {
+    setWorkspaceToEdit(ws);
+    setIsWorkspaceModalOpen(true);
+  };
 
   // Auto-dismiss active toast after 4 seconds
   React.useEffect(() => {
@@ -161,6 +184,16 @@ function AppContent() {
             </div>
             <span className="text-base font-black text-slate-900 dark:text-slate-50 tracking-tight font-display">DroopFlow</span>
           </div>
+
+          {/* Alternador de Negócios / Workspace Switcher */}
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            onSwitchWorkspace={setActiveWorkspaceId}
+            onOpenCreateModal={handleOpenCreateWorkspace}
+            onOpenEditModal={handleOpenEditWorkspace}
+            variant="sidebar"
+          />
  
           {/* Navigation Links */}
           <nav className="space-y-1" id="sidebar_nav">
@@ -263,6 +296,18 @@ function AppContent() {
           </div>
 
           <div className="flex items-center space-x-2" id="header_actions">
+            {/* Workspace Switcher in Mobile Header */}
+            <div className="md:hidden">
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                activeWorkspace={activeWorkspace}
+                onSwitchWorkspace={setActiveWorkspaceId}
+                onOpenCreateModal={handleOpenCreateWorkspace}
+                onOpenEditModal={handleOpenEditWorkspace}
+                variant="header"
+              />
+            </div>
+
             {/* Modo Foco / Privacidade Quick Toggle */}
             <button
               type="button"
@@ -485,6 +530,19 @@ function AppContent() {
       {/* Global Form Modals */}
       <VendaModal isOpen={isVendaOpen} onClose={() => setIsVendaOpen(false)} />
       <DespesaModal isOpen={isDespesaOpen} onClose={() => setIsDespesaOpen(false)} />
+      <WorkspaceModal 
+        isOpen={isWorkspaceModalOpen} 
+        onClose={() => setIsWorkspaceModalOpen(false)} 
+        workspaceToEdit={workspaceToEdit}
+        onSave={async (data) => {
+          if (workspaceToEdit) {
+            await updateWorkspace(workspaceToEdit.id, data);
+          } else {
+            await createWorkspace(data);
+          }
+        }}
+        onDelete={deleteWorkspace}
+      />
 
       {/* Global In-App Toast Popup Banner (Visible on mobile PWA and PC) */}
       <AnimatePresence>

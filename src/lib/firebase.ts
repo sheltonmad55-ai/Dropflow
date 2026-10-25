@@ -141,7 +141,8 @@ export async function pullAllUserData(userId: string) {
     campanhas,
     despesas_recorrentes,
     meta_items,
-    contas_bancarias
+    contas_bancarias,
+    workspaces
   ] = await Promise.all([
     fetchCol('caixinhas').then(res => res || []),
     fetchCol('vendas').then(res => res || []),
@@ -152,7 +153,8 @@ export async function pullAllUserData(userId: string) {
     fetchCol('campanhas').then(res => res || []),
     fetchCol('despesas_recorrentes').then(res => res || []),
     fetchCol('meta_items').then(res => res || []),
-    fetchCol('contas_bancarias').then(res => res || [])
+    fetchCol('contas_bancarias').then(res => res || []),
+    fetchCol('workspaces').then(res => res || [])
   ]);
 
   return {
@@ -166,7 +168,8 @@ export async function pullAllUserData(userId: string) {
     campanhas,
     despesas_recorrentes,
     meta_items,
-    contas_bancarias
+    contas_bancarias,
+    workspaces
   };
 }
 

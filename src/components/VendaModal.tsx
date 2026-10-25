@@ -13,7 +13,7 @@ interface VendaModalProps {
 }
 
 export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
-  const { produtos, fornecedores, zonasEntrega, addVenda, profile, addProduto, addZonaEntrega, addFornecedor, metaItems, contasBancarias } = useApp();
+  const { produtos, fornecedores, zonasEntrega, addVenda, profile, activeWorkspace, addProduto, addZonaEntrega, addFornecedor, metaItems, contasBancarias } = useApp();
   
   // Form fields
   const [valorRecebido, setValorRecebido] = useState<string>('');
@@ -26,8 +26,9 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [dataVenda, setDataVenda] = useState<string>(new Date().toISOString().split('T')[0]);
   
   // Niche and Shipping/Fee configurations
-  const isShippingActive = profile?.custo_envio_ativo !== false && profile?.tipo_negocio !== 'plr_infoproduto';
-  const isPlr = profile?.tipo_negocio === 'plr_infoproduto';
+  const currentTipo = activeWorkspace?.tipo || profile?.tipo_negocio || 'ecommerce_drop';
+  const isShippingActive = (activeWorkspace?.custo_envio_ativo ?? profile?.custo_envio_ativo) !== false && currentTipo !== 'plr_infoproduto';
+  const isPlr = currentTipo === 'plr_infoproduto';
   const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo'>('percentual');
   const [taxaVendaValor, setTaxaVendaValor] = useState<string>('');
   const [showTaxaOptional, setShowTaxaOptional] = useState<boolean>(false);
@@ -113,12 +114,12 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setPrecoUnitario('');
       setDesconto('0');
       
-      setTaxaVendaTipo(profile.taxa_venda_tipo || 'percentual');
-      const defaultTaxa = profile.taxa_venda_padrao ?? (profile.tipo_negocio === 'plr_infoproduto' ? 10 : 0);
+      setTaxaVendaTipo(activeWorkspace?.taxa_venda_tipo || profile.taxa_venda_tipo || 'percentual');
+      const defaultTaxa = activeWorkspace?.taxa_venda_padrao ?? profile.taxa_venda_padrao ?? (currentTipo === 'plr_infoproduto' ? 10 : 0);
       setTaxaVendaValor(defaultTaxa > 0 ? defaultTaxa.toString() : '');
-      setShowTaxaOptional(Boolean(profile.taxa_venda_ativa));
+      setShowTaxaOptional(Boolean(activeWorkspace?.taxa_venda_ativa ?? profile.taxa_venda_ativa));
     }
-  }, [isOpen, profile]);
+  }, [isOpen, profile, activeWorkspace]);
 
   // Fast inline creation toggles
   const [showFastProduct, setShowFastProduct] = useState(false);
@@ -142,7 +143,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     isNegative: false
   });
 
-  const currency = profile?.moeda || 'MT';
+  const currency = activeWorkspace?.moeda || profile?.moeda || 'MT';
 
   // Watch inputs and update live distribution preview
   useEffect(() => {
@@ -263,6 +264,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     try {
       await addVenda({
         valor_recebido: parseFloat(valorRecebido),
+        workspace_id: activeWorkspace?.id,
         produto_id: produtoId,
         fornecedor_id: fornecedorId,
         zona_entrega_id: (zonaEntregaId === 'sem_entrega' || !isShippingActive) ? '' : zonaEntregaId,
