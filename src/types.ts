@@ -32,6 +32,7 @@ export interface Workspace {
   taxa_venda_fixa_padrao?: number; // taxa fixa complementar quando combinado (ex: +10 MT na Lojou)
   taxa_saque_tipo?: 'percentual' | 'fixo'; // '%' ou fixo
   taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5% ou 50 MT)
+  compartilhar_caixinhas?: boolean; // se true, compartilha caixinhas/saldo global; se false, caixinhas 100% isoladas deste negócio
   plataforma_nome?: string;   // ex: "DroopCod", "Lojou", "Txapilog", "Zenofi", "Kiwify", "Shopify"
   cor?: string;
   icone?: string;
@@ -216,6 +217,8 @@ export interface Venda {
   custo_compra_total?: number;
   preco_unitario?: number;
   desconto?: number;
+  order_bumps_selecionados?: string[]; // IDs ou nomes dos order bumps incluídos nesta venda
+  upsells_selecionados?: string[];     // IDs ou nomes dos upsells incluídos nesta venda
   status?: 'pendente' | 'entregue';
   sync_status: 'synced' | 'pending';
   criado_em: string;
@@ -240,19 +243,36 @@ export interface Despesa {
   criado_em: string;
 }
 
+export interface OrderBumpItem {
+  id: string;
+  nome: string;
+  preco: number;
+}
+
+export interface UpsellItem {
+  id: string;
+  nome: string;
+  preco: number;
+}
+
 export interface Produto {
   id: string;
   user_id: string;
   workspace_id?: string;
+  tipo?: 'fisico' | 'digital_plr'; // 'fisico' (ecommerce/drop) ou 'digital_plr' (infoproduto/ebook/curso)
   nome: string;
   categoria: string;
-  fornecedor_id: string;
-  preco_compra: number;
+  fornecedor_id?: string; // opcional para infoprodutos / PLR
+  preco_compra?: number;   // opcional para infoprodutos / PLR (custo de compra 0)
   preco_venda: number;
   margem: number; // calculated field (preco_venda - preco_compra) / preco_venda * 100
-  quantidade: number;
+  quantidade?: number;     // opcional para infoprodutos / PLR
   lote_reposicao?: number; // default batch size for restocking (e.g. 100 units)
   kits?: { qtd: number; preco: number }[];
+  tem_order_bump?: boolean;
+  order_bumps?: OrderBumpItem[];
+  tem_upsell?: boolean;
+  upsells?: UpsellItem[];
   criado_em: string;
 }
 

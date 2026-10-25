@@ -24,7 +24,9 @@ import {
   ArrowDownRight,
   Layers,
   Wallet,
-  Sparkles
+  Sparkles,
+  Laptop,
+  Package
 } from 'lucide-react';
 
 export default function VendasView() {
@@ -37,6 +39,7 @@ export default function VendasView() {
     produtos, 
     fornecedores, 
     profile, 
+    activeWorkspace,
     addProduto, 
     addFornecedor,
     editProduto,
@@ -64,14 +67,24 @@ export default function VendasView() {
   const [showAddSupp, setShowAddSupp] = useState(false);
 
   // New product form
+  const isPlrWorkspace = activeWorkspace?.tipo === 'plr_infoproduto';
+  const [prodTipo, setProdTipo] = useState<'fisico' | 'digital_plr'>(isPlrWorkspace ? 'digital_plr' : 'fisico');
   const [prodNome, setProdNome] = useState('');
-  const [prodCat, setProdCat] = useState('Eletrônicos');
+  const [prodCat, setProdCat] = useState('Infoprodutos');
   const [prodSuppId, setProdSuppId] = useState('');
   const [prodCompra, setProdCompra] = useState('');
   const [prodVenda, setProdVenda] = useState('');
   const [prodQty, setProdQty] = useState('100');
   const [prodLote, setProdLote] = useState('100');
   const [createProdKits, setCreateProdKits] = useState<{ qtd: number; preco: number }[]>([]);
+  const [prodTemOrderBump, setProdTemOrderBump] = useState(false);
+  const [prodOrderBumps, setProdOrderBumps] = useState<{ id: string; nome: string; preco: number }[]>([]);
+  const [newOrderBumpNome, setNewOrderBumpNome] = useState('');
+  const [newOrderBumpPreco, setNewOrderBumpPreco] = useState('');
+  const [prodTemUpsell, setProdTemUpsell] = useState(false);
+  const [prodUpsells, setProdUpsells] = useState<{ id: string; nome: string; preco: number }[]>([]);
+  const [newUpsellNome, setNewUpsellNome] = useState('');
+  const [newUpsellPreco, setNewUpsellPreco] = useState('');
 
   // New supplier form
   const [suppNome, setSuppNome] = useState('');
@@ -81,14 +94,23 @@ export default function VendasView() {
 
   // Product editing
   const [editingProd, setEditingProd] = useState<any>(null);
+  const [editProdTipo, setEditProdTipo] = useState<'fisico' | 'digital_plr'>('fisico');
   const [editProdNome, setEditProdNome] = useState('');
-  const [editProdCat, setEditProdCat] = useState('Eletrônicos');
+  const [editProdCat, setEditProdCat] = useState('Infoprodutos');
   const [editProdSuppId, setEditProdSuppId] = useState('');
   const [editProdCompra, setEditProdCompra] = useState('');
   const [editProdVenda, setEditProdVenda] = useState('');
   const [editProdQty, setEditProdQty] = useState('');
   const [editProdLote, setEditProdLote] = useState('100');
   const [editProdKits, setEditProdKits] = useState<{ qtd: number; preco: number }[]>([]);
+  const [editProdTemOrderBump, setEditProdTemOrderBump] = useState(false);
+  const [editProdOrderBumps, setEditProdOrderBumps] = useState<{ id: string; nome: string; preco: number }[]>([]);
+  const [editNewOrderBumpNome, setEditNewOrderBumpNome] = useState('');
+  const [editNewOrderBumpPreco, setEditNewOrderBumpPreco] = useState('');
+  const [editProdTemUpsell, setEditProdTemUpsell] = useState(false);
+  const [editProdUpsells, setEditProdUpsells] = useState<{ id: string; nome: string; preco: number }[]>([]);
+  const [editNewUpsellNome, setEditNewUpsellNome] = useState('');
+  const [editNewUpsellPreco, setEditNewUpsellPreco] = useState('');
 
   // Supplier editing
   const [editingSupp, setEditingSupp] = useState<any>(null);
@@ -221,17 +243,23 @@ export default function VendasView() {
   // Product save handler
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prodNome || !prodCompra || !prodVenda) return;
+    if (!prodNome || !prodVenda) return;
+    if (prodTipo === 'fisico' && !prodCompra) return;
     try {
       await addProduto({
+        tipo: prodTipo,
         nome: prodNome,
         categoria: prodCat,
-        fornecedor_id: prodSuppId,
-        preco_compra: parseFloat(prodCompra),
+        fornecedor_id: prodTipo === 'digital_plr' ? undefined : prodSuppId,
+        preco_compra: prodTipo === 'digital_plr' ? 0 : parseFloat(prodCompra) || 0,
         preco_venda: parseFloat(prodVenda),
-        quantidade: parseInt(prodQty) || 0,
-        lote_reposicao: parseInt(prodLote) || 100,
-        kits: createProdKits
+        quantidade: prodTipo === 'digital_plr' ? 999999 : (parseInt(prodQty) || 0),
+        lote_reposicao: prodTipo === 'digital_plr' ? 0 : (parseInt(prodLote) || 100),
+        kits: prodTipo === 'digital_plr' ? [] : createProdKits,
+        tem_order_bump: prodTemOrderBump,
+        order_bumps: prodTemOrderBump ? prodOrderBumps : [],
+        tem_upsell: prodTemUpsell,
+        upsells: prodTemUpsell ? prodUpsells : []
       });
       setProdNome('');
       setProdCompra('');
@@ -239,6 +267,10 @@ export default function VendasView() {
       setProdQty('100');
       setProdLote('100');
       setCreateProdKits([]);
+      setProdTemOrderBump(false);
+      setProdOrderBumps([]);
+      setProdTemUpsell(false);
+      setProdUpsells([]);
       setShowAddProd(false);
     } catch (e) {
       alert('Erro ao criar produto.');
@@ -269,17 +301,23 @@ export default function VendasView() {
   // Product edit handler
   const handleEditProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingProd || !editProdNome || !editProdCompra || !editProdVenda) return;
+    if (!editingProd || !editProdNome || !editProdVenda) return;
+    if (editProdTipo === 'fisico' && !editProdCompra) return;
     try {
       await editProduto(editingProd.id, {
+        tipo: editProdTipo,
         nome: editProdNome,
         categoria: editProdCat,
-        fornecedor_id: editProdSuppId,
-        preco_compra: parseFloat(editProdCompra),
+        fornecedor_id: editProdTipo === 'digital_plr' ? undefined : editProdSuppId,
+        preco_compra: editProdTipo === 'digital_plr' ? 0 : parseFloat(editProdCompra) || 0,
         preco_venda: parseFloat(editProdVenda),
-        quantidade: parseInt(editProdQty) || 0,
-        lote_reposicao: parseInt(editProdLote) || 100,
-        kits: editProdKits
+        quantidade: editProdTipo === 'digital_plr' ? 999999 : (parseInt(editProdQty) || 0),
+        lote_reposicao: editProdTipo === 'digital_plr' ? 0 : (parseInt(editProdLote) || 100),
+        kits: editProdTipo === 'digital_plr' ? [] : editProdKits,
+        tem_order_bump: editProdTemOrderBump,
+        order_bumps: editProdTemOrderBump ? editProdOrderBumps : [],
+        tem_upsell: editProdTemUpsell,
+        upsells: editProdTemUpsell ? editProdUpsells : []
       });
       setEditingProd(null);
     } catch (e) {
@@ -722,34 +760,76 @@ export default function VendasView() {
                 <div key={p.id} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow space-y-3" id={`product_card_${p.id}`}>
                   <div className="flex justify-between items-start" id="product_top_info">
                     <div className="space-y-1" id="product_details">
-                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">{p.nome}</span>
-                      <div className="flex items-center space-x-2 text-[9px] text-slate-500 dark:text-slate-400 font-medium" id="product_costs">
-                        <span>Compra: <strong className="text-amber-700 dark:text-amber-400 font-bold">{p.preco_compra} {currency}</strong></span>
-                        <span>•</span>
-                        <span>Venda: <strong className="text-emerald-700 dark:text-emerald-400 font-bold">{p.preco_venda} {currency}</strong></span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold inline-block ${
-                          p.quantidade === 0 
-                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300' 
-                            : p.quantidade <= 5 
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
-                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                        }`} id="product_stock">
-                          Qtd: {p.quantidade} em estoque
-                        </span>
-                        <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-bold inline-block">
-                          Lote Reposição: {loteSize} un.
-                        </span>
-                        {supp && (
-                          <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-bold inline-block" id="product_supplier_badge">
-                            Fornecedor: {supp.nome}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">{p.nome}</span>
+                        {p.tipo === 'digital_plr' ? (
+                          <span className="text-[9px] bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded font-black flex items-center gap-1">
+                            <Laptop className="w-2.5 h-2.5" />
+                            <span>PLR / Digital</span>
+                          </span>
+                        ) : (
+                          <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded font-bold">
+                            Físico
                           </span>
                         )}
-                        {p.kits && p.kits.length > 0 && (
-                          <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold inline-block" id="product_kits_badge">
-                            Kits ({p.kits.length})
-                          </span>
+                      </div>
+
+                      {p.tipo === 'digital_plr' ? (
+                        <div className="flex items-center space-x-2 text-[9px] text-slate-500 dark:text-slate-400 font-medium" id="product_costs">
+                          <span>Ticket / Venda: <strong className="text-emerald-700 dark:text-emerald-400 font-bold">{p.preco_venda} {currency}</strong></span>
+                          <span>•</span>
+                          <span className="text-purple-600 dark:text-purple-400 font-bold">Sem Custo de Compra</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2 text-[9px] text-slate-500 dark:text-slate-400 font-medium" id="product_costs">
+                          <span>Compra: <strong className="text-amber-700 dark:text-amber-400 font-bold">{p.preco_compra} {currency}</strong></span>
+                          <span>•</span>
+                          <span>Venda: <strong className="text-emerald-700 dark:text-emerald-400 font-bold">{p.preco_venda} {currency}</strong></span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {p.tipo === 'digital_plr' ? (
+                          <>
+                            <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded font-bold inline-block">
+                              Estoque Infinito (Digital)
+                            </span>
+                            {p.order_bumps && p.order_bumps.length > 0 && (
+                              <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-bold inline-block">
+                                Order Bumps ({p.order_bumps.length})
+                              </span>
+                            )}
+                            {p.upsells && p.upsells.length > 0 && (
+                              <span className="text-[9px] bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded font-bold inline-block">
+                                Upsells ({p.upsells.length})
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold inline-block ${
+                              p.quantidade === 0 
+                                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300' 
+                                : p.quantidade <= 5 
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300'
+                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                            }`} id="product_stock">
+                              Qtd: {p.quantidade} em estoque
+                            </span>
+                            <span className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded font-bold inline-block">
+                              Lote Reposição: {loteSize} un.
+                            </span>
+                            {supp && (
+                              <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-bold inline-block" id="product_supplier_badge">
+                                Fornecedor: {supp.nome}
+                              </span>
+                            )}
+                            {p.kits && p.kits.length > 0 && (
+                              <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold inline-block" id="product_kits_badge">
+                                Kits ({p.kits.length})
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -766,14 +846,19 @@ export default function VendasView() {
                         id={`btn_edit_product_${p.id}`}
                         onClick={() => {
                           setEditingProd(p);
+                          setEditProdTipo(p.tipo || 'fisico');
                           setEditProdNome(p.nome);
                           setEditProdCat(p.categoria);
-                          setEditProdSuppId(p.fornecedor_id);
-                          setEditProdCompra(p.preco_compra.toString());
+                          setEditProdSuppId(p.fornecedor_id || '');
+                          setEditProdCompra((p.preco_compra || 0).toString());
                           setEditProdVenda(p.preco_venda.toString());
-                          setEditProdQty(p.quantidade.toString());
+                          setEditProdQty((p.quantidade || 0).toString());
                           setEditProdLote((p.lote_reposicao || 100).toString());
                           setEditProdKits(p.kits || []);
+                          setEditProdTemOrderBump(Boolean(p.tem_order_bump));
+                          setEditProdOrderBumps(p.order_bumps || []);
+                          setEditProdTemUpsell(Boolean(p.tem_upsell));
+                          setEditProdUpsells(p.upsells || []);
                         }}
                         className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
                         title="Editar produto"
@@ -783,8 +868,8 @@ export default function VendasView() {
                     </div>
                   </div>
 
-                  {/* Stock zero / low alerts with exact reinvestment cost calculation */}
-                  {p.quantidade === 0 ? (
+                  {/* Stock zero / low alerts with exact reinvestment cost calculation - Only for Physical Products */}
+                  {p.tipo !== 'digital_plr' && (p.quantidade === 0 ? (
                     <div className="bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2" id={`prod_zero_alert_${p.id}`}>
                       <div className="space-y-0.5">
                         <div className="flex items-center space-x-1 text-rose-700 dark:text-rose-400 font-extrabold text-xs">
@@ -828,7 +913,7 @@ export default function VendasView() {
                         <span>+ Adicionar Lote (+{loteSize} un.)</span>
                       </button>
                     </div>
-                  ) : null}
+                  ) : null)}
                 </div>
               );
             })
@@ -983,136 +1068,347 @@ export default function VendasView() {
       {/* ================= CREATE PRODUCT MODAL ================= */}
       {showAddProd && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="add_product_modal">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl" id="add_product_content">
-            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Novo Produto de Drop</h3>
-            <form onSubmit={handleAddProduct} className="space-y-3.5" id="add_product_form">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto" id="add_product_content">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">
+                {prodTipo === 'digital_plr' ? 'Novo Infoproduto / PLR' : 'Novo Produto Físico (Drop)'}
+              </h3>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setProdTipo('digital_plr')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    prodTipo === 'digital_plr' 
+                      ? 'bg-purple-600 text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  <Laptop className="w-3.5 h-3.5" />
+                  PLR / Digital
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProdTipo('fisico')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    prodTipo === 'fisico' 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  Físico (Drop)
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleAddProduct} className="space-y-4" id="add_product_form">
               <div className="space-y-1" id="prod_nome_group">
-                <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Nome do Produto</label>
+                <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                  {prodTipo === 'digital_plr' ? 'Nome do Infoproduto / E-book / Curso' : 'Nome do Produto'}
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Relógio Inteligente S9"
+                  placeholder={prodTipo === 'digital_plr' ? 'Ex: Método Vendas Rápidas PLR' : 'Ex: Relógio Inteligente S9'}
                   value={prodNome}
                   onChange={(e) => setProdNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-600 dark:focus:border-purple-500"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3" id="prod_prices_group">
-                <div className="space-y-1" id="prod_compra_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Compra ({currency})</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    value={prodCompra}
-                    onChange={(e) => setProdCompra(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1" id="prod_venda_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Venda ({currency})</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    value={prodVenda}
-                    onChange={(e) => setProdVenda(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2" id="prod_qty_supp_group">
-                <div className="space-y-1" id="prod_qty_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Qtd Atual</label>
-                  <input
-                    type="number"
-                    required
-                    value={prodQty}
-                    onChange={(e) => setProdQty(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1" id="prod_lote_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Lote Reposição</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="100"
-                    value={prodLote}
-                    onChange={(e) => setProdLote(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1" id="prod_supp_group">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Fornecedor</label>
+              {prodTipo === 'digital_plr' ? (
+                /* PLR / DIGITAL SPECIFIC FIELDS */
+                <div className="space-y-4" id="plr_specific_fields">
+                  <div className="space-y-1" id="prod_venda_group_plr">
+                    <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                      Preço de Venda (Ticket Principal) ({currency})
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      value={prodVenda}
+                      onChange={(e) => setProdVenda(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
+                    />
                   </div>
-                  <select
-                    value={prodSuppId}
-                    onChange={(e) => setProdSuppId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  >
-                    <option value="">Nenhum...</option>
-                    {fornecedores.map(f => (
-                      <option key={f.id} value={f.id}>{f.nome}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              {/* Kits configuration */}
-              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3" id="prod_kits_config">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Kits de Desconto (Preço Unitário Especial)</label>
-                <div className="flex space-x-2" id="prod_kits_inputs">
-                  <input
-                    type="number"
-                    placeholder="Qtd mínima"
-                    value={newKitQty}
-                    onChange={(e) => setNewKitQty(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                  <input
-                    type="number"
-                    placeholder={`Unitário (${currency})`}
-                    value={newKitPreco}
-                    onChange={(e) => setNewKitPreco(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const q = parseInt(newKitQty);
-                      const p = parseFloat(newKitPreco);
-                      if (q > 0 && p > 0) {
-                        setCreateProdKits(prev => [...prev, { qtd: q, preco: p }].sort((a,b) => a.qtd - b.qtd));
-                        setNewKitQty('');
-                        setNewKitPreco('');
-                      }
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
-                  >
-                    + Add
-                  </button>
-                </div>
-                {createProdKits.length > 0 && (
-                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3 border border-slate-100 dark:border-slate-700 space-y-1.5 max-h-24 overflow-y-auto" id="prod_kits_list">
-                    {createProdKits.map((k, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-[10px] text-slate-600 dark:text-slate-300">
-                        <span>A partir de <strong className="text-slate-800 dark:text-slate-100">{k.qtd} unid.</strong>: <strong className="text-emerald-600 dark:text-emerald-400">{k.preco} {currency}</strong> cada</span>
-                        <button
-                          type="button"
-                          onClick={() => setCreateProdKits(prev => prev.filter((_, i) => i !== idx))}
-                          className="text-rose-600 dark:text-rose-400 hover:underline font-bold"
-                        >
-                          Remover
-                        </button>
+                  {/* Order Bumps Section */}
+                  <div className="p-3.5 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-800/40 rounded-2xl space-y-3" id="plr_order_bumps_section">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="check_add_order_bump"
+                          checked={prodTemOrderBump}
+                          onChange={(e) => setProdTemOrderBump(e.target.checked)}
+                          className="rounded border-purple-300 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                        />
+                        <label htmlFor="check_add_order_bump" className="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          Possui Order Bump (Oferta no Checkout)?
+                        </label>
                       </div>
-                    ))}
+                      <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">
+                        {prodOrderBumps.length} configurado(s)
+                      </span>
+                    </div>
+
+                    {prodTemOrderBump && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Nome do Order Bump (Ex: Áudio-book VIP)"
+                            value={newOrderBumpNome}
+                            onChange={(e) => setNewOrderBumpNome(e.target.value)}
+                            className="flex-[2] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
+                          />
+                          <input
+                            type="number"
+                            placeholder={`Preço (${currency})`}
+                            value={newOrderBumpPreco}
+                            onChange={(e) => setNewOrderBumpPreco(e.target.value)}
+                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = parseFloat(newOrderBumpPreco);
+                              if (newOrderBumpNome.trim() && p > 0) {
+                                setProdOrderBumps(prev => [...prev, { id: `bump_${Date.now()}`, nome: newOrderBumpNome.trim(), preco: p }]);
+                                setNewOrderBumpNome('');
+                                setNewOrderBumpPreco('');
+                              }
+                            }}
+                            className="bg-purple-600 hover:bg-purple-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs cursor-pointer shadow-sm"
+                          >
+                            + Add
+                          </button>
+                        </div>
+
+                        {prodOrderBumps.length > 0 && (
+                          <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                            {prodOrderBumps.map((b) => (
+                              <div key={b.id} className="flex justify-between items-center text-xs bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/40">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">{b.nome}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-purple-600 dark:text-purple-400">+{b.preco} {currency}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setProdOrderBumps(prev => prev.filter(x => x.id !== b.id))}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold ml-1 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+
+                  {/* Upsells Section */}
+                  <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-800/40 rounded-2xl space-y-3" id="plr_upsells_section">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="check_add_upsell"
+                          checked={prodTemUpsell}
+                          onChange={(e) => setProdTemUpsell(e.target.checked)}
+                          className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                        />
+                        <label htmlFor="check_add_upsell" className="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          Possui Upsell (Oferta de 1 clique pós-compra)?
+                        </label>
+                      </div>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                        {prodUpsells.length} configurado(s)
+                      </span>
+                    </div>
+
+                    {prodTemUpsell && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Nome do Upsell (Ex: Mentoria / Acesso VIP)"
+                            value={newUpsellNome}
+                            onChange={(e) => setNewUpsellNome(e.target.value)}
+                            className="flex-[2] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                          />
+                          <input
+                            type="number"
+                            placeholder={`Preço (${currency})`}
+                            value={newUpsellPreco}
+                            onChange={(e) => setNewUpsellPreco(e.target.value)}
+                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = parseFloat(newUpsellPreco);
+                              if (newUpsellNome.trim() && p > 0) {
+                                setProdUpsells(prev => [...prev, { id: `upsell_${Date.now()}`, nome: newUpsellNome.trim(), preco: p }]);
+                                setNewUpsellNome('');
+                                setNewUpsellPreco('');
+                              }
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs cursor-pointer shadow-sm"
+                          >
+                            + Add
+                          </button>
+                        </div>
+
+                        {prodUpsells.length > 0 && (
+                          <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                            {prodUpsells.map((u) => (
+                              <div key={u.id} className="flex justify-between items-center text-xs bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">{u.nome}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-indigo-600 dark:text-indigo-400">+{u.preco} {currency}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setProdUpsells(prev => prev.filter(x => x.id !== u.id))}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold ml-1 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                    💡 <strong>Modelo PLR / Infoproduto:</strong> Estoque ilimitado e 100% de margem bruta. Não há custo de fornecedor físico nem controle de reposição.
+                  </div>
+                </div>
+              ) : (
+                /* PHYSICAL PRODUCT SPECIFIC FIELDS */
+                <div className="space-y-3.5" id="fisico_specific_fields">
+                  <div className="grid grid-cols-2 gap-3" id="prod_prices_group">
+                    <div className="space-y-1" id="prod_compra_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Compra ({currency})</label>
+                      <input
+                        type="number"
+                        required={prodTipo === 'fisico'}
+                        placeholder="0.00"
+                        value={prodCompra}
+                        onChange={(e) => setProdCompra(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div className="space-y-1" id="prod_venda_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Venda ({currency})</label>
+                      <input
+                        type="number"
+                        required
+                        placeholder="0.00"
+                        value={prodVenda}
+                        onChange={(e) => setProdVenda(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2" id="prod_qty_supp_group">
+                    <div className="space-y-1" id="prod_qty_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Qtd Atual</label>
+                      <input
+                        type="number"
+                        required={prodTipo === 'fisico'}
+                        value={prodQty}
+                        onChange={(e) => setProdQty(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div className="space-y-1" id="prod_lote_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Lote Reposição</label>
+                      <input
+                        type="number"
+                        required={prodTipo === 'fisico'}
+                        placeholder="100"
+                        value={prodLote}
+                        onChange={(e) => setProdLote(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div className="space-y-1" id="prod_supp_group">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Fornecedor</label>
+                      </div>
+                      <select
+                        value={prodSuppId}
+                        onChange={(e) => setProdSuppId(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      >
+                        <option value="">Nenhum...</option>
+                        {fornecedores.map(f => (
+                          <option key={f.id} value={f.id}>{f.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Kits configuration */}
+                  <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3" id="prod_kits_config">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Kits de Desconto (Preço Unitário Especial)</label>
+                    <div className="flex space-x-2" id="prod_kits_inputs">
+                      <input
+                        type="number"
+                        placeholder="Qtd mínima"
+                        value={newKitQty}
+                        onChange={(e) => setNewKitQty(e.target.value)}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                      <input
+                        type="number"
+                        placeholder={`Unitário (${currency})`}
+                        value={newKitPreco}
+                        onChange={(e) => setNewKitPreco(e.target.value)}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const q = parseInt(newKitQty);
+                          const p = parseFloat(newKitPreco);
+                          if (q > 0 && p > 0) {
+                            setCreateProdKits(prev => [...prev, { qtd: q, preco: p }].sort((a,b) => a.qtd - b.qtd));
+                            setNewKitQty('');
+                            setNewKitPreco('');
+                          }
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    {createProdKits.length > 0 && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3 border border-slate-100 dark:border-slate-700 space-y-1.5 max-h-24 overflow-y-auto" id="prod_kits_list">
+                        {createProdKits.map((k, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-[10px] text-slate-600 dark:text-slate-300">
+                            <span>A partir de <strong className="text-slate-800 dark:text-slate-100">{k.qtd} unid.</strong>: <strong className="text-emerald-600 dark:text-emerald-400">{k.preco} {currency}</strong> cada</span>
+                            <button
+                              type="button"
+                              onClick={() => setCreateProdKits(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-rose-600 dark:text-rose-400 hover:underline font-bold"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex space-x-2 pt-2" id="prod_modal_actions">
                 <button
@@ -1124,9 +1420,11 @@ export default function VendasView() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition-colors cursor-pointer"
+                  className={`flex-1 text-white font-extrabold py-2.5 rounded-xl text-xs transition-colors cursor-pointer ${
+                    prodTipo === 'digital_plr' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
                 >
-                  Confirmar Produto
+                  Confirmar {prodTipo === 'digital_plr' ? 'Infoproduto' : 'Produto'}
                 </button>
               </div>
             </form>
@@ -1137,134 +1435,345 @@ export default function VendasView() {
       {/* ================= EDIT PRODUCT MODAL ================= */}
       {editingProd && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="edit_product_modal">
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]" id="edit_product_content">
-            <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">Editar Produto</h3>
-            <form onSubmit={handleEditProduct} className="space-y-3.5" id="edit_product_form">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[92vh]" id="edit_product_content">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base font-display">
+                Editar {editProdTipo === 'digital_plr' ? 'Infoproduto / PLR' : 'Produto de Drop'}
+              </h3>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setEditProdTipo('digital_plr')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    editProdTipo === 'digital_plr' 
+                      ? 'bg-purple-600 text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  <Laptop className="w-3.5 h-3.5" />
+                  PLR / Digital
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditProdTipo('fisico')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    editProdTipo === 'fisico' 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  Físico (Drop)
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditProduct} className="space-y-4" id="edit_product_form">
               <div className="space-y-1" id="edit_prod_nome_group">
-                <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Nome do Produto</label>
+                <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                  {editProdTipo === 'digital_plr' ? 'Nome do Infoproduto / PLR' : 'Nome do Produto'}
+                </label>
                 <input
                   type="text"
                   required
                   placeholder="Nome do produto"
                   value={editProdNome}
                   onChange={(e) => setEditProdNome(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-purple-600"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3" id="edit_prod_prices_group">
-                <div className="space-y-1" id="edit_prod_compra_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Compra ({currency})</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    value={editProdCompra}
-                    onChange={(e) => setEditProdCompra(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1" id="edit_prod_venda_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Venda ({currency})</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    value={editProdVenda}
-                    onChange={(e) => setEditProdVenda(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2" id="edit_prod_qty_supp_group">
-                <div className="space-y-1" id="edit_prod_qty_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Qtd Atual</label>
-                  <input
-                    type="number"
-                    required
-                    value={editProdQty}
-                    onChange={(e) => setEditProdQty(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1" id="edit_prod_lote_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Lote Reposição</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="100"
-                    value={editProdLote}
-                    onChange={(e) => setEditProdLote(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1" id="edit_prod_supp_group">
-                  <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Fornecedor</label>
-                  <select
-                    value={editProdSuppId}
-                    onChange={(e) => setEditProdSuppId(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600 appearance-none"
-                  >
-                    <option value="">Nenhum...</option>
-                    {fornecedores.map(f => (
-                      <option key={f.id} value={f.id}>{f.nome}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Kits Configuration */}
-              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3" id="edit_prod_kits_config">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Kits de Desconto (Preço Unitário Especial)</label>
-                <div className="flex space-x-2" id="edit_prod_kits_inputs">
-                  <input
-                    type="number"
-                    placeholder="Qtd mínima"
-                    value={newKitQty}
-                    onChange={(e) => setNewKitQty(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                  />
-                  <input
-                    type="number"
-                    placeholder={`Unitário (${currency})`}
-                    value={newKitPreco}
-                    onChange={(e) => setNewKitPreco(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const q = parseInt(newKitQty);
-                      const p = parseFloat(newKitPreco);
-                      if (q > 0 && p > 0) {
-                        setEditProdKits(prev => [...prev, { qtd: q, preco: p }].sort((a,b) => a.qtd - b.qtd));
-                        setNewKitQty('');
-                        setNewKitPreco('');
-                      }
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
-                  >
-                    + Add
-                  </button>
-                </div>
-                {editProdKits.length > 0 && (
-                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3 border border-slate-100 dark:border-slate-700 space-y-1.5 max-h-24 overflow-y-auto" id="edit_prod_kits_list">
-                    {editProdKits.map((k, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-[10px] text-slate-600 dark:text-slate-300">
-                        <span>A partir de <strong className="text-slate-800 dark:text-slate-100">{k.qtd} unid.</strong>: <strong className="text-emerald-600 dark:text-emerald-400">{k.preco} {currency}</strong> cada</span>
-                        <button
-                          type="button"
-                          onClick={() => setEditProdKits(prev => prev.filter((_, i) => i !== idx))}
-                          className="text-rose-600 dark:text-rose-400 hover:underline font-bold"
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    ))}
+              {editProdTipo === 'digital_plr' ? (
+                /* EDIT PLR / DIGITAL SPECIFIC FIELDS */
+                <div className="space-y-4" id="edit_plr_specific_fields">
+                  <div className="space-y-1" id="edit_prod_venda_group_plr">
+                    <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                      Preço de Venda (Ticket Principal) ({currency})
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      value={editProdVenda}
+                      onChange={(e) => setEditProdVenda(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-purple-600"
+                    />
                   </div>
-                )}
-              </div>
+
+                  {/* Order Bumps Section */}
+                  <div className="p-3.5 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-800/40 rounded-2xl space-y-3" id="edit_plr_order_bumps_section">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="check_edit_order_bump"
+                          checked={editProdTemOrderBump}
+                          onChange={(e) => setEditProdTemOrderBump(e.target.checked)}
+                          className="rounded border-purple-300 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                        />
+                        <label htmlFor="check_edit_order_bump" className="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          Possui Order Bump (Oferta no Checkout)?
+                        </label>
+                      </div>
+                      <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">
+                        {editProdOrderBumps.length} configurado(s)
+                      </span>
+                    </div>
+
+                    {editProdTemOrderBump && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Nome do Order Bump"
+                            value={editNewOrderBumpNome}
+                            onChange={(e) => setEditNewOrderBumpNome(e.target.value)}
+                            className="flex-[2] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
+                          />
+                          <input
+                            type="number"
+                            placeholder={`Preço (${currency})`}
+                            value={editNewOrderBumpPreco}
+                            onChange={(e) => setEditNewOrderBumpPreco(e.target.value)}
+                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-purple-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = parseFloat(editNewOrderBumpPreco);
+                              if (editNewOrderBumpNome.trim() && p > 0) {
+                                setEditProdOrderBumps(prev => [...prev, { id: `bump_${Date.now()}`, nome: editNewOrderBumpNome.trim(), preco: p }]);
+                                setEditNewOrderBumpNome('');
+                                setEditNewOrderBumpPreco('');
+                              }
+                            }}
+                            className="bg-purple-600 hover:bg-purple-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs cursor-pointer shadow-sm"
+                          >
+                            + Add
+                          </button>
+                        </div>
+
+                        {editProdOrderBumps.length > 0 && (
+                          <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                            {editProdOrderBumps.map((b) => (
+                              <div key={b.id} className="flex justify-between items-center text-xs bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-purple-100 dark:border-purple-900/40">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">{b.nome}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-purple-600 dark:text-purple-400">+{b.preco} {currency}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditProdOrderBumps(prev => prev.filter(x => x.id !== b.id))}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold ml-1 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upsells Section */}
+                  <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-800/40 rounded-2xl space-y-3" id="edit_plr_upsells_section">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="check_edit_upsell"
+                          checked={editProdTemUpsell}
+                          onChange={(e) => setEditProdTemUpsell(e.target.checked)}
+                          className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                        />
+                        <label htmlFor="check_edit_upsell" className="text-xs font-bold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          Possui Upsell (Oferta de 1 clique pós-compra)?
+                        </label>
+                      </div>
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">
+                        {editProdUpsells.length} configurado(s)
+                      </span>
+                    </div>
+
+                    {editProdTemUpsell && (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Nome do Upsell"
+                            value={editNewUpsellNome}
+                            onChange={(e) => setEditNewUpsellNome(e.target.value)}
+                            className="flex-[2] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                          />
+                          <input
+                            type="number"
+                            placeholder={`Preço (${currency})`}
+                            value={editNewUpsellPreco}
+                            onChange={(e) => setEditNewUpsellPreco(e.target.value)}
+                            className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = parseFloat(editNewUpsellPreco);
+                              if (editNewUpsellNome.trim() && p > 0) {
+                                setEditProdUpsells(prev => [...prev, { id: `upsell_${Date.now()}`, nome: editNewUpsellNome.trim(), preco: p }]);
+                                setEditNewUpsellNome('');
+                                setEditNewUpsellPreco('');
+                              }
+                            }}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold px-3.5 py-2 rounded-xl text-xs cursor-pointer shadow-sm"
+                          >
+                            + Add
+                          </button>
+                        </div>
+
+                        {editProdUpsells.length > 0 && (
+                          <div className="space-y-1.5 max-h-28 overflow-y-auto">
+                            {editProdUpsells.map((u) => (
+                              <div key={u.id} className="flex justify-between items-center text-xs bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">{u.nome}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-indigo-600 dark:text-indigo-400">+{u.preco} {currency}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditProdUpsells(prev => prev.filter(x => x.id !== u.id))}
+                                    className="text-rose-500 hover:text-rose-700 text-[11px] font-bold ml-1 cursor-pointer"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                    💡 <strong>Modelo PLR / Infoproduto:</strong> Sem custos com fornecedores físicos ou reposição de estoque.
+                  </div>
+                </div>
+              ) : (
+                /* EDIT PHYSICAL PRODUCT SPECIFIC FIELDS */
+                <div className="space-y-3.5" id="edit_fisico_specific_fields">
+                  <div className="grid grid-cols-2 gap-3" id="edit_prod_prices_group">
+                    <div className="space-y-1" id="edit_prod_compra_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Compra ({currency})</label>
+                      <input
+                        type="number"
+                        required={editProdTipo === 'fisico'}
+                        placeholder="0.00"
+                        value={editProdCompra}
+                        onChange={(e) => setEditProdCompra(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div className="space-y-1" id="edit_prod_venda_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Preço Venda ({currency})</label>
+                      <input
+                        type="number"
+                        required
+                        placeholder="0.00"
+                        value={editProdVenda}
+                        onChange={(e) => setEditProdVenda(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2" id="edit_prod_qty_supp_group">
+                    <div className="space-y-1" id="edit_prod_qty_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Qtd Atual</label>
+                      <input
+                        type="number"
+                        required={editProdTipo === 'fisico'}
+                        value={editProdQty}
+                        onChange={(e) => setEditProdQty(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div className="space-y-1" id="edit_prod_lote_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Lote Reposição</label>
+                      <input
+                        type="number"
+                        required={editProdTipo === 'fisico'}
+                        placeholder="100"
+                        value={editProdLote}
+                        onChange={(e) => setEditProdLote(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div className="space-y-1" id="edit_prod_supp_group">
+                      <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">Fornecedor</label>
+                      <select
+                        value={editProdSuppId}
+                        onChange={(e) => setEditProdSuppId(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2.5 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600 appearance-none"
+                      >
+                        <option value="">Nenhum...</option>
+                        {fornecedores.map(f => (
+                          <option key={f.id} value={f.id}>{f.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Kits Configuration */}
+                  <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3" id="edit_prod_kits_config">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">Kits de Desconto (Preço Unitário Especial)</label>
+                    <div className="flex space-x-2" id="edit_prod_kits_inputs">
+                      <input
+                        type="number"
+                        placeholder="Qtd mínima"
+                        value={newKitQty}
+                        onChange={(e) => setNewKitQty(e.target.value)}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                      />
+                      <input
+                        type="number"
+                        placeholder={`Unitário (${currency})`}
+                        value={newKitPreco}
+                        onChange={(e) => setNewKitPreco(e.target.value)}
+                        className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const q = parseInt(newKitQty);
+                          const p = parseFloat(newKitPreco);
+                          if (q > 0 && p > 0) {
+                            setEditProdKits(prev => [...prev, { qtd: q, preco: p }].sort((a,b) => a.qtd - b.qtd));
+                            setNewKitQty('');
+                            setNewKitPreco('');
+                          }
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                    {editProdKits.length > 0 && (
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-3 border border-slate-100 dark:border-slate-700 space-y-1.5 max-h-24 overflow-y-auto" id="edit_prod_kits_list">
+                        {editProdKits.map((k, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-[10px] text-slate-600 dark:text-slate-300">
+                            <span>A partir de <strong className="text-slate-800 dark:text-slate-100">{k.qtd} unid.</strong>: <strong className="text-emerald-600 dark:text-emerald-400">{k.preco} {currency}</strong> cada</span>
+                            <button
+                              type="button"
+                              onClick={() => setEditProdKits(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-rose-600 dark:text-rose-400 hover:underline font-bold"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex space-x-2 pt-2" id="edit_prod_modal_actions">
                 <button
@@ -1276,7 +1785,9 @@ export default function VendasView() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs transition-colors cursor-pointer"
+                  className={`flex-1 text-white font-extrabold py-2.5 rounded-xl text-xs transition-colors cursor-pointer ${
+                    editProdTipo === 'digital_plr' ? 'bg-purple-600 hover:bg-purple-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
                 >
                   Salvar Alterações
                 </button>

@@ -2086,7 +2086,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   async function addProduto(produtoData: Omit<Produto, 'id' | 'user_id' | 'margem' | 'criado_em'>) {
     if (!profile) return;
     const id = crypto.randomUUID();
-    const margem = Math.round(((produtoData.preco_venda - produtoData.preco_compra) / produtoData.preco_venda) * 100 * 100) / 100;
+    const precoCompra = produtoData.preco_compra || 0;
+    const margem = produtoData.preco_venda > 0 ? Math.round(((produtoData.preco_venda - precoCompra) / produtoData.preco_venda) * 100 * 100) / 100 : 100;
 
     const newProduto: Produto = {
       ...produtoData,
@@ -2112,9 +2113,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let updated = { ...original, ...updates };
     // Recalculate margin if prices change
     if (updates.preco_compra !== undefined || updates.preco_venda !== undefined) {
-      const comp = updated.preco_compra;
-      const vend = updated.preco_venda;
-      updated.margem = vend > 0 ? Math.round(((vend - comp) / vend) * 100 * 100) / 100 : 0;
+      const comp = updated.preco_compra || 0;
+      const vend = updated.preco_venda || 0;
+      updated.margem = vend > 0 ? Math.round(((vend - comp) / vend) * 100 * 100) / 100 : 100;
     }
 
     await db.putItem('produtos', updated);
@@ -2206,6 +2207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const newCx: Caixinha = {
       id,
       user_id: auth.currentUser?.uid || profile.id,
+      workspace_id: activeWorkspace && activeWorkspace.compartilhar_caixinhas !== true ? activeWorkspace.id : undefined,
       nome,
       icone,
       cor,
@@ -2811,6 +2813,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await db.putItem('workspaces', newWs);
     await enqueueMutation({ type: 'workspace', action: 'create', data: newWs });
 
+    // Se o negócio tiver caixinhas isoladas, cria caixinhas padrão específicas para ele
+    if (newWs.compartilhar_caixinhas !== true) {
+      const defaultNewCaixinhas: Caixinha[] = [
+        {
+          id: `cx_lucro_${crypto.randomUUID()}`,
+          user_id: userId,
+          workspace_id: newWs.id,
+          nome: 'Lucro Líquido',
+          icone: 'TrendingUp',
+          cor: 'emerald',
+          tipo: 'lucro',
+          percentual_padrao: profile?.lucro_percent || 50,
+          saldo_atual: 0,
+          criado_em: new Date().toISOString()
+        },
+        {
+          id: `cx_ads_${crypto.randomUUID()}`,
+          user_id: userId,
+          workspace_id: newWs.id,
+          nome: 'Anúncios / Reinvestimento',
+          icone: 'Flame',
+          cor: 'purple',
+          tipo: 'anuncios',
+          percentual_padrao: profile?.anuncios_percent || 50,
+          saldo_atual: 0,
+          criado_em: new Date().toISOString()
+        }
+      ];
+
+      if (newWs.tipo !== 'plr_infoproduto') {
+        defaultNewCaixinhas.push(
+          {
+            id: `cx_supp_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: newWs.id,
+            nome: 'Fornecedores / Reposição',
+            icone: 'Package',
+            cor: 'blue',
+            tipo: 'fornecedores',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: `cx_del_${crypto.randomUUID()}`,
+            user_id: userId,
+            workspace_id: newWs.id,
+            nome: 'Taxas de Entrega',
+            icone: 'Truck',
+            cor: 'amber',
+            tipo: 'delivery',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          }
+        );
+      }
+
+      for (const cx of defaultNewCaixinhas) {
+        await db.putItem('caixinhas', cx);
+        await enqueueMutation({ type: 'caixinha', action: 'create', data: cx });
+      }
+      setCaixinhas(prev => [...prev, ...defaultNewCaixinhas]);
+    }
+
     if (profile) {
       const updatedProfile: Profile = {
         ...profile,
@@ -2931,6 +2996,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return metaItems.filter(m => m.workspace_id === activeWorkspace.id || (!m.workspace_id && isDefaultWorkspace));
   }, [metaItems, activeWorkspace, isDefaultWorkspace]);
 
+  const filteredCaixinhas = useMemo(() => {
+    if (!activeWorkspace) return caixinhas;
+    const isShared = activeWorkspace.compartilhar_caixinhas === true;
+    if (isShared) {
+      return caixinhas.filter(c => !c.workspace_id || c.workspace_id === workspaces[0]?.id);
+    }
+    const wsCaixinhas = caixinhas.filter(c => c.workspace_id === activeWorkspace.id);
+    if (wsCaixinhas.length > 0) return wsCaixinhas;
+    if (isDefaultWorkspace) {
+      return caixinhas.filter(c => !c.workspace_id || c.workspace_id === activeWorkspace.id);
+    }
+    return [];
+  }, [caixinhas, activeWorkspace, isDefaultWorkspace, workspaces]);
+
   return (
     <AppContext.Provider value={{
       profile,
@@ -2964,7 +3043,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addRelatorio,
       updateUserProfileByAdmin,
 
-      caixinhas,
+      caixinhas: filteredCaixinhas,
       contasBancarias,
       vendas: filteredVendas,
       despesas: filteredDespesas,

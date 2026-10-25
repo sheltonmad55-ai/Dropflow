@@ -17,6 +17,7 @@ interface WorkspaceModalProps {
     taxa_venda_fixa_padrao?: number;
     taxa_saque_tipo?: 'percentual' | 'fixo';
     taxa_saque_padrao?: number;
+    compartilhar_caixinhas?: boolean;
     plataforma_nome?: string;
     cor?: string;
     icone?: string;
@@ -61,7 +62,7 @@ export default function WorkspaceModal({
   onClose,
   workspaceToEdit,
   onSave,
-  onDelete
+  onDelete,
 }: WorkspaceModalProps) {
   const [nome, setNome] = useState('');
   const [tipo, setTipo] = useState<TipoNegocio>('ecommerce_drop');
@@ -74,6 +75,7 @@ export default function WorkspaceModal({
   const [taxaVendaFixaPadrao, setTaxaVendaFixaPadrao] = useState('0');
   const [taxaSaqueTipo, setTaxaSaqueTipo] = useState<'percentual' | 'fixo'>('percentual');
   const [taxaSaquePadrao, setTaxaSaquePadrao] = useState('0');
+  const [compartilharCaixinhas, setCompartilharCaixinhas] = useState(false);
   const [cor, setCor] = useState('#10B981');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -90,6 +92,7 @@ export default function WorkspaceModal({
       setTaxaVendaFixaPadrao(workspaceToEdit.taxa_venda_fixa_padrao ? String(workspaceToEdit.taxa_venda_fixa_padrao) : '0');
       setTaxaSaqueTipo(workspaceToEdit.taxa_saque_tipo || 'percentual');
       setTaxaSaquePadrao(workspaceToEdit.taxa_saque_padrao ? String(workspaceToEdit.taxa_saque_padrao) : '0');
+      setCompartilharCaixinhas(Boolean(workspaceToEdit.compartilhar_caixinhas));
       setCor(workspaceToEdit.cor || '#10B981');
     } else {
       setNome('');
@@ -103,6 +106,7 @@ export default function WorkspaceModal({
       setTaxaVendaFixaPadrao('0');
       setTaxaSaqueTipo('percentual');
       setTaxaSaquePadrao('0');
+      setCompartilharCaixinhas(false);
       setCor('#10B981');
     }
   }, [workspaceToEdit, isOpen]);
@@ -197,6 +201,7 @@ export default function WorkspaceModal({
         taxa_venda_fixa_padrao: parseFloat(taxaVendaFixaPadrao) || 0,
         taxa_saque_tipo: taxaSaqueTipo,
         taxa_saque_padrao: parseFloat(taxaSaquePadrao) || 0,
+        compartilhar_caixinhas: compartilharCaixinhas,
         plataforma_nome: plataformaNome.trim() || undefined,
         cor,
         icone: tipo === 'plr_infoproduto' ? 'Laptop' : tipo === 'ecommerce_drop' ? 'Store' : 'ShoppingBag'
@@ -414,6 +419,33 @@ export default function WorkspaceModal({
                 checked={custoEnvioAtivo}
                 onChange={(e) => setCustoEnvioAtivo(e.target.checked)}
                 className="w-4 h-4 accent-indigo-600 rounded cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {/* Compartilhar Caixinhas / Pockets com outros Negócios */}
+          <div className="p-3.5 bg-slate-50/90 dark:bg-slate-950/90 border border-slate-200/70 dark:border-slate-800 rounded-2xl space-y-2" id="field_ws_compartilhar_caixinhas">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className={`p-2 rounded-xl ${compartilharCaixinhas ? 'bg-amber-100 dark:bg-amber-950 text-amber-600' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600'}`}>
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Compartilhar Caixinhas / Pockets
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    {compartilharCaixinhas
+                      ? 'Compartilhado: Usa as mesmas caixinhas e saldos dos outros negócios'
+                      : 'Isolado (Recomendado): Este negócio terá caixinhas e saldos 100% próprios e independentes'}
+                  </p>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={compartilharCaixinhas}
+                onChange={(e) => setCompartilharCaixinhas(e.target.checked)}
+                className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
               />
             </div>
           </div>

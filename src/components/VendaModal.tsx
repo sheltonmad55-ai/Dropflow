@@ -49,17 +49,26 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [quantidade, setQuantidade] = useState<string>('1');
   const [precoUnitario, setPrecoUnitario] = useState<string>('');
   const [desconto, setDesconto] = useState<string>('0');
+  const [selectedOrderBumpIds, setSelectedOrderBumpIds] = useState<string[]>([]);
+  const [selectedUpsellIds, setSelectedUpsellIds] = useState<string[]>([]);
 
-  // Update unit price and total when product or quantity changes
+  const selectedProd = produtos.find(p => p.id === produtoId);
+  const isPlrProd = isPlr || selectedProd?.tipo === 'digital_plr';
+
+  // Update unit price and total when product, quantity, order bumps, or upsells change
   useEffect(() => {
-    if (!produtoId) return;
+    if (!produtoId) {
+      setSelectedOrderBumpIds([]);
+      setSelectedUpsellIds([]);
+      return;
+    }
     const prod = produtos.find(p => p.id === produtoId);
     if (!prod) return;
 
     const qtyNum = parseInt(quantidade) || 1;
     let unitPrice = prod.preco_venda;
 
-    if (prod.kits && prod.kits.length > 0) {
+    if (prod.tipo !== 'digital_plr' && prod.kits && prod.kits.length > 0) {
       const sortedKits = [...prod.kits].sort((a, b) => b.qtd - a.qtd);
       const matchingKit = sortedKits.find(k => qtyNum >= k.qtd);
       if (matchingKit) {
@@ -69,17 +78,55 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
 
     setPrecoUnitario(unitPrice.toString());
     
+    // Sum selected Order Bumps
+    let bumpsTotal = 0;
+    if (prod.order_bumps && prod.order_bumps.length > 0) {
+      bumpsTotal = prod.order_bumps
+        .filter(b => selectedOrderBumpIds.includes(b.id))
+        .reduce((sum, b) => sum + (b.preco || 0), 0);
+    }
+
+    // Sum selected Upsells
+    let upsellsTotal = 0;
+    if (prod.upsells && prod.upsells.length > 0) {
+      upsellsTotal = prod.upsells
+        .filter(u => selectedUpsellIds.includes(u.id))
+        .reduce((sum, u) => sum + (u.preco || 0), 0);
+    }
+
     const descNum = parseFloat(desconto) || 0;
-    const totalRec = (unitPrice * qtyNum) - descNum;
+    const totalRec = (unitPrice * qtyNum) - descNum + bumpsTotal + upsellsTotal;
     setValorRecebido(totalRec > 0 ? totalRec.toString() : '0');
-  }, [produtoId, quantidade, produtos]);
+
+    // Auto-select gateway account if it's PLR and none chosen yet
+    if (prod.tipo === 'digital_plr' || isPlr) {
+      if (!contaId) {
+        const gatewayAcc = contasBancarias.find(c => c.tipo === 'gateway' || c.nome.toLowerCase().includes('lojou') || c.nome.toLowerCase().includes('kiwify'));
+        if (gatewayAcc) {
+          setContaId(gatewayAcc.id);
+        }
+      }
+    }
+  }, [produtoId, quantidade, selectedOrderBumpIds, selectedUpsellIds, produtos, isPlr]);
 
   const handlePrecoUnitarioChange = (val: string) => {
     setPrecoUnitario(val);
     const pNum = parseFloat(val) || 0;
     const qtyNum = parseInt(quantidade) || 1;
     const descNum = parseFloat(desconto) || 0;
-    const totalRec = (pNum * qtyNum) - descNum;
+    let bumpsTotal = 0;
+    if (selectedProd && selectedProd.order_bumps) {
+      bumpsTotal = selectedProd.order_bumps
+        .filter(b => selectedOrderBumpIds.includes(b.id))
+        .reduce((sum, b) => sum + (b.preco || 0), 0);
+    }
+    let upsellsTotal = 0;
+    if (selectedProd && selectedProd.upsells) {
+      upsellsTotal = selectedProd.upsells
+        .filter(u => selectedUpsellIds.includes(u.id))
+        .reduce((sum, u) => sum + (u.preco || 0), 0);
+    }
+    const totalRec = (pNum * qtyNum) - descNum + bumpsTotal + upsellsTotal;
     setValorRecebido(totalRec > 0 ? totalRec.toString() : '0');
   };
 
@@ -88,7 +135,19 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     const descNum = parseFloat(val) || 0;
     const pNum = parseFloat(precoUnitario) || 0;
     const qtyNum = parseInt(quantidade) || 1;
-    const totalRec = (pNum * qtyNum) - descNum;
+    let bumpsTotal = 0;
+    if (selectedProd && selectedProd.order_bumps) {
+      bumpsTotal = selectedProd.order_bumps
+        .filter(b => selectedOrderBumpIds.includes(b.id))
+        .reduce((sum, b) => sum + (b.preco || 0), 0);
+    }
+    let upsellsTotal = 0;
+    if (selectedProd && selectedProd.upsells) {
+      upsellsTotal = selectedProd.upsells
+        .filter(u => selectedUpsellIds.includes(u.id))
+        .reduce((sum, u) => sum + (u.preco || 0), 0);
+    }
+    const totalRec = (pNum * qtyNum) - descNum + bumpsTotal + upsellsTotal;
     setValorRecebido(totalRec > 0 ? totalRec.toString() : '0');
   };
 
@@ -97,7 +156,19 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     const valNum = parseFloat(val) || 0;
     const pNum = parseFloat(precoUnitario) || 0;
     const qtyNum = parseInt(quantidade) || 1;
-    const expected = pNum * qtyNum;
+    let bumpsTotal = 0;
+    if (selectedProd && selectedProd.order_bumps) {
+      bumpsTotal = selectedProd.order_bumps
+        .filter(b => selectedOrderBumpIds.includes(b.id))
+        .reduce((sum, b) => sum + (b.preco || 0), 0);
+    }
+    let upsellsTotal = 0;
+    if (selectedProd && selectedProd.upsells) {
+      upsellsTotal = selectedProd.upsells
+        .filter(u => selectedUpsellIds.includes(u.id))
+        .reduce((sum, u) => sum + (u.preco || 0), 0);
+    }
+    const expected = (pNum * qtyNum) + bumpsTotal + upsellsTotal;
     const implicitDesc = expected - valNum;
     setDesconto(implicitDesc > 0 ? implicitDesc.toString() : '0');
   };
@@ -153,13 +224,14 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     const val = parseFloat(valorRecebido) || 0;
     const qtyNum = parseInt(quantidade) || 1;
     
-    // Find active product costs scaled by quantity
+    // Find active product costs scaled by quantity (0 for PLR products)
     const prod = produtos.find(p => p.id === produtoId);
-    const sCost = (prod ? prod.preco_compra : 0) * qtyNum;
+    const isPlrItem = isPlr || prod?.tipo === 'digital_plr';
+    const sCost = isPlrItem ? 0 : ((prod ? prod.preco_compra : 0) * qtyNum);
     
-    // Find active zone shipping costs (if shipping is active)
+    // Find active zone shipping costs (0 for PLR products)
     let dCost = 0;
-    if (isShippingActive && zonaEntregaId && zonaEntregaId !== 'sem_entrega') {
+    if (!isPlrItem && isShippingActive && zonaEntregaId && zonaEntregaId !== 'sem_entrega') {
       const zone = zonasEntrega.find(z => z.id === zonaEntregaId);
       dCost = zone ? zone.custo : 0;
     }
@@ -168,7 +240,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     let taxaDeduction = 0;
     const taxaNum = parseFloat(taxaVendaValor) || 0;
     const taxaFixaNum = parseFloat(taxaVendaFixa) || 0;
-    if ((isPlr || profile?.taxa_venda_ativa || showTaxaOptional || !isShippingActive) && (taxaNum > 0 || taxaFixaNum > 0)) {
+    if ((isPlr || isPlrItem || profile?.taxa_venda_ativa || showTaxaOptional || !isShippingActive) && (taxaNum > 0 || taxaFixaNum > 0)) {
       if (taxaVendaTipo === 'percentual') {
         taxaDeduction = Math.round(val * (taxaNum / 100) * 100) / 100;
       } else if (taxaVendaTipo === 'combinado') {
@@ -260,7 +332,10 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       return;
     }
 
-    if (isShippingActive && !zonaEntregaId) {
+    const prod = produtos.find(p => p.id === produtoId);
+    const isPlrItem = isPlr || prod?.tipo === 'digital_plr';
+
+    if (!isPlrItem && isShippingActive && !zonaEntregaId) {
       alert('Por favor selecione a zona de entrega ou a opção "Sem Custo de Envio".');
       return;
     }
@@ -274,8 +349,10 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
         valor_recebido: parseFloat(valorRecebido),
         workspace_id: activeWorkspace?.id,
         produto_id: produtoId,
-        fornecedor_id: fornecedorId,
-        zona_entrega_id: (zonaEntregaId === 'sem_entrega' || !isShippingActive) ? '' : zonaEntregaId,
+        fornecedor_id: isPlrItem ? undefined : (fornecedorId || undefined),
+        zona_entrega_id: isPlrItem ? '' : ((zonaEntregaId === 'sem_entrega' || !isShippingActive) ? '' : zonaEntregaId),
+        order_bumps_selecionados: selectedOrderBumpIds,
+        upsells_selecionados: selectedUpsellIds,
         taxa_venda_tipo: (taxaNum > 0 || taxaFixaNum > 0) ? taxaVendaTipo : undefined,
         taxa_venda_valor: taxaNum > 0 ? taxaNum : undefined,
         taxa_venda_fixa: (taxaVendaTipo === 'combinado' && taxaFixaNum > 0) ? taxaFixaNum : undefined,
@@ -290,7 +367,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
         custom_anuncios_taxa_cambio: isCustomAds && customAdsTipo === 'usd' ? (parseFloat(taxaCambioUsd) || 64) : undefined,
         meta_id: selectedMetaId || undefined,
         meta_valor_alocado: selectedMetaId ? preview.metaAllocatedAmount : undefined,
-        quantidade: parseInt(quantidade) || 1,
+        quantidade: isPlrItem ? 1 : (parseInt(quantidade) || 1),
         preco_unitario: parseFloat(precoUnitario) || 0,
         desconto: parseFloat(desconto) || 0
       });
@@ -301,6 +378,8 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setFornecedorId('');
       setZonaEntregaId('');
       setContaId('');
+      setSelectedOrderBumpIds([]);
+      setSelectedUpsellIds([]);
       setObservacao('');
       setQuantidade('1');
       setPrecoUnitario('');
@@ -368,21 +447,21 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="venda_modal">
-      <div className="bg-white border border-slate-100 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-6 relative flex flex-col space-y-4" id="venda_modal_content">
+    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="venda_modal">
+      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-2xl p-6 relative flex flex-col space-y-4 text-slate-900 dark:text-slate-100" id="venda_modal_content">
         
         {/* Header */}
         <div className="flex justify-between items-center pb-2" id="venda_modal_header">
-          <div className="flex items-center space-x-2" id="venda_modal_title_group">
-            <div className="bg-emerald-50 p-2 rounded-xl text-emerald-600" id="venda_modal_icon">
+          <div className="flex items-center space-x-2.5" id="venda_modal_title_group">
+            <div className="bg-emerald-50 dark:bg-emerald-950/50 p-2.5 rounded-xl text-emerald-600 dark:text-emerald-400" id="venda_modal_icon">
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-slate-900 text-lg font-display">Registar Nova Venda</h3>
-              <p className="text-[10px] text-slate-500">Distribuição automática de fundos</p>
+              <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-lg font-display">Registar Nova Venda</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Distribuição automática nos pockets / caixinhas</p>
             </div>
           </div>
-          <button id="btn_close_venda_modal" onClick={onClose} className="p-2 rounded-full bg-slate-50 text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors">
+          <button id="btn_close_venda_modal" onClick={onClose} className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -522,13 +601,13 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               {/* Show Kit information feedback if a kit is active! */}
               {(() => {
                 const prod = produtos.find(p => p.id === produtoId);
-                if (prod && prod.kits && prod.kits.length > 0) {
+                if (prod && prod.tipo !== 'digital_plr' && prod.kits && prod.kits.length > 0) {
                   const qtyNum = parseInt(quantidade) || 1;
                   const sortedKits = [...prod.kits].sort((a, b) => b.qtd - a.qtd);
                   const matchingKit = sortedKits.find(k => qtyNum >= k.qtd);
                   if (matchingKit) {
                     return (
-                      <div className="col-span-3 text-[10px] text-emerald-600 font-bold bg-white p-1.5 rounded border border-emerald-100 flex items-center mt-1" id="kit_applied_feedback">
+                      <div className="col-span-3 text-[10px] text-emerald-600 font-bold bg-white dark:bg-slate-800 p-1.5 rounded border border-emerald-100 dark:border-emerald-900 flex items-center mt-1" id="kit_applied_feedback">
                         <Sparkles className="w-3.5 h-3.5 mr-1" />
                         Desconto de Kit Atacado Aplicado! Preço de tabela reduzido para {matchingKit.preco} {currency} cada.
                       </div>
@@ -540,8 +619,103 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
             </div>
           )}
 
-          {/* Custo de Entrega / Envio (Para Ecommerce & Drop) */}
-          {isShippingActive && (
+          {/* ================= ORDER BUMPS & UPSELLS (PLR) ================= */}
+          {selectedProd && (
+            <div className="space-y-2.5" id="venda_bumps_upsells_container">
+              {selectedProd.order_bumps && selectedProd.order_bumps.length > 0 && (
+                <div className="bg-purple-50/80 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 rounded-2xl p-3.5 space-y-2 animate-fade-in" id="venda_order_bumps_selection">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
+                      <span>🎁 Order Bump(s) Inclusos no Checkout</span>
+                    </span>
+                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 rounded-full">
+                      {selectedOrderBumpIds.length} selecionado(s)
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {selectedProd.order_bumps.map(b => {
+                      const isChecked = selectedOrderBumpIds.includes(b.id);
+                      return (
+                        <label 
+                          key={b.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                            isChecked 
+                              ? 'bg-purple-100/90 dark:bg-purple-900/50 border-purple-300 dark:border-purple-600 font-bold text-purple-950 dark:text-purple-100 shadow-sm' 
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-purple-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedOrderBumpIds(prev => [...prev, b.id]);
+                                } else {
+                                  setSelectedOrderBumpIds(prev => prev.filter(id => id !== b.id));
+                                }
+                              }}
+                              className="rounded border-purple-400 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span>{b.nome}</span>
+                          </div>
+                          <span className="font-extrabold text-purple-600 dark:text-purple-400">+{b.preco} {currency}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {selectedProd.upsells && selectedProd.upsells.length > 0 && (
+                <div className="bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 rounded-2xl p-3.5 space-y-2 animate-fade-in" id="venda_upsells_selection">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                      <span>🚀 Upsell(s) Inclusos (Pós-compra)</span>
+                    </span>
+                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">
+                      {selectedUpsellIds.length} selecionado(s)
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {selectedProd.upsells.map(u => {
+                      const isChecked = selectedUpsellIds.includes(u.id);
+                      return (
+                        <label 
+                          key={u.id}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                            isChecked 
+                              ? 'bg-indigo-100/90 dark:bg-indigo-900/50 border-indigo-300 dark:border-indigo-600 font-bold text-indigo-950 dark:text-indigo-100 shadow-sm' 
+                              : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedUpsellIds(prev => [...prev, u.id]);
+                                } else {
+                                  setSelectedUpsellIds(prev => prev.filter(id => id !== u.id));
+                                }
+                              }}
+                              className="rounded border-indigo-400 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span>{u.nome}</span>
+                          </div>
+                          <span className="font-extrabold text-indigo-600 dark:text-indigo-400">+{u.preco} {currency}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Custo de Entrega / Envio (Apenas Para Ecommerce & Drop Físico) */}
+          {!isPlrItem && isShippingActive && (
             <div className="space-y-1.5" id="field_venda_zona">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-semibold text-slate-500">Zona de Entrega / Envio</label>
@@ -705,24 +879,26 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
           )}
 
           {/* Taxa por Venda (Para PLR / Infoprodutos ou quando envio está desativado) */}
-          {!isShippingActive && (
-            <div className="space-y-2 bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5" id="field_venda_taxa_plr">
-              <div className="flex justify-between items-center">
+          {(isPlrItem || !isShippingActive) && (
+            <div className="space-y-2.5 bg-purple-50/90 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-2xl p-4 shadow-sm" id="field_venda_taxa_plr">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                 <div>
-                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                     <span>💳 Taxa por Venda</span>
-                    <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-black">
+                    <span className="text-[10px] bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-200 px-2 py-0.5 rounded-full font-black">
                       Gateway / Plataforma
                     </span>
                   </label>
-                  <span className="text-[10px] text-slate-400">Sem frete de entrega (PLR / Infoproduto)</span>
+                  <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 block mt-0.5">
+                    Taxa da plataforma (Lojou, Kiwify, Hotmart)
+                  </span>
                 </div>
-                <div className="flex items-center bg-white p-0.5 rounded-lg border border-purple-200 shadow-sm">
+                <div className="flex items-center bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-purple-200 dark:border-purple-700 shadow-sm self-start sm:self-auto">
                   <button
                     type="button"
                     onClick={() => setTaxaVendaTipo('percentual')}
                     className={`px-2 py-1 text-[9px] sm:text-[10px] font-black rounded-md transition-colors cursor-pointer ${
-                      taxaVendaTipo === 'percentual' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
+                      taxaVendaTipo === 'percentual' ? 'bg-purple-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                     }`}
                   >
                     %
@@ -731,7 +907,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                     type="button"
                     onClick={() => setTaxaVendaTipo('fixo')}
                     className={`px-2 py-1 text-[9px] sm:text-[10px] font-black rounded-md transition-colors cursor-pointer ${
-                      taxaVendaTipo === 'fixo' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
+                      taxaVendaTipo === 'fixo' ? 'bg-purple-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                     }`}
                   >
                     {currency}
@@ -740,7 +916,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                     type="button"
                     onClick={() => setTaxaVendaTipo('combinado')}
                     className={`px-2 py-1 text-[9px] sm:text-[10px] font-black rounded-md transition-colors cursor-pointer ${
-                      taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
+                      taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                     }`}
                   >
                     % + {currency} (Lojou)
@@ -749,24 +925,24 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               </div>
 
               {taxaVendaTipo === 'combinado' ? (
-                <div className="space-y-1 pt-1">
+                <div className="space-y-1.5 pt-1">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-600 block mb-1">Percentual (%)</label>
+                      <label className="text-[10px] font-bold text-slate-700 dark:text-slate-300 block mb-1">Percentual (%)</label>
                       <div className="relative">
                         <input
                           type="number"
                           step="any"
-                          placeholder="Ex: 5%"
+                          placeholder="Ex: 5"
                           value={taxaVendaValor}
                           onChange={(e) => setTaxaVendaValor(e.target.value)}
-                          className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-purple-500 shadow-sm"
                         />
-                        <span className="absolute right-3 top-2.5 text-xs font-black text-purple-500">%</span>
+                        <span className="absolute right-3 top-2.5 text-xs font-black text-purple-600 dark:text-purple-400">%</span>
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-600 block mb-1">+ Fixo ({currency})</label>
+                      <label className="text-[10px] font-bold text-slate-700 dark:text-slate-300 block mb-1">+ Fixo ({currency})</label>
                       <div className="relative">
                         <input
                           type="number"
@@ -774,37 +950,37 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                           placeholder="Ex: 10"
                           value={taxaVendaFixa}
                           onChange={(e) => setTaxaVendaFixa(e.target.value)}
-                          className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-purple-500 shadow-sm"
                         />
-                        <span className="absolute right-3 top-2.5 text-xs font-black text-purple-500">{currency}</span>
+                        <span className="absolute right-3 top-2.5 text-xs font-black text-purple-600 dark:text-purple-400">{currency}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-between text-[10px] text-slate-500 pt-0.5">
-                    <span>Dedução desta venda:</span>
-                    <span className="font-bold text-purple-700">
+                  <div className="flex justify-between text-[11px] font-bold text-purple-900 dark:text-purple-200 pt-0.5">
+                    <span>Dedução estimada:</span>
+                    <span>
                       -{preview.taxaVendaDeduction} {currency} {taxaVendaValor ? `(${taxaVendaValor}% + ${taxaVendaFixa || 0} ${currency})` : ''}
                     </span>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-1 pt-1">
+                <div className="space-y-1.5 pt-1">
                   <div className="relative">
                     <input
                       type="number"
                       step="any"
-                      placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 10% (Kiwify, Hotmart, EscalePay)' : `Ex: 50 ${currency}`}
+                      placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 10% (Lojou, Kiwify, Hotmart)' : `Ex: 50 ${currency}`}
                       value={taxaVendaValor}
                       onChange={(e) => setTaxaVendaValor(e.target.value)}
-                      className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                      className="w-full bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-purple-500 shadow-sm"
                     />
-                    <span className="absolute right-3 top-3.5 text-xs font-black text-purple-500">
+                    <span className="absolute right-3 top-3 text-xs font-black text-purple-600 dark:text-purple-400">
                       {taxaVendaTipo === 'percentual' ? '%' : currency}
                     </span>
                   </div>
-                  <div className="flex justify-between text-[10px] text-slate-500 pt-0.5">
-                    <span>Dedução desta venda:</span>
-                    <span className="font-bold text-purple-700">
+                  <div className="flex justify-between text-[11px] font-bold text-purple-900 dark:text-purple-200 pt-0.5">
+                    <span>Dedução estimada:</span>
+                    <span>
                       -{preview.taxaVendaDeduction} {currency} {taxaVendaTipo === 'percentual' && taxaVendaValor ? `(${taxaVendaValor}%)` : ''}
                     </span>
                   </div>
@@ -1077,46 +1253,48 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
             </div>
 
             <div className="space-y-2 text-xs" id="preview_breakdown">
-              <div className="flex justify-between font-semibold" id="preview_row_fornecedor">
-                <span className="text-slate-500">📦 Resgate Fornecedor / Custo:</span>
-                <span className="font-extrabold text-amber-600">+{preview.supplierCost} {currency}</span>
-              </div>
-              {preview.shippingCost > 0 && (
+              {!isPlrItem && (
+                <div className="flex justify-between font-semibold" id="preview_row_fornecedor">
+                  <span className="text-slate-500 dark:text-slate-400">📦 Resgate Fornecedor / Custo:</span>
+                  <span className="font-extrabold text-amber-600 dark:text-amber-400">+{preview.supplierCost} {currency}</span>
+                </div>
+              )}
+              {!isPlrItem && preview.shippingCost > 0 && (
                 <div className="flex justify-between font-semibold" id="preview_row_delivery">
-                  <span className="text-slate-500">🚚 Resgate Delivery (Entrega):</span>
-                  <span className="font-extrabold text-indigo-600">+{preview.shippingCost} {currency}</span>
+                  <span className="text-slate-500 dark:text-slate-400">🚚 Resgate Delivery (Entrega):</span>
+                  <span className="font-extrabold text-indigo-600 dark:text-indigo-400">+{preview.shippingCost} {currency}</span>
                 </div>
               )}
               {preview.taxaVendaDeduction > 0 && (
                 <div className="flex justify-between font-semibold" id="preview_row_taxa">
-                  <span className="text-slate-500">💳 Taxa Gateway / Plataforma:</span>
-                  <span className="font-extrabold text-purple-600">+{preview.taxaVendaDeduction} {currency}</span>
+                  <span className="text-slate-500 dark:text-slate-400">💳 Taxa Gateway / Plataforma:</span>
+                  <span className="font-extrabold text-purple-600 dark:text-purple-400">+{preview.taxaVendaDeduction} {currency}</span>
                 </div>
               )}
               
-              <div className="border-t border-dashed border-slate-200 my-1 pt-1 flex justify-between font-semibold" id="preview_row_remainder">
-                <span className="text-slate-700 font-bold">Margem Líquida Restante:</span>
-                <span className={`font-black ${preview.isNegative ? 'text-rose-600' : 'text-slate-800'}`}>
+              <div className="border-t border-dashed border-slate-200 dark:border-slate-700 my-1 pt-1 flex justify-between font-semibold" id="preview_row_remainder">
+                <span className="text-slate-700 dark:text-slate-300 font-bold">Margem Líquida Restante:</span>
+                <span className={`font-black ${preview.isNegative ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'}`}>
                   {preview.remainder} {currency}
                 </span>
               </div>
 
               {preview.isNegative && (
-                <div className="bg-rose-50 border border-rose-100 text-rose-700 p-2.5 rounded-xl text-[10px] flex items-start space-x-1.5" id="preview_negative_warning">
+                <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 text-rose-700 dark:text-rose-300 p-2.5 rounded-xl text-[10px] flex items-start space-x-1.5" id="preview_negative_warning">
                   <AlertTriangle className="w-4 h-4 shrink-0 stroke-[2.5]" />
                   <span>Atenção: Margem negativa! O valor recebido não cobre o custo do produto, taxa ou envio.</span>
                 </div>
               )}
 
               {!preview.isNegative && (
-                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200" id="preview_remaining_split">
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200/60" id="preview_split_anuncios">
-                    <span className="text-[9px] font-bold text-sky-600 block mb-0.5">📢 Anúncios ({isCustomAds ? customAdsPercent : (profile?.anuncios_percent || 40)}%)</span>
-                    <span className="font-black text-sky-700 text-sm">+{preview.adsAmount} {currency}</span>
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-200 dark:border-slate-700" id="preview_remaining_split">
+                  <div className="bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700" id="preview_split_anuncios">
+                    <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400 block mb-0.5">📢 Anúncios ({isCustomAds ? customAdsPercent : (profile?.anuncios_percent || 40)}%)</span>
+                    <span className="font-black text-sky-700 dark:text-sky-300 text-sm">+{preview.adsAmount} {currency}</span>
                   </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-slate-200/60" id="preview_split_lucro">
-                    <span className="text-[9px] font-bold text-emerald-600 block mb-0.5">💰 Lucro ({100 - (isCustomAds ? customAdsPercent : (profile?.anuncios_percent || 40))}%)</span>
-                    <span className="font-black text-emerald-700 text-sm">+{preview.profitAmount} {currency}</span>
+                  <div className="bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700" id="preview_split_lucro">
+                    <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 block mb-0.5">💰 Lucro ({100 - (isCustomAds ? customAdsPercent : (profile?.anuncios_percent || 40))}%)</span>
+                    <span className="font-black text-emerald-700 dark:text-emerald-300 text-sm">+{preview.profitAmount} {currency}</span>
                   </div>
                 </div>
               )}
@@ -1129,15 +1307,15 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               id="btn_cancel_venda"
               type="button"
               onClick={onClose}
-              className="flex-1 bg-slate-100 text-slate-600 font-semibold py-3 px-4 rounded-xl text-xs hover:bg-slate-200 transition-colors"
+              className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold py-3 px-4 rounded-xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
             >
               Voltar
             </button>
             <button
               id="btn_confirm_venda"
               type="submit"
-              disabled={!valorRecebido || !produtoId || !zonaEntregaId}
-              className="flex-1 bg-slate-900 text-white font-semibold py-3 px-4 rounded-xl text-xs hover:bg-slate-800 transition-colors shadow-sm disabled:opacity-50"
+              disabled={!valorRecebido || !produtoId || (!isPlrItem && isShippingActive && !zonaEntregaId)}
+              className="flex-1 bg-slate-900 dark:bg-emerald-600 text-white font-semibold py-3 px-4 rounded-xl text-xs hover:bg-slate-800 dark:hover:bg-emerald-500 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
             >
               Gravar Venda
             </button>
