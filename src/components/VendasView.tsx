@@ -39,7 +39,10 @@ export default function VendasView() {
     produtos, 
     fornecedores, 
     profile, 
+    workspaces,
     activeWorkspace,
+    primaryWorkspace,
+    transferirProdutoParaWorkspace,
     addProduto, 
     addFornecedor,
     editProduto,
@@ -68,6 +71,7 @@ export default function VendasView() {
 
   // New product form
   const isPlrWorkspace = activeWorkspace?.tipo === 'plr_infoproduto';
+  const [prodWorkspaceId, setProdWorkspaceId] = useState(activeWorkspace?.id || '');
   const [prodTipo, setProdTipo] = useState<'fisico' | 'digital_plr'>(isPlrWorkspace ? 'digital_plr' : 'fisico');
   const [prodNome, setProdNome] = useState('');
   const [prodCat, setProdCat] = useState('Infoprodutos');
@@ -94,6 +98,7 @@ export default function VendasView() {
 
   // Product editing
   const [editingProd, setEditingProd] = useState<any>(null);
+  const [editProdWorkspaceId, setEditProdWorkspaceId] = useState('');
   const [editProdTipo, setEditProdTipo] = useState<'fisico' | 'digital_plr'>('fisico');
   const [editProdNome, setEditProdNome] = useState('');
   const [editProdCat, setEditProdCat] = useState('Infoprodutos');
@@ -259,7 +264,8 @@ export default function VendasView() {
         tem_order_bump: prodTemOrderBump,
         order_bumps: prodTemOrderBump ? prodOrderBumps : [],
         tem_upsell: prodTemUpsell,
-        upsells: prodTemUpsell ? prodUpsells : []
+        upsells: prodTemUpsell ? prodUpsells : [],
+        workspace_id: prodWorkspaceId || activeWorkspace?.id
       });
       setProdNome('');
       setProdCompra('');
@@ -317,7 +323,8 @@ export default function VendasView() {
         tem_order_bump: editProdTemOrderBump,
         order_bumps: editProdTemOrderBump ? editProdOrderBumps : [],
         tem_upsell: editProdTemUpsell,
-        upsells: editProdTemUpsell ? editProdUpsells : []
+        upsells: editProdTemUpsell ? editProdUpsells : [],
+        workspace_id: editProdWorkspaceId || editingProd.workspace_id || activeWorkspace?.id
       });
       setEditingProd(null);
     } catch (e) {
@@ -789,6 +796,19 @@ export default function VendasView() {
                       )}
 
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {workspaces && workspaces.length > 1 && (
+                          <span 
+                            className="text-[9px] px-2 py-0.5 rounded-full font-black border flex items-center gap-1 inline-flex"
+                            style={{
+                              backgroundColor: (workspaces.find(w => w.id === p.workspace_id)?.cor || '#10B981') + '15',
+                              color: workspaces.find(w => w.id === p.workspace_id)?.cor || '#10B981',
+                              borderColor: (workspaces.find(w => w.id === p.workspace_id)?.cor || '#10B981') + '35'
+                            }}
+                          >
+                            <Store className="w-2.5 h-2.5" />
+                            {workspaces.find(w => w.id === p.workspace_id)?.nome || 'Negócio Principal'}
+                          </span>
+                        )}
                         {p.tipo === 'digital_plr' ? (
                           <>
                             <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded font-bold inline-block">
@@ -846,6 +866,7 @@ export default function VendasView() {
                         id={`btn_edit_product_${p.id}`}
                         onClick={() => {
                           setEditingProd(p);
+                          setEditProdWorkspaceId(p.workspace_id || activeWorkspace?.id || '');
                           setEditProdTipo(p.tipo || 'fisico');
                           setEditProdNome(p.nome);
                           setEditProdCat(p.categoria);
@@ -1102,6 +1123,26 @@ export default function VendasView() {
             </div>
 
             <form onSubmit={handleAddProduct} className="space-y-4" id="add_product_form">
+              {workspaces && workspaces.length > 1 && (
+                <div className="space-y-1 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/60 dark:border-slate-700/60" id="prod_workspace_group">
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-emerald-600" />
+                    Destinar ao Negócio / Workspace:
+                  </label>
+                  <select
+                    value={prodWorkspaceId || activeWorkspace?.id}
+                    onChange={(e) => setProdWorkspaceId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                  >
+                    {workspaces.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.nome} {w.is_primary ? '(Principal)' : ''} — {w.moeda} ({w.tipo === 'plr_infoproduto' ? 'PLR / Digital' : 'Drop Físico'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1" id="prod_nome_group">
                 <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
                   {prodTipo === 'digital_plr' ? 'Nome do Infoproduto / E-book / Curso' : 'Nome do Produto'}
@@ -1469,6 +1510,26 @@ export default function VendasView() {
             </div>
 
             <form onSubmit={handleEditProduct} className="space-y-4" id="edit_product_form">
+              {workspaces && workspaces.length > 1 && (
+                <div className="space-y-1 p-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/60 dark:border-slate-700/60" id="edit_prod_workspace_group">
+                  <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-emerald-600" />
+                    Negócio / Workspace deste Produto:
+                  </label>
+                  <select
+                    value={editProdWorkspaceId || editingProd.workspace_id || activeWorkspace?.id}
+                    onChange={(e) => setEditProdWorkspaceId(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-600"
+                  >
+                    {workspaces.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.nome} {w.is_primary ? '(Principal)' : ''} — {w.moeda} ({w.tipo === 'plr_infoproduto' ? 'PLR / Digital' : 'Drop Físico'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1" id="edit_prod_nome_group">
                 <label className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
                   {editProdTipo === 'digital_plr' ? 'Nome do Infoproduto / PLR' : 'Nome do Produto'}

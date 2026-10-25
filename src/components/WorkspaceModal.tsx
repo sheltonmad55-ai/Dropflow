@@ -663,7 +663,7 @@ export default function WorkspaceModal({
 
           {/* Botões de Ação */}
           <div className="pt-2 flex items-center space-x-2">
-            {workspaceToEdit && onDelete && (
+            {workspaceToEdit && onDelete && !workspaceToEdit.is_primary && (
               <button
                 type="button"
                 onClick={async () => {

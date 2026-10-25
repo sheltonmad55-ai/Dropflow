@@ -135,12 +135,15 @@ interface AppContextType {
 
   // Workspaces / Multi-Negócios Management
   workspaces: Workspace[];
+  primaryWorkspace: Workspace | null;
+  isPrimaryActive: boolean;
   activeWorkspace: Workspace | null;
   activeWorkspaceId: string;
   setActiveWorkspaceId: (workspaceId: string) => Promise<void>;
   createWorkspace: (workspaceData: Omit<Workspace, 'id' | 'user_id' | 'criado_em'>) => Promise<Workspace>;
   updateWorkspace: (id: string, updates: Partial<Workspace>) => Promise<void>;
   deleteWorkspace: (id: string) => Promise<void>;
+  transferirProdutoParaWorkspace?: (produtoId: string, novoWorkspaceId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -176,10 +179,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem('dropflow_active_workspace') || '';
   });
 
+  const primaryWorkspace = useMemo<Workspace | null>(() => {
+    if (!workspaces.length) return null;
+    return workspaces.find(w => w.is_primary) 
+      || workspaces.find(w => w.id === profile?.primary_workspace_id)
+      || workspaces.find(w => w.id.startsWith('ws_default_'))
+      || [...workspaces].sort((a, b) => (a.criado_em || '').localeCompare(b.criado_em || ''))[0];
+  }, [workspaces, profile]);
+
   const activeWorkspace = useMemo<Workspace | null>(() => {
     if (!workspaces.length) return null;
-    return workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0];
-  }, [workspaces, activeWorkspaceId]);
+    return workspaces.find(w => w.id === activeWorkspaceId) || primaryWorkspace || workspaces[0];
+  }, [workspaces, activeWorkspaceId, primaryWorkspace]);
+
+  const isPrimaryActive = useMemo(() => {
+    if (!activeWorkspace || !primaryWorkspace) return true;
+    return activeWorkspace.id === primaryWorkspace.id;
+  }, [activeWorkspace, primaryWorkspace]);
 
   // Modo Foco / Privacy State
   const [modoFoco, setModoFocoState] = useState<boolean>(() => {
@@ -940,41 +956,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
       profileWorkspaces.forEach(w => combinedWorkspacesMap.set(w.id, w));
 
       let finalWorkspaces = Array.from(combinedWorkspacesMap.values());
-      if (finalWorkspaces.length === 0) {
-        const defaultWsId = `ws_default_${userId}`;
-        const initialWorkspace: Workspace = {
-          id: currentUserProfile?.active_workspace_id || defaultWsId,
-          user_id: userId,
-          nome: currentUserProfile?.empresa || 'Negócio Principal',
-          tipo: currentUserProfile?.tipo_negocio || 'ecommerce_drop',
-          moeda: currentUserProfile?.moeda || 'MT',
-          custo_envio_ativo: currentUserProfile?.custo_envio_ativo !== false,
-          taxa_venda_ativa: Boolean(currentUserProfile?.taxa_venda_ativa),
-          taxa_venda_tipo: currentUserProfile?.taxa_venda_tipo || 'percentual',
-          taxa_venda_padrao: currentUserProfile?.taxa_venda_padrao || 0,
-          taxa_saque_padrao: currentUserProfile?.taxa_saque_padrao || 0,
-          plataforma_nome: '',
-          cor: '#10B981',
-          icone: 'Store',
-          criado_em: currentUserProfile?.criado_em || new Date().toISOString()
-        };
-        finalWorkspaces = [initialWorkspace];
-        void db.putItem('workspaces', initialWorkspace);
+      const defaultWsId = `ws_default_${userId}`;
+
+      // Identify or restore the Primary Workspace
+      let primaryWs = finalWorkspaces.find(w => w.is_primary || w.id === currentUserProfile?.primary_workspace_id || w.id === defaultWsId);
+
+      if (!primaryWs) {
+        // If there is an existing workspace that isn't a secondary business like 'Akra', treat it as primary
+        const potentialPrimary = finalWorkspaces.find(w => !w.nome.toLowerCase().includes('akra') && w.tipo !== 'plr_infoproduto');
+        if (potentialPrimary) {
+          potentialPrimary.is_primary = true;
+          primaryWs = potentialPrimary;
+        } else if (finalWorkspaces.length > 0) {
+          // If only secondary workspaces like 'Akra' exist, restore the primary VIP store
+          primaryWs = {
+            id: defaultWsId,
+            user_id: userId,
+            nome: currentUserProfile?.empresa || 'Negócio Principal (Drop)',
+            tipo: 'ecommerce_drop',
+            moeda: 'MT',
+            custo_envio_ativo: true,
+            taxa_venda_ativa: false,
+            taxa_venda_tipo: 'percentual',
+            taxa_venda_padrao: 0,
+            taxa_saque_padrao: 0,
+            plataforma_nome: '',
+            cor: '#10B981',
+            icone: 'Store',
+            criado_em: '2026-01-01T00:00:00.000Z',
+            is_primary: true
+          };
+          finalWorkspaces.unshift(primaryWs);
+          void db.putItem('workspaces', primaryWs);
+        } else {
+          // finalWorkspaces was empty
+          primaryWs = {
+            id: defaultWsId,
+            user_id: userId,
+            nome: currentUserProfile?.empresa || 'Negócio Principal (Drop)',
+            tipo: currentUserProfile?.tipo_negocio || 'ecommerce_drop',
+            moeda: currentUserProfile?.moeda || 'MT',
+            custo_envio_ativo: currentUserProfile?.custo_envio_ativo !== false,
+            taxa_venda_ativa: Boolean(currentUserProfile?.taxa_venda_ativa),
+            taxa_venda_tipo: currentUserProfile?.taxa_venda_tipo || 'percentual',
+            taxa_venda_padrao: currentUserProfile?.taxa_venda_padrao || 0,
+            taxa_saque_padrao: currentUserProfile?.taxa_saque_padrao || 0,
+            plataforma_nome: '',
+            cor: '#10B981',
+            icone: 'Store',
+            criado_em: currentUserProfile?.criado_em || '2026-01-01T00:00:00.000Z',
+            is_primary: true
+          };
+          finalWorkspaces = [primaryWs];
+          void db.putItem('workspaces', primaryWs);
+        }
       }
 
+      // Strictly ensure secondary workspaces (like Akra) are never flagged as primary
+      finalWorkspaces = finalWorkspaces.map(w => {
+        if (w.id === primaryWs?.id) return { ...w, is_primary: true };
+        return { ...w, is_primary: false };
+      });
+
+      // Deterministically sort: Primary Workspace ALWAYS at index 0, followed by subsequent workspaces by created date
+      finalWorkspaces.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return (a.criado_em || '').localeCompare(b.criado_em || '');
+      });
+
       setWorkspaces(finalWorkspaces);
+
       const savedActiveWs = localStorage.getItem('dropflow_active_workspace');
       if (savedActiveWs && finalWorkspaces.some(w => w.id === savedActiveWs)) {
         setActiveWorkspaceIdState(savedActiveWs);
       } else {
-        const fallbackWsId = currentUserProfile?.active_workspace_id || finalWorkspaces[0].id;
+        const fallbackWsId = primaryWs?.id || finalWorkspaces[0].id;
         setActiveWorkspaceIdState(fallbackWsId);
         localStorage.setItem('dropflow_active_workspace', fallbackWsId);
       }
 
       // Restore the latest local mutations before real-time listeners start.
-      // This prevents a cached/old Firestore snapshot from flashing over a
-      // change that is still waiting for its first successful sync.
       const latestPending = new Map<string, SyncQueueItem>();
       queue
         .filter(item => item.data?.user_id === userId || (item.type === 'profile' && item.data?.id === userId))
@@ -985,6 +1047,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pendingMutationsRef.current.clear();
       latestPending.forEach((item, key) => {
         pendingMutationsRef.current.set(key, { ...item, version: ++mutationVersionRef.current });
+      });
+
+      const primaryWsId = primaryWs ? primaryWs.id : finalWorkspaces[0].id;
+      const akraWs = finalWorkspaces.find(w => w.nome.toLowerCase().includes('akra'));
+
+      // Auto-migrate / backfill legacy data to Primary Workspace so it never leaks into secondary workspaces (e.g. Akra)
+      const userVendas = dbVendas.filter(v => v.user_id === userId);
+      const sanitizedVendas = userVendas.map(v => {
+        // If unassigned or accidentally stamped with Akra id prior to Akra creation:
+        const wasCreatedBeforeAkra = akraWs && v.criado_em && akraWs.criado_em && v.criado_em < akraWs.criado_em;
+        if (!v.workspace_id || (wasCreatedBeforeAkra && v.workspace_id === akraWs?.id)) {
+          const updated = { ...v, workspace_id: primaryWsId };
+          void db.putItem('vendas', updated);
+          return updated;
+        }
+        return v;
+      }).sort((a,b) => b.data_venda.localeCompare(a.data_venda));
+
+      const userDespesas = dbDespesas.filter(d => d.user_id === userId);
+      const sanitizedDespesas = userDespesas.map(d => {
+        const wasCreatedBeforeAkra = akraWs && d.criado_em && akraWs.criado_em && d.criado_em < akraWs.criado_em;
+        if (!d.workspace_id || (wasCreatedBeforeAkra && d.workspace_id === akraWs?.id)) {
+          const updated = { ...d, workspace_id: primaryWsId };
+          void db.putItem('despesas', updated);
+          return updated;
+        }
+        return d;
+      }).sort((a,b) => b.data.localeCompare(a.data));
+
+      const userProdutos = dbProdutos.filter(p => p.user_id === userId);
+      const sanitizedProdutos = userProdutos.map(p => {
+        // If unassigned or physical product in a PLR workspace:
+        const isPhysicalInPlr = akraWs && akraWs.tipo === 'plr_infoproduto' && p.workspace_id === akraWs.id && (p.tipo === 'fisico' || !p.tipo);
+        if (!p.workspace_id || isPhysicalInPlr) {
+          const updated = { ...p, workspace_id: primaryWsId };
+          void db.putItem('produtos', updated);
+          return updated;
+        }
+        return p;
       });
 
       setCaixinhas(dbCaixinhas.filter(c => c.user_id === userId));
@@ -1001,9 +1102,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } else {
         setContasBancarias([]);
       }
-      setVendas(dbVendas.filter(v => v.user_id === userId).sort((a,b) => b.data_venda.localeCompare(a.data_venda)));
-      setDespesas(dbDespesas.filter(d => d.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
-      setProdutos(dbProdutos.filter(p => p.user_id === userId));
+      setVendas(sanitizedVendas);
+      setDespesas(sanitizedDespesas);
+      setProdutos(sanitizedProdutos);
       setFornecedores(dbFornecedores.filter(f => f.user_id === userId));
       setZonasEntrega(dbZonas.filter(z => z.user_id === userId));
       setCampanhas(dbCampanhas.filter(c => c.user_id === userId).sort((a,b) => b.data.localeCompare(a.data)));
@@ -2803,9 +2904,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: `ws_${crypto.randomUUID()}`,
       user_id: userId,
       ...workspaceData,
+      is_primary: false,
       criado_em: new Date().toISOString()
     };
-    const updated = [...workspaces, newWs];
+    const updated = [...workspaces, newWs].sort((a, b) => {
+      if (a.is_primary && !b.is_primary) return -1;
+      if (!a.is_primary && b.is_primary) return 1;
+      return (a.criado_em || '').localeCompare(b.criado_em || '');
+    });
     setWorkspaces(updated);
     setActiveWorkspaceIdState(newWs.id);
     localStorage.setItem('dropflow_active_workspace', newWs.id);
@@ -2936,6 +3042,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       alert('Você precisa ter pelo menos um negócio ativo.');
       return;
     }
+    const target = workspaces.find(w => w.id === id);
+    if (target?.is_primary) {
+      alert('O negócio principal não pode ser excluído.');
+      return;
+    }
     const remaining = workspaces.filter(w => w.id !== id);
     setWorkspaces(remaining);
     await db.deleteItem('workspaces', id);
@@ -2959,56 +3070,87 @@ export function AppProvider({ children }: { children: ReactNode }) {
     triggerToast('Negócio Removido', 'Workspace removido com sucesso.', 'info');
   };
 
-  // Filter collections by active workspace (while maintaining backward compatibility for unassigned items)
-  const isDefaultWorkspace = !workspaces.length || activeWorkspace?.id === workspaces[0]?.id;
+  const transferirProdutoParaWorkspace = async (produtoId: string, novoWorkspaceId: string) => {
+    const prod = produtos.find(p => p.id === produtoId);
+    if (!prod) return;
+    const updated = { ...prod, workspace_id: novoWorkspaceId };
+    await db.putItem('produtos', updated);
+    await enqueueMutation({ type: 'produto', action: 'update', data: updated });
+    setProdutos(prev => prev.map(p => p.id === produtoId ? updated : p));
+    const targetWs = workspaces.find(w => w.id === novoWorkspaceId);
+    triggerToast('Produto Transferido', `Produto transferido para ${targetWs?.nome || 'o workspace selecionado'}.`, 'success');
+  };
+
+  // Filter collections by active workspace with strict isolation (secondary workspaces NEVER inherit unassigned items)
   const filteredVendas = useMemo(() => {
     if (!activeWorkspace) return vendas;
-    return vendas.filter(v => v.workspace_id === activeWorkspace.id || (!v.workspace_id && isDefaultWorkspace));
-  }, [vendas, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return vendas.filter(v => v.workspace_id === activeWorkspace.id || !v.workspace_id || (primaryWorkspace && v.workspace_id === primaryWorkspace.id));
+    }
+    return vendas.filter(v => v.workspace_id === activeWorkspace.id);
+  }, [vendas, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredDespesas = useMemo(() => {
     if (!activeWorkspace) return despesas;
-    return despesas.filter(d => d.workspace_id === activeWorkspace.id || (!d.workspace_id && isDefaultWorkspace));
-  }, [despesas, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return despesas.filter(d => d.workspace_id === activeWorkspace.id || !d.workspace_id || (primaryWorkspace && d.workspace_id === primaryWorkspace.id));
+    }
+    return despesas.filter(d => d.workspace_id === activeWorkspace.id);
+  }, [despesas, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredProdutos = useMemo(() => {
     if (!activeWorkspace) return produtos;
-    return produtos.filter(p => p.workspace_id === activeWorkspace.id || (!p.workspace_id && isDefaultWorkspace));
-  }, [produtos, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return produtos.filter(p => p.workspace_id === activeWorkspace.id || !p.workspace_id || (primaryWorkspace && p.workspace_id === primaryWorkspace.id));
+    }
+    return produtos.filter(p => p.workspace_id === activeWorkspace.id);
+  }, [produtos, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredCampanhas = useMemo(() => {
     if (!activeWorkspace) return campanhas;
-    return campanhas.filter(c => c.workspace_id === activeWorkspace.id || (!c.workspace_id && isDefaultWorkspace));
-  }, [campanhas, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return campanhas.filter(c => c.workspace_id === activeWorkspace.id || !c.workspace_id || (primaryWorkspace && c.workspace_id === primaryWorkspace.id));
+    }
+    return campanhas.filter(c => c.workspace_id === activeWorkspace.id);
+  }, [campanhas, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredZonas = useMemo(() => {
     if (!activeWorkspace) return zonasEntrega;
-    return zonasEntrega.filter(z => z.workspace_id === activeWorkspace.id || (!z.workspace_id && isDefaultWorkspace));
-  }, [zonasEntrega, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return zonasEntrega.filter(z => z.workspace_id === activeWorkspace.id || !z.workspace_id || (primaryWorkspace && z.workspace_id === primaryWorkspace.id));
+    }
+    return zonasEntrega.filter(z => z.workspace_id === activeWorkspace.id);
+  }, [zonasEntrega, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredDespesasRecorrentes = useMemo(() => {
     if (!activeWorkspace) return despesasRecorrentes;
-    return despesasRecorrentes.filter(dr => dr.workspace_id === activeWorkspace.id || (!dr.workspace_id && isDefaultWorkspace));
-  }, [despesasRecorrentes, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return despesasRecorrentes.filter(dr => dr.workspace_id === activeWorkspace.id || !dr.workspace_id || (primaryWorkspace && dr.workspace_id === primaryWorkspace.id));
+    }
+    return despesasRecorrentes.filter(dr => dr.workspace_id === activeWorkspace.id);
+  }, [despesasRecorrentes, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredMetaItems = useMemo(() => {
     if (!activeWorkspace) return metaItems;
-    return metaItems.filter(m => m.workspace_id === activeWorkspace.id || (!m.workspace_id && isDefaultWorkspace));
-  }, [metaItems, activeWorkspace, isDefaultWorkspace]);
+    if (isPrimaryActive) {
+      return metaItems.filter(m => m.workspace_id === activeWorkspace.id || !m.workspace_id || (primaryWorkspace && m.workspace_id === primaryWorkspace.id));
+    }
+    return metaItems.filter(m => m.workspace_id === activeWorkspace.id);
+  }, [metaItems, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   const filteredCaixinhas = useMemo(() => {
     if (!activeWorkspace) return caixinhas;
     const isShared = activeWorkspace.compartilhar_caixinhas === true;
     if (isShared) {
-      return caixinhas.filter(c => !c.workspace_id || c.workspace_id === workspaces[0]?.id);
+      return caixinhas.filter(c => !c.workspace_id || (primaryWorkspace && c.workspace_id === primaryWorkspace.id));
     }
     const wsCaixinhas = caixinhas.filter(c => c.workspace_id === activeWorkspace.id);
     if (wsCaixinhas.length > 0) return wsCaixinhas;
-    if (isDefaultWorkspace) {
-      return caixinhas.filter(c => !c.workspace_id || c.workspace_id === activeWorkspace.id);
+    if (isPrimaryActive) {
+      return caixinhas.filter(c => !c.workspace_id || (primaryWorkspace && c.workspace_id === primaryWorkspace.id));
     }
     return [];
-  }, [caixinhas, activeWorkspace, isDefaultWorkspace, workspaces]);
+  }, [caixinhas, activeWorkspace, isPrimaryActive, primaryWorkspace]);
 
   return (
     <AppContext.Provider value={{
@@ -3028,12 +3170,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       // Workspaces
       workspaces,
+      primaryWorkspace,
+      isPrimaryActive,
       activeWorkspace,
       activeWorkspaceId,
       setActiveWorkspaceId,
       createWorkspace,
       updateWorkspace,
       deleteWorkspace,
+      transferirProdutoParaWorkspace,
 
       isAdmin,
       broadcasts,

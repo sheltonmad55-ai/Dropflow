@@ -36,6 +36,7 @@ export interface Workspace {
   plataforma_nome?: string;   // ex: "DroopCod", "Lojou", "Txapilog", "Zenofi", "Kiwify", "Shopify"
   cor?: string;
   icone?: string;
+  is_primary?: boolean; // Negócio principal original (herda registros históricos sem workspace_id)
   criado_em: string;
 }
 
@@ -62,6 +63,7 @@ export interface Profile {
   taxa_saque_padrao?: number;  // Valor padrão da taxa de saque (ex: 5% ou 50 MT)
   workspaces?: Workspace[];    // Lista de workspaces / negócios cadastrados
   active_workspace_id?: string; // ID do workspace ativo atualmente
+  primary_workspace_id?: string; // ID do workspace principal original
   anuncios_percent: number; // e.g. 50% of remainder
   lucro_percent: number;    // e.g. 50% of remainder
   metaDiaria?: number;

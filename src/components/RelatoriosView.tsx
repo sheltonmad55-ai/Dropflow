@@ -20,7 +20,13 @@ import {
   Bell, 
   Eye, 
   ChevronRight, 
-  X 
+  X,
+  SlidersHorizontal,
+  Wallet,
+  CircleDollarSign,
+  Info,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -48,10 +54,26 @@ export default function RelatoriosView() {
 
   const [subTab, setSubTab] = useState<'dashboard' | 'gerar' | 'historico'>('dashboard');
   const [period, setPeriod] = useState<'hoje' | 'semana' | 'mes' | 'todos'>('mes');
+  const [metricMode, setMetricMode] = useState<'comparativo' | 'lucro_puro' | 'caixa_restante'>(() => {
+    return (localStorage.getItem('dropflow_report_metric_mode') as any) || 'comparativo';
+  });
+  const [chartMetric, setChartMetric] = useState<'lucro_puro' | 'caixa_restante'>(() => {
+    return (localStorage.getItem('dropflow_report_chart_metric') as any) || 'lucro_puro';
+  });
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [generatingType, setGeneratingType] = useState<'diario' | 'semanal' | 'mensal'>('diario');
   const [reportFeedback, setReportFeedback] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleSetMetricMode = (mode: 'comparativo' | 'lucro_puro' | 'caixa_restante') => {
+    setMetricMode(mode);
+    localStorage.setItem('dropflow_report_metric_mode', mode);
+  };
+
+  const handleSetChartMetric = (metric: 'lucro_puro' | 'caixa_restante') => {
+    setChartMetric(metric);
+    localStorage.setItem('dropflow_report_chart_metric', metric);
+  };
 
   const currency = profile?.moeda || 'MT';
   const sonsAtivos = profile?.ativarSons !== false && profile?.somRelatorios !== false;
@@ -109,28 +131,36 @@ export default function RelatoriosView() {
   // Calculations
   const totalRevenue = filteredVendas.reduce((acc, curr) => acc + curr.valor_recebido, 0);
   
-  // Calculate specific product and shipping costs from vendas distribution
+  // Calculate specific product and direct shipping costs without doubling
   let totalSupplierCost = 0;
   let totalDeliveryCost = 0;
+  let totalTaxaVenda = 0;
 
   filteredVendas.forEach(v => {
     const prod = produtos.find(p => p.id === v.produto_id);
-    if (prod) {
-      totalSupplierCost += prod.preco_compra;
-    }
-    const suppCx = caixinhas.find(c => c.tipo === 'fornecedores');
-    const delivCx = caixinhas.find(c => c.tipo === 'delivery');
-    if (suppCx) totalSupplierCost += (v.distribuicao[suppCx.id] || 0);
-    if (delivCx) totalDeliveryCost += (v.distribuicao[delivCx.id] || 0);
+    const prodCost = v.custo_compra_total !== undefined ? v.custo_compra_total : (prod?.preco_compra || 0);
+    totalSupplierCost += prodCost;
+    totalDeliveryCost += (v.custo_entrega || 0);
+    totalTaxaVenda += (v.taxa_venda_total || 0);
   });
 
-  // Calculate actual operating expenses (despesas)
+  // Direct costs directly associated with making the sales
+  const totalDirectCosts = totalSupplierCost + totalDeliveryCost + totalTaxaVenda;
+
+  // 1. Pure Operating Profit generated directly by sales (before personal withdrawals and general expenses)
+  const pureOperatingProfit = totalRevenue - totalDirectCosts;
+  const pureOperatingMargin = totalRevenue > 0 ? Math.round((pureOperatingProfit / totalRevenue) * 100) : 0;
+
+  // 2. Total Operating Expenses & Withdrawals (despesas gerais, saques e retiradas)
   const totalOperatingExpenses = filteredDespesas.reduce((acc, curr) => acc + curr.valor, 0);
 
-  // Profit calculations
-  const totalCosts = totalSupplierCost + totalDeliveryCost + totalOperatingExpenses;
-  const netProfit = totalRevenue - totalCosts;
-  const profitMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
+  // 3. Net Cash Remaining in Hand (saldo restante no caixa após retiradas e gastos)
+  const netCashRemaining = pureOperatingProfit - totalOperatingExpenses;
+  const remainingMargin = totalRevenue > 0 ? Math.round((netCashRemaining / totalRevenue) * 100) : 0;
+
+  // Backwards compatible net profit for existing summary components
+  const netProfit = metricMode === 'lucro_puro' ? pureOperatingProfit : netCashRemaining;
+  const profitMargin = metricMode === 'lucro_puro' ? pureOperatingMargin : remainingMargin;
 
   // Products performance
   const productSalesMap: { [name: string]: { qty: number; rev: number } } = {};
@@ -192,19 +222,20 @@ export default function RelatoriosView() {
       
       let weekSupplierCost = 0;
       let weekDeliveryCost = 0;
-      const suppCx = caixinhas.find(c => c.tipo === 'fornecedores');
-      const delivCx = caixinhas.find(c => c.tipo === 'delivery');
+      let weekTaxa = 0;
       
       weekVendas.forEach(v => {
         const prod = produtos.find(p => p.id === v.produto_id);
-        if (prod) weekSupplierCost += prod.preco_compra;
-        if (suppCx) weekSupplierCost += (v.distribuicao[suppCx.id] || 0);
-        if (delivCx) weekDeliveryCost += (v.distribuicao[delivCx.id] || 0);
+        const prodCost = v.custo_compra_total !== undefined ? v.custo_compra_total : (prod?.preco_compra || 0);
+        weekSupplierCost += prodCost;
+        weekDeliveryCost += (v.custo_entrega || 0);
+        weekTaxa += (v.taxa_venda_total || 0);
       });
       
+      const weekDirectCosts = weekSupplierCost + weekDeliveryCost + weekTaxa;
+      const weekPureProfit = weekRevenue - weekDirectCosts;
       const weekOperatingExpenses = weekDespesas.reduce((acc, curr) => acc + curr.valor, 0);
-      const weekCosts = weekSupplierCost + weekDeliveryCost + weekOperatingExpenses;
-      const weekNetProfit = weekRevenue - weekCosts;
+      const weekNetCash = weekPureProfit - weekOperatingExpenses;
       
       const formatDayMonth = (date: Date) => {
         const d = date.getDate();
@@ -215,8 +246,10 @@ export default function RelatoriosView() {
       weeklyData.push({
         name: `${formatDayMonth(start)} - ${formatDayMonth(end)}`,
         Receita: weekRevenue,
-        Despesas: weekCosts,
-        Lucro: weekNetProfit,
+        Despesas: weekOperatingExpenses + weekDirectCosts,
+        LucroPuro: weekPureProfit,
+        SaldoRestante: weekNetCash,
+        Lucro: chartMetric === 'lucro_puro' ? weekPureProfit : weekNetCash,
       });
     }
     
@@ -356,53 +389,209 @@ export default function RelatoriosView() {
             </div>
           </div>
 
-          {/* Primary Financial Overview Cards */}
+          {/* Primary Financial Overview Cards with Configurable Metrics */}
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-5 space-y-4 shadow-sm" id="accounting_hero">
             <div className="flex justify-between items-center" id="accounting_hero_header">
-              <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase">Demonstração de Resultados (DRE)</span>
+              <span className="text-[10px] font-black tracking-wider text-slate-400 dark:text-slate-500 uppercase flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                Demonstração de Resultados (DRE)
+              </span>
               <span className="text-emerald-600 text-xs font-black flex items-center">
-                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Margem: {profitMargin}%
+                <TrendingUp className="w-3.5 h-3.5 mr-1" /> Margem: {metricMode === 'lucro_puro' ? pureOperatingMargin : remainingMargin}%
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4" id="accounting_breakdown">
-              <div className="space-y-1" id="dre_receita">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Faturamento Bruto</span>
-                <span className="text-lg font-black text-slate-900 dark:text-slate-100 block">
-                  {totalRevenue.toLocaleString()} <span className="text-xs text-slate-400 font-normal">{currency}</span>
-                </span>
+            {/* Metric Mode Configurator: Pure Profit vs Cash Remaining vs Complete DRE */}
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2" id="metric_configurator_bar">
+              <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-[10px] font-black uppercase tracking-wider">Configurar Exibição de Métricas:</span>
               </div>
-
-              <div className="space-y-1" id="dre_lucro">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Resultado Líquido</span>
-                <span className={`text-lg font-black block ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {netProfit.toLocaleString()} <span className="text-xs text-slate-400 font-normal">{currency}</span>
-                </span>
+              <div className="grid grid-cols-3 gap-1 w-full sm:w-auto" id="metric_mode_buttons">
+                {[
+                  { id: 'comparativo', label: 'Visão Completa DRE' },
+                  { id: 'lucro_puro', label: 'Lucro Puro (Vendas)' },
+                  { id: 'caixa_restante', label: 'Saldo em Caixa' },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleSetMetricMode(m.id as any)}
+                    className={`px-2.5 py-1.5 text-[10px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 text-center ${
+                      metricMode === m.id
+                        ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 font-black'
+                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/50 dark:border-slate-700/50 font-bold'
+                    }`}
+                  >
+                    {metricMode === m.id && <Check className="w-3 h-3 stroke-[3]" />}
+                    <span>{m.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
+
+            {/* Mode 1: Comparativo Completo (4 Cards) */}
+            {metricMode === 'comparativo' && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1" id="accounting_breakdown_comparativo">
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1" id="dre_receita_comp">
+                  <span className="text-[9px] font-black uppercase text-slate-400 dark:text-slate-500 block tracking-wider">1. Faturamento Bruto</span>
+                  <span className="text-base font-black text-slate-900 dark:text-slate-100 block">
+                    {totalRevenue.toLocaleString()} <span className="text-[10px] text-slate-400 font-normal">{currency}</span>
+                  </span>
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500 block truncate">Recebido de vendas</span>
+                </div>
+
+                <div className="bg-emerald-50/60 dark:bg-emerald-950/20 p-3 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/40 space-y-1" id="dre_lucro_puro_comp">
+                  <span className="text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-400 block tracking-wider flex items-center justify-between">
+                    <span>2. Lucro Puro Vendas</span>
+                    <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 px-1 py-0.2 rounded font-black">{pureOperatingMargin}%</span>
+                  </span>
+                  <span className="text-base font-black text-emerald-600 dark:text-emerald-400 block">
+                    {pureOperatingProfit.toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
+                  </span>
+                  <span className="text-[9px] text-emerald-700/80 dark:text-emerald-400/80 block truncate">Gerado antes de saques</span>
+                </div>
+
+                <div className="bg-rose-50/60 dark:bg-rose-950/20 p-3 rounded-2xl border border-rose-200/60 dark:border-rose-800/40 space-y-1" id="dre_despesas_comp">
+                  <span className="text-[9px] font-black uppercase text-rose-700 dark:text-rose-400 block tracking-wider">3. Saídas & Saques</span>
+                  <span className="text-base font-black text-rose-600 dark:text-rose-400 block">
+                    {totalOperatingExpenses.toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
+                  </span>
+                  <span className="text-[9px] text-rose-700/80 dark:text-rose-400/80 block truncate">Consumido / retirado</span>
+                </div>
+
+                <div className={`p-3 rounded-2xl border space-y-1 ${
+                  netCashRemaining >= 0 
+                    ? 'bg-blue-50/60 dark:bg-blue-950/20 border-blue-200/60 dark:border-blue-800/40' 
+                    : 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200/60 dark:border-rose-800/40'
+                }`} id="dre_saldo_restante_comp">
+                  <span className="text-[9px] font-black uppercase text-blue-700 dark:text-blue-400 block tracking-wider flex items-center justify-between">
+                    <span>4. Saldo em Caixa</span>
+                    <span className="text-[9px] bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 px-1 py-0.2 rounded font-black">{remainingMargin}%</span>
+                  </span>
+                  <span className={`text-base font-black block ${netCashRemaining >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600'}`}>
+                    {netCashRemaining.toLocaleString()} <span className="text-[10px] font-normal">{currency}</span>
+                  </span>
+                  <span className="text-[9px] text-blue-700/80 dark:text-blue-400/80 block truncate">Restante no bolso</span>
+                </div>
+              </div>
+            )}
+
+            {/* Mode 2: Foco no Lucro Puro das Vendas (Sem descontar saques/gastos) */}
+            {metricMode === 'lucro_puro' && (
+              <div className="space-y-3 pt-1" id="accounting_breakdown_puro">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1" id="dre_receita_puro">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold uppercase tracking-wider">Faturamento Bruto</span>
+                    <span className="text-xl font-black text-slate-900 dark:text-slate-100 block">
+                      {totalRevenue.toLocaleString()} <span className="text-xs text-slate-400 font-normal">{currency}</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1" id="dre_lucro_puro">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block font-bold uppercase tracking-wider">Lucro Líquido Real das Vendas</span>
+                      <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-black">
+                        Margem: {pureOperatingMargin}%
+                      </span>
+                    </div>
+                    <span className={`text-xl font-black block ${pureOperatingProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                      {pureOperatingProfit.toLocaleString()} <span className="text-xs text-slate-400 font-normal">{currency}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30 rounded-xl flex items-center gap-2 text-[10px] text-emerald-800 dark:text-emerald-300">
+                  <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    <strong>Métrica Isolada:</strong> Exibe exclusivamente o lucro líquido produzido pelas vendas (Preço − Fornecedores − Entregas − Taxas), sem descontar valores que consumiu ou sacou.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Mode 3: Foco no Saldo Restante em Caixa */}
+            {metricMode === 'caixa_restante' && (
+              <div className="space-y-3 pt-1" id="accounting_breakdown_caixa">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1" id="dre_receita_caixa">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-bold uppercase tracking-wider">Faturamento Bruto</span>
+                    <span className="text-xl font-black text-slate-900 dark:text-slate-100 block">
+                      {totalRevenue.toLocaleString()} <span className="text-xs text-slate-400 font-normal">{currency}</span>
+                    </span>
+                  </div>
+
+                  <div className="space-y-1" id="dre_lucro_caixa">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-blue-700 dark:text-blue-400 block font-bold uppercase tracking-wider">Saldo Restante em Caixa</span>
+                      <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-black">
+                        {remainingMargin}% em Caixa
+                      </span>
+                    </div>
+                    <span className={`text-xl font-black block ${netCashRemaining >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600'}`}>
+                      {netCashRemaining.toLocaleString()} <span className="text-xs text-slate-400 font-normal">{currency}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-xl flex items-center gap-2 text-[10px] text-blue-800 dark:text-blue-300">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span>
+                    <strong>Métrica de Caixa:</strong> Exibe o montante residual nas suas contas após descontar os custos diretos das vendas e todas as retiradas, saques e despesas efetuadas ({totalOperatingExpenses.toLocaleString()} {currency}).
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Progress gauge for costs vs revenue */}
             {totalRevenue > 0 && (
               <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800" id="cost_ratio_gauge">
                 <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Custos Totais ({Math.round(totalCosts / totalRevenue * 100)}%)</span>
-                  <span>Lucro Líquido ({profitMargin}%)</span>
+                  <span>Custos Diretos: {totalDirectCosts.toLocaleString()} {currency} ({Math.round(totalDirectCosts / totalRevenue * 100)}%)</span>
+                  <span>Lucro Puro Gerado: {pureOperatingProfit.toLocaleString()} {currency} ({pureOperatingMargin}%)</span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 flex overflow-hidden" id="gauge_bar">
-                  <div className="bg-rose-500 h-full transition-all duration-500" style={{ width: `${Math.min(100, totalCosts / totalRevenue * 100)}%` }}></div>
-                  <div className="bg-emerald-500 h-full transition-all duration-500" style={{ width: `${Math.max(0, 100 - (totalCosts / totalRevenue * 100))}%` }}></div>
+                  <div className="bg-rose-500 h-full transition-all duration-500" style={{ width: `${Math.min(100, (totalDirectCosts / totalRevenue) * 100)}%` }}></div>
+                  <div className="bg-emerald-500 h-full transition-all duration-500" style={{ width: `${Math.max(0, 100 - ((totalDirectCosts / totalRevenue) * 100))}%` }}></div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Recharts Chart: Revenue vs Costs Line Chart */}
+          {/* Recharts Chart: Revenue vs Costs Line Chart with Toggle */}
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-5 space-y-4 shadow-sm" id="relatorios_chart_wrapper">
-            <div className="flex justify-between items-center" id="relatorios_chart_header">
-              <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
-                <BarChart2 className="w-4 h-4 mr-1.5 text-emerald-600" /> Evolução do Lucro Líquido Semanal
-              </h3>
-              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Últimas 5 semanas</span>
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2" id="relatorios_chart_header">
+              <div>
+                <h3 className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center font-display">
+                  <BarChart2 className="w-4 h-4 mr-1.5 text-emerald-600" /> Evolução Semanal: {chartMetric === 'lucro_puro' ? 'Lucro Puro das Vendas' : 'Saldo Restante no Caixa'}
+                </h3>
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Últimas 5 semanas</span>
+              </div>
+              
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => handleSetChartMetric('lucro_puro')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    chartMetric === 'lucro_puro'
+                      ? 'bg-emerald-600 text-white shadow-sm font-black'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  Lucro Puro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetChartMetric('caixa_restante')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    chartMetric === 'caixa_restante'
+                      ? 'bg-blue-600 text-white shadow-sm font-black'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                  }`}
+                >
+                  Saldo Caixa
+                </button>
+              </div>
             </div>
 
             <div className="h-56 w-full text-xs" id="recharts_weekly_profit">
@@ -410,8 +599,8 @@ export default function RelatoriosView() {
                 <AreaChart data={weeklyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLucro" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.15}/>
-                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor={chartMetric === 'lucro_puro' ? "#10B981" : "#3B82F6"} stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor={chartMetric === 'lucro_puro' ? "#10B981" : "#3B82F6"} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
@@ -436,16 +625,16 @@ export default function RelatoriosView() {
                       fontSize: '11px',
                       fontFamily: 'Inter, sans-serif'
                     }}
-                    formatter={(value: any) => [`${Number(value).toLocaleString()} ${currency}`, 'Lucro Líquido']}
+                    formatter={(value: any) => [`${Number(value).toLocaleString()} ${currency}`, chartMetric === 'lucro_puro' ? 'Lucro Puro (Vendas)' : 'Saldo Restante (Caixa)'] }
                   />
                   <Area 
                     type="monotone" 
                     dataKey="Lucro" 
-                    stroke="#10B981" 
+                    stroke={chartMetric === 'lucro_puro' ? "#10B981" : "#3B82F6"} 
                     strokeWidth={2.5}
                     fillOpacity={1} 
                     fill="url(#colorLucro)" 
-                    activeDot={{ r: 6, strokeWidth: 0, fill: '#10B981' }}
+                    activeDot={{ r: 6, strokeWidth: 0, fill: chartMetric === 'lucro_puro' ? "#10B981" : "#3B82F6" }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
