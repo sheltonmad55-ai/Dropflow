@@ -50,13 +50,15 @@ interface LandingPageViewProps {
   onOpenAuth?: (initialMode?: 'login' | 'register') => void;
   paywallUser?: any;
   onCheckPayment?: () => Promise<boolean>;
+  onActivateTrial?: () => Promise<any>;
   onLogout?: () => void;
 }
 
-export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPayment, onLogout }: LandingPageViewProps) {
-  const { login, loginGoogle, register } = useApp();
+export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPayment, onActivateTrial, onLogout }: LandingPageViewProps) {
+  const { login, loginGoogle, register, activateTrial } = useApp();
 
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [activatingTrial, setActivatingTrial] = useState(false);
 
   const handleVerifyPayment = async () => {
     if (!onCheckPayment) return;
@@ -65,6 +67,19 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
       await onCheckPayment();
     } finally {
       setCheckingPayment(false);
+    }
+  };
+
+  const handleActivateTrial = async () => {
+    setActivatingTrial(true);
+    try {
+      if (onActivateTrial) {
+        await onActivateTrial();
+      } else if (activateTrial) {
+        await activateTrial();
+      }
+    } finally {
+      setActivatingTrial(false);
     }
   };
 
@@ -383,61 +398,102 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
               </button>
             )}
 
-            <a 
-              href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
-            >
-              <span>Assinar Pro (297 MT)</span>
-              <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
-            </a>
+            {paywallUser ? (
+              !paywallUser.trial_used ? (
+                <button 
+                  onClick={handleActivateTrial}
+                  disabled={activatingTrial}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{activatingTrial ? 'A ativar...' : 'Ativar 15 Dias Grátis 🎁'}</span>
+                </button>
+              ) : (
+                <a 
+                  href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5"
+                >
+                  <span>Assinar Pro (297 MT)</span>
+                  <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                </a>
+              )
+            ) : (
+              <button 
+                onClick={() => {
+                  setAuthMode('register');
+                  setShowAuthModal(true);
+                }}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs sm:text-sm px-4 sm:px-5 py-2.5 rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Testar 15 Dias Grátis 🚀</span>
+                <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </button>
+            )}
           </div>
         </div>
       </nav>
 
-      {/* Paywall Banner for authenticated users needing subscription */}
+      {/* Paywall Banner for authenticated users needing subscription or trial activation */}
       {paywallUser && (
         <div className="bg-gradient-to-r from-emerald-950/95 via-slate-900 to-amber-950/85 border-b border-emerald-500/30 p-4 sticky top-16 z-30 backdrop-blur-xl shadow-2xl">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 text-left w-full md:w-auto">
               <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-lg">
-                <Lock className="w-5 h-5" />
+                {!paywallUser.trial_used ? <Sparkles className="w-5 h-5 text-emerald-400" /> : <Lock className="w-5 h-5" />}
               </div>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="font-bold text-sm text-white">
-                    Assinatura Pendente: {paywallUser.nome || 'Lojista'}
+                    {!paywallUser.trial_used 
+                      ? `🎁 15 Dias Grátis Prontos para Ativação: ${paywallUser.nome || 'Lojista'}`
+                      : `Período de Teste Gratuito Terminado: ${paywallUser.nome || 'Lojista'}`}
                   </h4>
                   <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-mono border border-emerald-500/30 font-bold">
-                    🔒 Dados 100% Salvos na App
+                    {!paywallUser.trial_used ? '🎉 Não é obrigatório pagar agora' : '🔒 Teste Grátis Único Utilizado'}
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Conta conectada com sucesso ({paywallUser.email}). Para liberar o painel do DroopFlow, conclui o pagamento do plano Pro no EscalePay.
+                  {!paywallUser.trial_used 
+                    ? `Conta conectada com sucesso (${paywallUser.email}). Clica em Ativar 15 Dias Grátis para desbloquear na hora o teu painel financeiro, caixinhas e relatórios sem qualquer custo!`
+                    : `Conta conectada (${paywallUser.email}). Os teus 15 dias de teste grátis terminaram. Como cada conta tem direito a 1 teste gratuito, para desbloquear e continuar a utilizar o DroopFlow, conclui o pagamento do plano Pro no EscalePay.`}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 justify-end">
-              <a
-                href={`https://checkout.escalepay.com/9729350${paywallUser.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 md:flex-initial bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5"
-              >
-                <span>Pagar no EscalePay (297 MT)</span>
-                <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
-              </a>
-              {onCheckPayment && (
+              {!paywallUser.trial_used ? (
                 <button
-                  onClick={handleVerifyPayment}
-                  disabled={checkingPayment}
-                  className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  onClick={handleActivateTrial}
+                  disabled={activatingTrial}
+                  className="flex-1 md:flex-initial bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <RotateCcw className={`w-3.5 h-3.5 ${checkingPayment ? 'animate-spin' : ''}`} />
-                  <span>{checkingPayment ? 'A verificar...' : 'Já Paguei'}</span>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{activatingTrial ? 'A ativar...' : 'Ativar Meus 15 Dias Grátis 🎁'}</span>
                 </button>
+              ) : (
+                <>
+                  <a
+                    href={`https://checkout.escalepay.com/9729350${paywallUser.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 md:flex-initial bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span>Pagar no EscalePay (297 MT)</span>
+                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                  </a>
+                  {onCheckPayment && (
+                    <button
+                      onClick={handleVerifyPayment}
+                      disabled={checkingPayment}
+                      className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-4 py-2.5 rounded-xl border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${checkingPayment ? 'animate-spin' : ''}`} />
+                      <span>{checkingPayment ? 'A verificar...' : 'Já Paguei'}</span>
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -468,15 +524,39 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
 
         {/* Hero CTAs */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 mb-14">
-          <a 
-            href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base px-8 py-4 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <span>Garantir Acesso Pro Instantâneo</span>
-            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
-          </a>
+          {paywallUser ? (
+            !paywallUser.trial_used ? (
+              <button 
+                onClick={handleActivateTrial}
+                disabled={activatingTrial}
+                className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base px-8 py-4 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles className="w-5 h-5 text-slate-950" />
+                <span>{activatingTrial ? 'A ativar...' : 'Ativar Meus 15 Dias Grátis Agora 🎁'}</span>
+              </button>
+            ) : (
+              <a 
+                href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base px-8 py-4 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Renovar Assinatura Pro (297 MT)</span>
+                <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+              </a>
+            )
+          ) : (
+            <button 
+              onClick={() => {
+                setAuthMode('register');
+                setShowAuthModal(true);
+              }}
+              className="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base px-8 py-4 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Começar 15 Dias Grátis 🚀</span>
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+            </button>
+          )}
           
           <button 
             onClick={() => scrollTo('simulador')}
@@ -1324,10 +1404,13 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
               </div>
 
               {/* Price Display */}
-              <div className="flex items-baseline gap-2 pt-2 border-b border-white/5 pb-6">
+              <div className="flex items-baseline gap-2 pt-2 border-b border-white/5 pb-6 flex-wrap">
                 <span className="text-5xl sm:text-6xl font-black text-white font-mono">297</span>
                 <span className="text-emerald-400 font-black text-xl">MT</span>
                 <span className="text-slate-400 text-sm">/ mês</span>
+                <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 font-extrabold text-xs border border-emerald-500/30 ml-2">
+                  🎁 15 Dias 100% Grátis
+                </span>
               </div>
 
               {/* Features List */}
@@ -1372,19 +1455,42 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
 
               {/* SINGLE UNIFIED PRIMARY ACTION BUTTON */}
               <div className="pt-4 space-y-3">
-                <a 
-                  href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 text-center"
-                >
-                  <span>GARANTIR ACESSO PRO INSTANTÂNEO 🚀</span>
-                </a>
+                {paywallUser ? (
+                  !paywallUser.trial_used ? (
+                    <button 
+                      onClick={handleActivateTrial}
+                      disabled={activatingTrial}
+                      className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 text-center cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-5 h-5 text-slate-950" />
+                      <span>{activatingTrial ? 'A ATIVAR TESTE...' : 'ATIVAR MEUS 15 DIAS GRÁTIS AGORA 🎁'}</span>
+                    </button>
+                  ) : (
+                    <a 
+                      href={`https://checkout.escalepay.com/9729350${paywallUser?.email ? `?email=${encodeURIComponent(paywallUser.email)}` : ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 text-center"
+                    >
+                      <span>CONCLUIR ASSINATURA PRO (297 MT) 🚀</span>
+                    </a>
+                  )
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setAuthMode('register');
+                      setShowAuthModal(true);
+                    }}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm sm:text-base py-4 px-6 rounded-2xl shadow-xl shadow-emerald-500/25 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 text-center cursor-pointer"
+                  >
+                    <span>COMEÇAR TESTE DE 15 DIAS GRÁTIS 🎁</span>
+                  </button>
+                )}
 
                 {/* Subtle login text for existing users */}
                 <div className="text-center pt-2">
                   <p className="text-xs text-slate-400">
-                    Já realizaste o pagamento ou já tens conta?{' '}
+                    Já utilizaste o teste ou já tens conta?{' '}
                     <button
                       type="button"
                       onClick={() => {
@@ -1399,8 +1505,8 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
                 </div>
 
                 <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 pt-2 border-t border-white/5">
-                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Pagamento 100% Seguro via EscalePay • Ativação Imediata</span>
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>15 Dias Grátis • Sem Pagamento Obrigatório Agora • Acesso Imediato</span>
                 </div>
               </div>
 
@@ -1706,14 +1812,21 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
                 <Lock className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-black text-white font-display">
-                {authMode === 'login' ? 'Entrar no DroopFlow' : 'Criar Nova Conta'}
+                {authMode === 'login' ? 'Entrar no DroopFlow' : 'Criar Conta (15 Dias Grátis)'}
               </h3>
               <p className="text-xs text-slate-400">
                 {authMode === 'login' 
                   ? 'Acede ao teu painel financeiro e dados salvos.' 
-                  : 'Cria a tua conta para começar a organizar as tuas vendas.'}
+                  : 'Cria a tua conta e ativa 15 dias de teste grátis imediatamente!'}
               </p>
             </div>
+
+            {authMode === 'register' && (
+              <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-2xl flex items-center gap-2.5 text-xs text-emerald-300 font-semibold">
+                <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>🎁 15 Dias Grátis Incluídos • Sem pagamento obrigatório agora!</span>
+              </div>
+            )}
 
             {authError && (
               <div className="p-3 bg-rose-500/10 border border-rose-500/25 rounded-xl text-xs text-rose-300">
@@ -1765,7 +1878,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
                 disabled={authLoading}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
               >
-                <span>{authLoading ? 'A processar...' : authMode === 'login' ? 'Entrar na Conta' : 'Criar Conta'}</span>
+                <span>{authLoading ? 'A processar...' : authMode === 'login' ? 'Entrar na Conta' : 'Criar Conta e Ativar 15 Dias Grátis 🎁'}</span>
                 <ArrowRight className="w-4 h-4 stroke-[2.5]" />
               </button>
             </form>

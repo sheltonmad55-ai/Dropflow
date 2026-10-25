@@ -47,6 +47,7 @@ function AppContent() {
     isAdmin, 
     profile, 
     hasActiveAccess,
+    activateTrial,
     checkPaymentStatus,
     triggerMockUpgrade, 
     logout, 
@@ -133,6 +134,7 @@ function AppContent() {
     return (
       <LandingPageView 
         paywallUser={profile} 
+        onActivateTrial={activateTrial}
         onCheckPayment={checkPaymentStatus} 
         onLogout={logout} 
       />
@@ -288,6 +290,33 @@ function AppContent() {
             </span>
           </div>
         </header>
+
+        {/* Trial Days Remaining Banner if on Trial */}
+        {profile?.plano === 'trial' && (() => {
+          const trialExpiresAtStr = profile?.trial_expires_at;
+          const trialDaysRemaining = trialExpiresAtStr 
+            ? Math.max(0, Math.ceil((new Date(trialExpiresAtStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+            : 15;
+          return (
+            <div className="bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-amber-500/10 border-b border-emerald-500/20 px-6 py-2.5 flex items-center justify-between flex-wrap gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="font-bold text-slate-800 dark:text-slate-100">
+                  🎁 Teste Grátis Ativo:
+                </span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  Tens <strong className="text-emerald-600 dark:text-emerald-400 font-extrabold">{trialDaysRemaining} {trialDaysRemaining === 1 ? 'dia restante' : 'dias restantes'}</strong> de acesso completo a todas as ferramentas.
+                </span>
+              </div>
+              <button
+                onClick={() => setActiveTab('definicoes')}
+                className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+              >
+                Ver Detalhes do Plano →
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Main Tab View Contents (spans nicely on desktop) */}
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8 overflow-y-auto max-w-5xl w-full mx-auto pb-24 md:pb-8" id="app_main_content">

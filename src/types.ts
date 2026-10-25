@@ -25,6 +25,8 @@ export interface Profile {
   moeda: string;
   plano: 'trial' | 'pro' | 'expired';
   trial_expires_at: string; // ISO date
+  trial_used?: boolean; // Flag to ensure each account only gets 1 free 15-day trial
+  trial_activated_at?: string; // ISO date when 15-day trial was activated
   plano_expira_em?: string; // ISO date for subscription expiration
   plano_atualizado_em?: string;
   criado_em: string;

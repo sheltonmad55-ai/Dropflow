@@ -23,7 +23,7 @@ export default function AdminView() {
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
   const [newPlan, setNewPlan] = useState<'trial' | 'pro' | 'free'>('trial');
   const [isSuspended, setIsSuspended] = useState(false);
-  const [trialExpiresDays, setTrialExpiresDays] = useState('7');
+  const [trialExpiresDays, setTrialExpiresDays] = useState('15');
   
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
   const [isSendingAnnounce, setIsSendingAnnounce] = useState(false);

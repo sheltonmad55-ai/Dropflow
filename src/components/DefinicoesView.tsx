@@ -1297,12 +1297,14 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
                 </span>
                 <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-mono font-bold border border-emerald-500/20">
-                  {isAdmin ? '👑 Acesso Vitalício Admin' : isVipShelton ? '⭐ VIP Pro (90 Dias)' : '🚀 Plano Mensal Pro'}
+                  {isAdmin ? '👑 Acesso Vitalício Admin' : isVipShelton ? '⭐ VIP Pro (90 Dias)' : profile?.plano === 'trial' ? '🎁 Teste Grátis (15 Dias)' : '🚀 Plano Mensal Pro'}
                 </span>
               </div>
               
               <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.
+                {profile?.plano === 'trial' 
+                  ? 'Estás a usufruir de 15 dias de teste gratuito com acesso ilimitado a lançamentos, caixinhas e relatórios. Quando os 15 dias terminarem, é só assinar o plano Pro para continuar.' 
+                  : 'Estás a usufruir de lançamentos ilimitados, sincronização multi-dispositivo e relatórios completos.'}
               </p>
 
               {/* Data de Renovação e Aviso de Bloqueio */}
@@ -1314,7 +1316,8 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                       <strong className="text-emerald-600 dark:text-emerald-400">Sem data de expiração (Acesso irrestrito).</strong>
                     ) : (
                       <>
-                        Data de Renovação: <strong className="text-slate-900 dark:text-white">{dataRenovacaoTexto}</strong>
+                        {profile?.plano === 'trial' ? 'Expiração do Teste: ' : 'Data de Renovação: '}
+                        <strong className="text-slate-900 dark:text-white">{dataRenovacaoTexto}</strong>
                         <span className="ml-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
                           ({diasRestantesCalculados} {diasRestantesCalculados === 1 ? 'dia restante' : 'dias restantes'})
                         </span>
@@ -1329,7 +1332,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] shadow-sm transition-all shrink-0 justify-center"
                 >
-                  <span>Renovar no EscalePay</span>
+                  <span>{profile?.plano === 'trial' ? 'Assinar Plano Pro' : 'Renovar no EscalePay'}</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>

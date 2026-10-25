@@ -47,6 +47,7 @@ interface AppContextType {
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   triggerMockUpgrade: () => Promise<void>;
   hasActiveAccess: boolean;
+  activateTrial: (days?: number) => Promise<{ success: boolean; message: string }>;
   checkPaymentStatus: () => Promise<boolean>;
 
   // Admin and Metas/Relatorios
@@ -998,9 +999,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const isSheltonSam = normalizedEmail === 'sheltonsam2.0@gmail.com';
       const isAdminEmail = normalizedEmail === 'sheltonmad55@gmail.com';
 
-      // Plan calculation: Shelton Sam gets 3 months PRO, Admin gets PRO, others get active trial
+      // Plan calculation: Shelton Sam gets 3 months PRO, Admin gets PRO, others get 15 days active trial
       let initialPlano: 'pro' | 'trial' = 'trial';
-      let trialExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      let trialExpiry = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
 
       if (isSheltonSam) {
         initialPlano = 'pro';
@@ -1018,6 +1019,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         moeda: moeda || 'MT',
         plano: initialPlano,
         trial_expires_at: trialExpiry,
+        trial_used: true,
+        trial_activated_at: new Date().toISOString(),
+        plano_expira_em: trialExpiry,
         anuncios_percent: 50,
         lucro_percent: 50,
         criado_em: new Date().toISOString()
@@ -1103,7 +1107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const isAdminEmail = googleEmail === 'sheltonmad55@gmail.com';
 
         let initialPlano: 'pro' | 'trial' = 'trial';
-        let trialExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+        let trialExpiry = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
 
         if (isSheltonSam) {
           initialPlano = 'pro';
@@ -1121,6 +1125,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           moeda: 'MT',
           plano: initialPlano,
           trial_expires_at: trialExpiry,
+          trial_used: true,
+          trial_activated_at: new Date().toISOString(),
+          plano_expira_em: trialExpiry,
           anuncios_percent: 50,
           lucro_percent: 50,
           criado_em: new Date().toISOString()
@@ -2451,9 +2458,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Check expiration date: if expired, block access until renewal
   const expiryDateStr = profile?.trial_expires_at || profile?.plano_expira_em;
   const isExpired = (!isAdminUser && expiryDateStr) ? (new Date() > new Date(expiryDateStr)) : false;
+  const isTrialActive = profile?.plano === 'trial' && !isExpired && Boolean(profile?.trial_expires_at);
 
-  // Only VIP (while not expired), Admin, and active Pro (while not expired) have access to the SaaS app!
-  const hasActiveAccess = isAdminUser || (!isExpired && (isSheltonSam || isPro));
+  // VIP (while not expired), Admin, active Pro (while not expired), or active 15-day Trial have access!
+  const hasActiveAccess = !profile?.suspenso && (isAdminUser || (!isExpired && (isSheltonSam || isPro || isTrialActive)));
+
+  async function activateTrial(days: number = 15): Promise<{ success: boolean; message: string }> {
+    const user = auth.currentUser;
+    if (!user) {
+      return { success: false, message: 'Inicie sessão ou crie uma conta para ativar os 15 dias grátis.' };
+    }
+
+    const email = (user.email || profile?.email || '').toLowerCase().trim();
+    if (email === 'sheltonsam2.0@gmail.com' || email === 'sheltonmad55@gmail.com' || profile?.id === 'admin') {
+      return { success: true, message: 'A sua conta já tem acesso total irrestrito!' };
+    }
+
+    // Se já é Pro ativo, não precisa passar pelo teste
+    if (profile?.plano === 'pro' && profile?.plano_expira_em && new Date() <= new Date(profile.plano_expira_em)) {
+      return { success: true, message: 'Já possui o plano Pro ativo!' };
+    }
+
+    // Regra: cada conta só terá um teste grátis por vez
+    // Se a conta já usou o teste (trial_used = true) e o período expirou, impede reativação e manda pagar
+    if (profile?.trial_used && profile?.trial_expires_at && new Date() > new Date(profile.trial_expires_at)) {
+      triggerToast(
+        'Teste Grátis Esgotado ⚠️', 
+        'Esta conta já usufruiu dos 15 dias de teste grátis. Para continuar a usar o DroopFlow, conclua o pagamento do plano Pro no EscalePay.', 
+        'warning'
+      );
+      return { 
+        success: false, 
+        message: 'Esta conta já utilizou o teste gratuito de 15 dias. Por favor, conclua a assinatura.' 
+      };
+    }
+
+    // Se o teste já está ativo e ainda válido
+    if (profile?.plano === 'trial' && profile?.trial_expires_at && new Date() <= new Date(profile.trial_expires_at)) {
+      return { success: true, message: 'O teu teste de 15 dias já se encontra ativo!' };
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+    const updates: Partial<Profile> = {
+      plano: 'trial',
+      trial_used: true,
+      trial_activated_at: now.toISOString(),
+      trial_expires_at: expiresAt,
+      plano_expira_em: expiresAt,
+      plano_atualizado_em: now.toISOString()
+    };
+
+    try {
+      await updateDoc(doc(fDb, 'profiles', user.uid), updates);
+      if (profile) {
+        setProfile({ ...profile, ...updates });
+      }
+      await db.putItem('profiles', { ...(profile || {}), ...updates, id: user.uid });
+      triggerToast(
+        '15 Dias Grátis Ativados! 🎉', 
+        `O teu teste gratuito foi ativado com sucesso! Tens acesso completo ao DroopFlow até ${new Date(expiresAt).toLocaleDateString('pt-PT')}.`, 
+        'success'
+      );
+      return { success: true, message: '15 dias ativados com sucesso!' };
+    } catch (err: any) {
+      console.warn('Erro ao atualizar profile no Firestore, atualizando localmente:', err);
+      if (profile) {
+        const fallbackProfile = { ...profile, ...updates };
+        setProfile(fallbackProfile);
+        await db.putItem('profiles', fallbackProfile);
+      }
+      triggerToast(
+        '15 Dias Grátis Ativados! 🎉', 
+        'O teu acesso de teste de 15 dias foi liberado.', 
+        'success'
+      );
+      return { success: true, message: '15 dias ativados localmente.' };
+    }
+  }
 
   async function checkPaymentStatus(): Promise<boolean> {
     const user = auth.currentUser;
@@ -2505,6 +2587,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isLoadingAuth,
       hasActiveAccess,
+      activateTrial,
       checkPaymentStatus,
       login,
       register,

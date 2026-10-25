@@ -71,7 +71,7 @@ export async function sendNotification(title: string, body: string, options?: No
     }
   };
 
-  const notificationOptions: NotificationOptions = {
+  const notificationOptions: any = {
     body,
     icon: getAbsoluteUrl('/icons/icon-192.png'),
     badge: getAbsoluteUrl('/icons/badge-96.png'),
