@@ -208,6 +208,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       case 'ZAR':
         return `R ${num.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      case 'AOA':
+      case 'KZ':
+        return `${num.toLocaleString('pt-AO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} Kz`;
       case 'EUR':
         return `€ ${num.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       case 'MT':

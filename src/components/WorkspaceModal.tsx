@@ -29,6 +29,7 @@ const MOEDAS_DISPONIVEIS = [
   { id: 'BRL', simbolo: 'R$', nome: 'Real Brasileiro', bandeira: '🇧🇷' },
   { id: 'ZAR', simbolo: 'R', nome: 'Rand Sul-Africano', bandeira: '🇿🇦' },
   { id: 'MT', simbolo: 'MT', nome: 'Metical Moçambicano', bandeira: '🇲🇿' },
+  { id: 'AOA', simbolo: 'Kz', nome: 'Kwanza Angolano', bandeira: '🇦🇴' },
   { id: 'EUR', simbolo: '€', nome: 'Euro', bandeira: '🇪🇺' },
 ];
 
@@ -45,10 +46,10 @@ const CORES_PALETA = [
 
 const PLATAFORMAS_SUGESTOES = [
   'DroopCod',
-  'Lojoo',
+  'Lojou',
+  'Txapilog',
   'Zenofi',
   'Kiwify',
-  'ChatPilog',
   'Hotmart',
   'Shopify',
   'Yampi',
@@ -140,7 +141,7 @@ export default function WorkspaceModal({
 
   const handleSelectPlataforma = (plat: string) => {
     setPlataformaNome(plat);
-    if (plat === 'Lojoo') {
+    if (plat === 'Lojou' || plat === 'Lojoo') {
       setTaxaVendaAtiva(true);
       setTaxaVendaTipo('combinado');
       setTaxaVendaPadrao('5');
@@ -148,6 +149,15 @@ export default function WorkspaceModal({
       setTaxaSaqueTipo('fixo');
       setTaxaSaquePadrao('50');
       setMoeda('MT');
+    } else if (plat === 'Txapilog' || plat === 'ChatPilog') {
+      setTaxaVendaAtiva(true);
+      setTaxaVendaTipo('combinado');
+      setTaxaVendaPadrao('5');
+      setTaxaVendaFixaPadrao('10');
+      setTaxaSaqueTipo('fixo');
+      setTaxaSaquePadrao('50');
+      setMoeda('MT');
+      setCustoEnvioAtivo(true);
     } else if (plat === 'Kiwify') {
       setTaxaVendaAtiva(true);
       setTaxaVendaTipo('combinado');
@@ -359,7 +369,7 @@ export default function WorkspaceModal({
               type="text"
               value={plataformaNome}
               onChange={(e) => setPlataformaNome(e.target.value)}
-              placeholder="Ex: DroopCod, Zenofi, Kiwify, ChatPilog, Shopify"
+              placeholder="Ex: DroopCod, Lojou, Txapilog, Zenofi, Kiwify, Shopify"
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl px-3.5 py-2.5 text-xs text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
             {/* Quick chips */}
@@ -420,7 +430,7 @@ export default function WorkspaceModal({
                     Taxa da Plataforma / Gateway por Venda
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Desconta taxa por transação (ex: 5% + 10 MT Lojoo, 8.99% + 2.49 Kiwify)
+                    Desconta taxa por transação (ex: 5% + 10 MT Lojou, 8.99% + 2.49 Kiwify)
                   </p>
                 </div>
               </div>
@@ -464,7 +474,7 @@ export default function WorkspaceModal({
                         taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white shadow-xs' : 'text-purple-700 dark:text-purple-300'
                       }`}
                     >
-                      % + {moeda} (Lojoo)
+                      % + {moeda} (Lojou)
                     </button>
                   </div>
                 </div>
@@ -550,7 +560,7 @@ export default function WorkspaceModal({
                   <p className="text-[10px] text-slate-500">
                     {taxaSaqueTipo === 'percentual' 
                       ? 'Desconto percentual na retirada (ex: 5%)'
-                      : `Taxa fixa deduzida por saque (ex: 50 ${moeda} Lojoo)`}
+                      : `Taxa fixa deduzida por saque (ex: 50 ${moeda} Lojou)`}
                   </p>
                 </div>
               </div>

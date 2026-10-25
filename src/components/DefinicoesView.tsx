@@ -722,6 +722,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 <option value="BRL">🇧🇷 BRL (R$) - Real Brasileiro</option>
                 <option value="ZAR">🇿🇦 ZAR (R) - Rand Sul-Africano</option>
                 <option value="MT">🇲🇿 MT - Metical Moçambicano</option>
+                <option value="AOA">🇦🇴 AOA (Kz) - Kwanza Angolano</option>
                 <option value="EUR">🇪🇺 EUR (€) - Euros</option>
               </select>
             </div>
@@ -733,6 +734,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                   { id: 'BRL', flag: '🇧🇷', sym: 'R$', name: 'Real' },
                   { id: 'ZAR', flag: '🇿🇦', sym: 'R', name: 'Rand' },
                   { id: 'MT', flag: '🇲🇿', sym: 'MT', name: 'Metical' },
+                  { id: 'AOA', flag: '🇦🇴', sym: 'Kz', name: 'Kwanza' },
                   { id: 'EUR', flag: '🇪🇺', sym: '€', name: 'Euro' },
                 ].map((item) => (
                   <button
@@ -884,7 +886,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                         onClick={() => setTaxaVendaTipo('combinado')}
                         className={`px-2 py-1 text-[10px] font-bold rounded ${taxaVendaTipo === 'combinado' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
                       >
-                        % + {moeda} (Lojoo)
+                        % + {moeda} (Lojou)
                       </button>
                     </div>
 
@@ -944,7 +946,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                     🏧 Taxa de Saque / Payout da Plataforma
                   </label>
                   <p className="text-[10px] text-slate-400 leading-relaxed">
-                    Taxa cobrada pela plataforma (ex: Lojoo 50 {moeda} fixo, ou percentual padrão) ao transferir o saldo para a sua conta bancária.
+                    Taxa cobrada pela plataforma (ex: Lojou 50 {moeda} fixo, ou percentual padrão) ao transferir o saldo para a sua conta bancária.
                   </p>
                 </div>
 
@@ -962,7 +964,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                       onClick={() => setTaxaSaqueTipo('fixo')}
                       className={`px-2 py-1 text-[10px] font-bold rounded ${taxaSaqueTipo === 'fixo' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
                     >
-                      {moeda} (Fixo - ex: Lojoo)
+                      {moeda} (Fixo - ex: Lojou)
                     </button>
                   </div>
 

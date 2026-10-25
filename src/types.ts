@@ -24,15 +24,15 @@ export interface Workspace {
   user_id: string;
   nome: string; // Ex: "DroopCod", "Zenofi PLR", "Loja de Cabelos", "Pessoal & Investimentos"
   tipo: TipoNegocio;
-  moeda: string; // 'MT' | 'USD' | 'BRL' | 'ZAR' | 'EUR'
+  moeda: string; // 'MT' | 'AOA' | 'USD' | 'BRL' | 'ZAR' | 'EUR'
   custo_envio_ativo: boolean; // se tem custos de entrega/envio
   taxa_venda_ativa: boolean;  // se tem taxa percentual ou fixa por venda (gateway/plataforma)
   taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado';
   taxa_venda_padrao?: number; // taxa por venda (ex: 5% ou 10%)
-  taxa_venda_fixa_padrao?: number; // taxa fixa complementar quando combinado (ex: +10 MT na Lojoo)
+  taxa_venda_fixa_padrao?: number; // taxa fixa complementar quando combinado (ex: +10 MT na Lojou)
   taxa_saque_tipo?: 'percentual' | 'fixo'; // '%' ou fixo
   taxa_saque_padrao?: number; // taxa por saque/retirada (ex: 5% ou 50 MT)
-  plataforma_nome?: string;   // ex: "DroopCod", "Zenofi", "Kiwify", "ChatPilog", "Shopify"
+  plataforma_nome?: string;   // ex: "DroopCod", "Lojou", "Txapilog", "Zenofi", "Kiwify", "Shopify"
   cor?: string;
   icone?: string;
   criado_em: string;
@@ -197,7 +197,7 @@ export interface Venda {
   zona_entrega_id?: string; // opcional para infoprodutos / quando custo de envio está desligado
   taxa_venda_tipo?: 'percentual' | 'fixo' | 'combinado'; // tipo de taxa da plataforma/gateway (% ou valor fixo ou combinado)
   taxa_venda_valor?: number; // porcentagem ou valor fixo configurado na venda
-  taxa_venda_fixa?: number;  // valor fixo adicional quando combinado (ex: +10 MT na Lojoo)
+  taxa_venda_fixa?: number;  // valor fixo adicional quando combinado (ex: +10 MT na Lojou)
   taxa_venda_total?: number; // valor final deduzido na moeda local (MT)
   forma_pagamento: string;
   observacao: string;

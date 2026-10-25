@@ -743,7 +743,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
                       taxaVendaTipo === 'combinado' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    % + {currency} (Lojoo)
+                    % + {currency} (Lojou)
                   </button>
                 </div>
               </div>
