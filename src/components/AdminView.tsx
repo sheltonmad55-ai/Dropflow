@@ -61,6 +61,48 @@ export default function AdminView() {
   const [editNome, setEditNome] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [isNormalizing, setIsNormalizing] = useState(false);
+  const [normalizeStatus, setNormalizeStatus] = useState('');
+
+  const handleNormalizarPlanos = async () => {
+    const pros = allProfiles.filter(u => {
+      const email = (u.email || '').toLowerCase().trim();
+      return u.plano === 'pro' && email !== 'sheltonsam2.0@gmail.com' && email !== 'sheltonmad55@gmail.com';
+    });
+
+    if (pros.length === 0) {
+      alert("Não existem contas indevidas no plano PRO. Todas as outras contas já estão em TRIAL.");
+      return;
+    }
+
+    const confirmRun = window.confirm(
+      `Existem ${pros.length} conta(s) com plano PRO antigo (como droopstore, Mario Martinho, Sam Outlier, etc).\n\nDesejas convertê-las para TRIAL (15 dias de teste) agora no Firestore?\n\nA tua conta (sheltonsam2.0@gmail.com) e a conta Admin permanecerão intactas.`
+    );
+    if (!confirmRun) return;
+
+    setIsNormalizing(true);
+    setNormalizeStatus('A atualizar contas no Firestore...');
+    try {
+      const trialExpiry = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
+      let updatedCount = 0;
+
+      for (const u of pros) {
+        await updateUserProfileByAdmin(u.id, {
+          plano: 'trial',
+          trial_expires_at: trialExpiry
+        });
+        updatedCount++;
+      }
+
+      setNormalizeStatus(`Sucesso! ${updatedCount} conta(s) convertida(s) de PRO para TRIAL.`);
+      setTimeout(() => setNormalizeStatus(''), 5000);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao normalizar planos.');
+    } finally {
+      setIsNormalizing(false);
+    }
+  };
   
   // Admin Audit Logs
   const [adminLogs, setAdminLogs] = useState<any[]>([]);
@@ -399,7 +441,17 @@ export default function AdminView() {
           </p>
         </div>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleNormalizarPlanos}
+            disabled={isNormalizing}
+            className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold py-2.5 px-3.5 rounded-2xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            title="Converte contas antigas PRO para TRIAL, preservando sheltonsam2.0@gmail.com"
+          >
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>{isNormalizing ? 'A converter...' : '⚡ Corrigir PRO para TRIAL'}</span>
+          </button>
+
           <button
             onClick={handleExportUsersCsv}
             className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold py-2.5 px-3.5 rounded-2xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer"
@@ -415,6 +467,13 @@ export default function AdminView() {
           </span>
         </div>
       </div>
+
+      {normalizeStatus && (
+        <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-2xl text-xs font-bold flex items-center space-x-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+          <span>{normalizeStatus}</span>
+        </div>
+      )}
 
       {/* ORGANIC CAMPAIGN TRACKING HERO BANNER */}
       <div className="p-5 rounded-3xl bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white shadow-xl relative overflow-hidden">
