@@ -185,15 +185,39 @@ function AppContent() {
             <span className="text-base font-black text-slate-900 dark:text-slate-50 tracking-tight font-display">DroopFlow</span>
           </div>
 
-          {/* Alternador de Negócios / Workspace Switcher */}
-          <WorkspaceSwitcher
-            workspaces={workspaces}
-            activeWorkspace={activeWorkspace}
-            onSwitchWorkspace={setActiveWorkspaceId}
-            onOpenCreateModal={handleOpenCreateWorkspace}
-            onOpenEditModal={handleOpenEditWorkspace}
-            variant="sidebar"
-          />
+          {/* Alternador de Negócios OU Cartão de Super Admin */}
+          {activeTab === 'admin' ? (
+            <div className="p-3.5 bg-gradient-to-br from-indigo-950/90 via-slate-900 to-indigo-900/70 border border-indigo-500/30 rounded-2xl shadow-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/40">
+                    <Shield className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-black text-white block tracking-tight">Super Admin Master</span>
+                    <span className="text-[9px] font-bold text-indigo-300 uppercase tracking-wider block">Sistema Central</span>
+                  </div>
+                </div>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Sistema Online" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className="w-full text-center py-1.5 px-2.5 bg-white/10 hover:bg-white/15 text-indigo-200 hover:text-white rounded-xl text-[10px] font-black transition-colors flex items-center justify-center space-x-1.5 border border-white/5 cursor-pointer"
+              >
+                <span>← Voltar às Minhas Lojas</span>
+              </button>
+            </div>
+          ) : (
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              activeWorkspace={activeWorkspace}
+              onSwitchWorkspace={setActiveWorkspaceId}
+              onOpenCreateModal={handleOpenCreateWorkspace}
+              onOpenEditModal={handleOpenEditWorkspace}
+              variant="sidebar"
+            />
+          )}
  
           {/* Navigation Links */}
           <nav className="space-y-1" id="sidebar_nav">
@@ -251,23 +275,43 @@ function AppContent() {
         </div>
 
         {/* Desktop Quick Actions Panel inside Sidebar */}
-        <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800" id="sidebar_actions">
-          <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block px-1">Registos Rápidos</span>
-          <button
-            onClick={() => setIsVendaOpen(true)}
-            className="w-full bg-emerald-600 text-white font-extrabold py-3 px-4 rounded-xl text-xs hover:bg-emerald-500 transition-colors shadow-md shadow-emerald-600/10 flex items-center justify-center space-x-2 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Registar Venda</span>
-          </button>
-          <button
-            onClick={() => setIsDespesaOpen(true)}
-            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold py-3 px-4 rounded-xl text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-center space-x-2 cursor-pointer"
-          >
-            <ArrowDownRight className="w-4 h-4 text-rose-500 stroke-[2.5]" />
-            <span>Registar Saída</span>
-          </button>
-        </div>
+        {activeTab === 'admin' ? (
+          <div className="space-y-2 pt-4 border-t border-slate-100 dark:border-slate-800" id="sidebar_actions">
+            <span className="text-[10px] font-black tracking-wider text-indigo-400 uppercase block px-1">Segurança do Sistema</span>
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/80 to-purple-50/40 dark:from-indigo-950/40 dark:to-slate-900 border border-indigo-200/60 dark:border-indigo-800/40 text-[10px] space-y-1.5 shadow-sm">
+              <div className="flex items-center justify-between font-black text-indigo-700 dark:text-indigo-300">
+                <span className="flex items-center space-x-1.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Modo Master Ativo</span>
+                </span>
+                <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold uppercase">
+                  ROOT
+                </span>
+              </div>
+              <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-snug">
+                Tens controlo total sobre planos de subscritores, transmissão de comunicados e auditoria global.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800" id="sidebar_actions">
+            <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase block px-1">Registos Rápidos</span>
+            <button
+              onClick={() => setIsVendaOpen(true)}
+              className="w-full bg-emerald-600 text-white font-extrabold py-3 px-4 rounded-xl text-xs hover:bg-emerald-500 transition-colors shadow-md shadow-emerald-600/10 flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Registar Venda</span>
+            </button>
+            <button
+              onClick={() => setIsDespesaOpen(true)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold py-3 px-4 rounded-xl text-xs hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center justify-center space-x-2 cursor-pointer"
+            >
+              <ArrowDownRight className="w-4 h-4 text-rose-500 stroke-[2.5]" />
+              <span>Registar Saída</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* MAIN CONTAINER: Responsive width & Layout */}
@@ -284,29 +328,46 @@ function AppContent() {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <span className="text-sm md:text-base font-black text-slate-900 dark:text-slate-50 font-display">
-              {activeTab === 'dashboard' ? 'Painel de Controlo' :
-               activeTab === 'caixinhas' ? 'Gestão de Pockets' :
-               activeTab === 'vendas' ? 'Lista de Vendas' :
-               activeTab === 'campanhas' ? 'Campanhas de Anúncios' :
-               activeTab === 'relatorios' ? 'Relatórios Financeiros' :
-               activeTab === 'metas' ? 'Metas de Vendas' :
-               activeTab === 'admin' ? 'Painel de Admin' : 'Configurações'}
-            </span>
+            {activeTab === 'admin' ? (
+              <div className="flex items-center space-x-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600/20 text-indigo-500 border border-indigo-500/30 flex items-center justify-center">
+                  <Shield className="w-4 h-4 stroke-[2.5]" />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm md:text-base font-black text-slate-900 dark:text-slate-50 font-display">
+                    Painel Master de Administração
+                  </span>
+                  <span className="hidden sm:inline px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    SUPER ADMIN
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <span className="text-sm md:text-base font-black text-slate-900 dark:text-slate-50 font-display">
+                {activeTab === 'dashboard' ? 'Painel de Controlo' :
+                 activeTab === 'caixinhas' ? 'Gestão de Pockets' :
+                 activeTab === 'vendas' ? 'Lista de Vendas' :
+                 activeTab === 'campanhas' ? 'Campanhas de Anúncios' :
+                 activeTab === 'relatorios' ? 'Relatórios Financeiros' :
+                 activeTab === 'metas' ? 'Metas de Vendas' : 'Configurações'}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center space-x-2" id="header_actions">
             {/* Workspace Switcher in Mobile Header */}
-            <div className="md:hidden">
-              <WorkspaceSwitcher
-                workspaces={workspaces}
-                activeWorkspace={activeWorkspace}
-                onSwitchWorkspace={setActiveWorkspaceId}
-                onOpenCreateModal={handleOpenCreateWorkspace}
-                onOpenEditModal={handleOpenEditWorkspace}
-                variant="header"
-              />
-            </div>
+            {activeTab !== 'admin' && (
+              <div className="md:hidden">
+                <WorkspaceSwitcher
+                  workspaces={workspaces}
+                  activeWorkspace={activeWorkspace}
+                  onSwitchWorkspace={setActiveWorkspaceId}
+                  onOpenCreateModal={handleOpenCreateWorkspace}
+                  onOpenEditModal={handleOpenEditWorkspace}
+                  variant="header"
+                />
+              </div>
+            )}
 
             {/* Modo Foco / Privacidade Quick Toggle */}
             <button
@@ -325,20 +386,26 @@ function AppContent() {
             </button>
 
             {/* Active indicator */}
-            <span className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-100 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700 px-2.5 py-1 rounded-full uppercase tracking-wider">
-              {activeTab === 'dashboard' ? 'Início' :
-               activeTab === 'caixinhas' ? 'Pockets' :
-               activeTab === 'vendas' ? 'Operações' :
-               activeTab === 'campanhas' ? 'Campanhas' :
-               activeTab === 'relatorios' ? 'Relatórios' :
-               activeTab === 'metas' ? 'Metas' :
-               activeTab === 'admin' ? 'Admin' : 'Opções'}
-            </span>
+            {activeTab === 'admin' ? (
+              <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-200 dark:text-indigo-300 dark:bg-indigo-950/60 dark:border-indigo-800/80 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center space-x-1">
+                <Shield className="w-3 h-3 stroke-[3]" />
+                <span>ADMIN MASTER</span>
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold text-slate-600 bg-slate-50 border border-slate-100 dark:text-slate-300 dark:bg-slate-800 dark:border-slate-700 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                {activeTab === 'dashboard' ? 'Início' :
+                 activeTab === 'caixinhas' ? 'Pockets' :
+                 activeTab === 'vendas' ? 'Operações' :
+                 activeTab === 'campanhas' ? 'Campanhas' :
+                 activeTab === 'relatorios' ? 'Relatórios' :
+                 activeTab === 'metas' ? 'Metas' : 'Opções'}
+              </span>
+            )}
           </div>
         </header>
 
-        {/* Trial Days Remaining Banner if on Trial */}
-        {profile?.plano === 'trial' && (() => {
+        {/* Trial Days Remaining Banner if on Trial (Hidden in Admin) */}
+        {profile?.plano === 'trial' && activeTab !== 'admin' && (() => {
           const trialExpiresAtStr = profile?.trial_expires_at;
           const trialDaysRemaining = trialExpiresAtStr 
             ? Math.max(0, Math.ceil((new Date(trialExpiresAtStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
@@ -364,8 +431,8 @@ function AppContent() {
           );
         })()}
 
-        {/* Niche Configuration Prompt Banner (if not yet chosen) */}
-        {!profile?.tipo_negocio && (
+        {/* Niche Configuration Prompt Banner (if not yet chosen and not on Admin) */}
+        {!profile?.tipo_negocio && activeTab !== 'admin' && (
           <div className="bg-gradient-to-r from-purple-500/15 via-indigo-500/10 to-emerald-500/10 border-b border-purple-500/20 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs animate-fade-in" id="niche_setup_prompt">
             <div className="space-y-0.5">
               <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">

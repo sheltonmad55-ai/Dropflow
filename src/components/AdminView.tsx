@@ -588,9 +588,15 @@ export default function AdminView() {
                                   </span>
                                 )}
                               </div>
-                              <span className="text-[10px] text-slate-400 block truncate max-w-[160px]">
-                                {user.email || user.id}
-                              </span>
+                              {user.email ? (
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate max-w-[170px]" title={user.email}>
+                                  {user.email}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] text-slate-400 dark:text-slate-500 italic block">
+                                  Conta Direta (sem e-mail)
+                                </span>
+                              )}
                               <span className="text-[9px] text-slate-400">
                                 {user.pais || 'Moçambique'} ({user.moeda || 'MT'})
                               </span>
@@ -811,7 +817,9 @@ export default function AdminView() {
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-5 space-y-4 border border-slate-100 dark:border-slate-800 shadow-2xl animate-scale-in">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-2">
               <h4 className="font-black text-slate-900 dark:text-slate-50 text-sm">Ajustar Utilizador</h4>
-              <p className="text-[10px] text-slate-500 truncate">{selectedUser.nome} ({selectedUser.email || selectedUser.id})</p>
+              <p className="text-[10px] text-slate-500 truncate">
+                {selectedUser.nome} {selectedUser.email ? `(${selectedUser.email})` : '• Conta Direta'}
+              </p>
               <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
                 Entrou em: {formatExactDateTime(selectedUser.criado_em)}
               </p>
