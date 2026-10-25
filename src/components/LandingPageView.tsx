@@ -97,6 +97,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authNome, setAuthNome] = useState('');
+  const [authNicho, setAuthNicho] = useState<'ecommerce_drop' | 'plr_infoproduto' | 'hibrido'>('ecommerce_drop');
   const [authError, setAuthError] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -265,7 +266,7 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
       if (authMode === 'login') {
         await login(authEmail, authPassword);
       } else {
-        await register(authEmail, authPassword, authNome);
+        await register(authEmail, authPassword, authNome, 'Moçambique', 'MT', authNicho);
       }
       setShowAuthModal(false);
     } catch (err: any) {
@@ -1836,17 +1837,81 @@ export default function LandingPageView({ onOpenAuth, paywallUser, onCheckPaymen
 
             <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-xs">
               {authMode === 'register' && (
-                <div>
-                  <label className="font-bold text-slate-300 block mb-1">O Teu Nome / Loja</label>
-                  <input
-                    type="text"
-                    required
-                    value={authNome}
-                    onChange={(e) => setAuthNome(e.target.value)}
-                    placeholder="Ex: Sam Outlier"
-                    className="w-full bg-slate-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-emerald-500"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1">O Teu Nome / Loja</label>
+                    <input
+                      type="text"
+                      required
+                      value={authNome}
+                      onChange={(e) => setAuthNome(e.target.value)}
+                      placeholder="Ex: Sam Outlier"
+                      className="w-full bg-slate-900 border border-white/10 rounded-xl px-3.5 py-2.5 text-white outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-slate-300 block mb-1.5 flex items-center justify-between">
+                      <span>Qual é o teu modelo de vendas?</span>
+                      <span className="text-[10px] text-emerald-400 font-normal">Personaliza o sistema</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAuthNicho('ecommerce_drop')}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col transition-all cursor-pointer ${
+                          authNicho === 'ecommerce_drop'
+                            ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                            : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-base mb-1">📦</span>
+                        <span className="font-bold text-[11px] leading-tight">E-commerce & Drop</span>
+                        <span className="text-[9px] text-slate-400 mt-0.5">Produtos Físicos & Envio</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAuthNicho('plr_infoproduto')}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col transition-all cursor-pointer ${
+                          authNicho === 'plr_infoproduto'
+                            ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                            : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-base mb-1">💡</span>
+                        <span className="font-bold text-[11px] leading-tight">PLR & Infoprodutos</span>
+                        <span className="text-[9px] text-slate-400 mt-0.5">Taxa de Venda (%) • Sem Frete</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAuthNicho('hibrido')}
+                        className={`p-2.5 rounded-xl border text-left flex flex-col transition-all cursor-pointer ${
+                          authNicho === 'hibrido'
+                            ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                            : 'bg-slate-900/60 border-white/10 text-slate-400 hover:border-white/20 hover:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-base mb-1">🔄</span>
+                        <span className="font-bold text-[11px] leading-tight">Híbrido / Ambos</span>
+                        <span className="text-[9px] text-slate-400 mt-0.5">Físico + Infoprodutos</span>
+                      </button>
+                    </div>
+
+                    <div className="mt-1.5 p-2 rounded-lg bg-white/5 border border-white/5 text-[10px] text-slate-400 flex items-center gap-1.5">
+                      {authNicho === 'plr_infoproduto' && (
+                        <span>🎯 <strong>Configuração Automática:</strong> Custo de envio desativado • Taxa por venda de gateway (%) ativada.</span>
+                      )}
+                      {authNicho === 'ecommerce_drop' && (
+                        <span>🚚 <strong>Configuração Automática:</strong> Zonas de entrega ativadas • Fornecedores e estafetas integrados.</span>
+                      )}
+                      {authNicho === 'hibrido' && (
+                        <span>⚡ <strong>Configuração Automática:</strong> Zonas de entrega + Taxa de gateway ambas disponíveis no registo.</span>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
 
               <div>

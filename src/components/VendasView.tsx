@@ -544,12 +544,21 @@ export default function VendasView() {
                             <span className="text-[9px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded font-bold">
                               Ads: {v.distribuicao[caixasId('anuncios')] || 0}
                             </span>
-                            <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">
-                              For: {v.distribuicao[caixasId('fornecedores')] || 0}
-                            </span>
-                            <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">
-                              Del: {v.distribuicao[caixasId('delivery')] || 0}
-                            </span>
+                            {Boolean(v.distribuicao[caixasId('fornecedores')]) && (
+                              <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-bold">
+                                For: {v.distribuicao[caixasId('fornecedores')] || 0}
+                              </span>
+                            )}
+                            {Boolean(v.distribuicao[caixasId('delivery')]) && (
+                              <span className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-bold">
+                                Del: {v.distribuicao[caixasId('delivery')] || 0}
+                              </span>
+                            )}
+                            {Boolean(v.taxa_venda_total) && (
+                              <span className="text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold">
+                                Taxa: {v.taxa_venda_total}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="p-4">

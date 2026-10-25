@@ -602,10 +602,30 @@ export default function CaixinhasView() {
       {subTab === 'delivery' && (
         <div className="space-y-4" id="delivery_panel">
           
+          {profile?.custo_envio_ativo === false && (
+            <div className="p-3.5 bg-purple-50/80 border border-purple-200/70 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-purple-900 shadow-sm">
+              <div className="space-y-0.5">
+                <p className="font-bold flex items-center gap-1.5">
+                  <span>💡</span> Custos de envio desativados nas vendas
+                </p>
+                <p className="text-[11px] text-purple-700">
+                  Ideal para infoprodutos (PLR) ou quando o frete é cobrado por fora. As vendas usam taxa por venda (gateway/plataforma).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateProfile({ custo_envio_ativo: true })}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-[11px] transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
+              >
+                Reativar Custos de Envio
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-between items-center" id="delivery_header">
             <div>
               <h3 className="text-sm font-bold text-slate-900 font-display">Custos de Entrega / Envio</h3>
-              <p className="text-[10px] text-slate-500">Filtro utilizado ao vender</p>
+              <p className="text-[10px] text-slate-500">Zonas e taxas utilizadas ao vender produtos físicos</p>
             </div>
             <button
               id="btn_open_add_zone"

@@ -91,6 +91,11 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
   const [nome, setNome] = useState(profile?.nome || '');
   const [pais, setPais] = useState(profile?.pais || 'Moçambique');
   const [moeda, setMoeda] = useState(profile?.moeda || 'MT');
+  const [tipoNegocio, setTipoNegocio] = useState<'ecommerce_drop' | 'plr_infoproduto' | 'hibrido'>(profile?.tipo_negocio || 'ecommerce_drop');
+  const [custoEnvioAtivo, setCustoEnvioAtivo] = useState<boolean>(profile?.custo_envio_ativo ?? (profile?.tipo_negocio !== 'plr_infoproduto'));
+  const [taxaVendaAtiva, setTaxaVendaAtiva] = useState<boolean>(profile?.taxa_venda_ativa ?? (profile?.tipo_negocio === 'plr_infoproduto'));
+  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo'>(profile?.taxa_venda_tipo || 'percentual');
+  const [taxaVendaPadrao, setTaxaVendaPadrao] = useState<string>((profile?.taxa_venda_padrao ?? (profile?.tipo_negocio === 'plr_infoproduto' ? 10 : 0)).toString());
 
   // Contas Bancárias & Carteiras state
   const [showAddConta, setShowAddConta] = useState(false);
@@ -238,6 +243,11 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
       setNome(profile.nome || '');
       setPais(profile.pais || 'Moçambique');
       setMoeda(profile.moeda || 'MT');
+      setTipoNegocio(profile.tipo_negocio || 'ecommerce_drop');
+      setCustoEnvioAtivo(profile.custo_envio_ativo ?? (profile.tipo_negocio !== 'plr_infoproduto'));
+      setTaxaVendaAtiva(profile.taxa_venda_ativa ?? (profile.tipo_negocio === 'plr_infoproduto'));
+      setTaxaVendaTipo(profile.taxa_venda_tipo || 'percentual');
+      setTaxaVendaPadrao((profile.taxa_venda_padrao ?? (profile.tipo_negocio === 'plr_infoproduto' ? 10 : 0)).toString());
     }
   }, [profile]);
 
@@ -280,9 +290,14 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
       await updateProfile({
         nome,
         pais,
-        moeda
+        moeda,
+        tipo_negocio: tipoNegocio,
+        custo_envio_ativo: custoEnvioAtivo,
+        taxa_venda_ativa: taxaVendaAtiva,
+        taxa_venda_tipo: taxaVendaTipo,
+        taxa_venda_padrao: parseFloat(taxaVendaPadrao) || 0
       });
-      alert('Perfil comercial atualizado com sucesso!');
+      alert('Perfil e configurações comerciais atualizados com sucesso!');
     } catch (e) {
       alert('Erro ao atualizar perfil.');
     } finally {
@@ -660,6 +675,152 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                 <option value="USD">USD (Dólares)</option>
                 <option value="EUR">EUR (Euros)</option>
               </select>
+            </div>
+          </div>
+
+          {/* Configurações de Nicho & Modelo de Negócio */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3" id="field_def_modelo_negocio">
+            <div>
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block mb-1">
+                Nicho / Modelo de Negócio
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTipoNegocio('ecommerce_drop');
+                    setCustoEnvioAtivo(true);
+                  }}
+                  className={`p-3 rounded-2xl border text-left flex flex-col transition-all cursor-pointer ${
+                    tipoNegocio === 'ecommerce_drop'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-100 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200/60 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="text-base mb-1">📦</span>
+                  <span className="font-bold text-xs">E-commerce & Drop</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">Físico • Envio • Fornecedor</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTipoNegocio('plr_infoproduto');
+                    setCustoEnvioAtivo(false);
+                    setTaxaVendaAtiva(true);
+                    if (!taxaVendaPadrao || taxaVendaPadrao === '0') {
+                      setTaxaVendaPadrao('10');
+                    }
+                  }}
+                  className={`p-3 rounded-2xl border text-left flex flex-col transition-all cursor-pointer ${
+                    tipoNegocio === 'plr_infoproduto'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-100 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200/60 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="text-base mb-1">💡</span>
+                  <span className="font-bold text-xs">PLR & Infoprodutos</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">Digital • Taxa Gateway • Sem frete</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTipoNegocio('hibrido');
+                    setCustoEnvioAtivo(true);
+                    setTaxaVendaAtiva(true);
+                  }}
+                  className={`p-3 rounded-2xl border text-left flex flex-col transition-all cursor-pointer ${
+                    tipoNegocio === 'hibrido'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-100 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-950 border-slate-200/60 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="text-base mb-1">🔄</span>
+                  <span className="font-bold text-xs">Híbrido / Ambos</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">Flexível para ambos os tipos</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Preferências Operacionais */}
+            <div className="bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-3.5 space-y-3">
+              <span className="text-[11px] font-black tracking-wider text-slate-500 uppercase block">
+                Preferências de Custos & Logística
+              </span>
+
+              {/* Toggle Custo de Envio */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-0.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                    🚚 Gestão de Custos de Entrega / Envio
+                  </label>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    Ativa zonas de frete nas vendas. Se desativado (ideal para PLR ou quando o frete é pago à parte pelo cliente), remove a exigência de zonas de envio.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={custoEnvioAtivo}
+                  onChange={(e) => setCustoEnvioAtivo(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer mt-1"
+                />
+              </div>
+
+              {/* Toggle Taxa por Venda (Gateway / Plataforma) */}
+              <div className="border-t border-slate-200/50 dark:border-slate-800/80 pt-2.5 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      💳 Taxa por Venda (Gateway / Plataforma)
+                    </label>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      Deduz a taxa percentual ou fixa por venda (ex: Kiwify, Hotmart, EscalePay, CartPanda) para apurar o lucro real.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={taxaVendaAtiva}
+                    onChange={(e) => setTaxaVendaAtiva(e.target.checked)}
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer mt-1"
+                  />
+                </div>
+
+                {taxaVendaAtiva && (
+                  <div className="pl-0 sm:pl-2 pt-1 flex items-center gap-2 animate-fade-in">
+                    <div className="flex items-center bg-white dark:bg-slate-900 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setTaxaVendaTipo('percentual')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded ${taxaVendaTipo === 'percentual' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
+                      >
+                        % (Percentual)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaxaVendaTipo('fixo')}
+                        className={`px-2 py-1 text-[10px] font-bold rounded ${taxaVendaTipo === 'fixo' ? 'bg-emerald-600 text-white' : 'text-slate-500'}`}
+                      >
+                        {moeda} (Fixo)
+                      </button>
+                    </div>
+
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Taxa padrão"
+                        value={taxaVendaPadrao}
+                        onChange={(e) => setTaxaVendaPadrao(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                      />
+                      <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
+                        {taxaVendaTipo === 'percentual' ? '%' : moeda}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

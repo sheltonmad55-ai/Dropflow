@@ -17,6 +17,8 @@ export interface HistoricoMeta {
   criado_em: string;
 }
 
+export type TipoNegocio = 'ecommerce_drop' | 'plr_infoproduto' | 'hibrido';
+
 export interface Profile {
   id: string; // matches user auth id
   email?: string;
@@ -30,6 +32,11 @@ export interface Profile {
   plano_expira_em?: string; // ISO date for subscription expiration
   plano_atualizado_em?: string;
   criado_em: string;
+  tipo_negocio?: TipoNegocio; // 'ecommerce_drop' | 'plr_infoproduto' | 'hibrido'
+  custo_envio_ativo?: boolean; // Se custos de entrega/envio estão ativos (padrão true para drop, false para plr)
+  taxa_venda_ativa?: boolean;  // Se taxa percentual/fixa por venda (gateway/plataforma) está ativa
+  taxa_venda_tipo?: 'percentual' | 'fixo'; // '%' ou 'fixo'
+  taxa_venda_padrao?: number;  // Valor padrão da taxa (ex: 10% ou 50 MT)
   anuncios_percent: number; // e.g. 50% of remainder
   lucro_percent: number;    // e.g. 50% of remainder
   metaDiaria?: number;
@@ -155,7 +162,10 @@ export interface Venda {
   valor_recebido: number;
   produto_id: string;
   fornecedor_id: string;
-  zona_entrega_id: string;
+  zona_entrega_id?: string; // opcional para infoprodutos / quando custo de envio está desligado
+  taxa_venda_tipo?: 'percentual' | 'fixo'; // tipo de taxa da plataforma/gateway (% ou valor fixo)
+  taxa_venda_valor?: number; // porcentagem ou valor fixo configurado na venda
+  taxa_venda_total?: number; // valor final deduzido na moeda local (MT)
   forma_pagamento: string;
   observacao: string;
   data_venda: string; // YYYY-MM-DD

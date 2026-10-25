@@ -54,7 +54,8 @@ function AppContent() {
     activeToast, 
     dismissToast,
     modoFoco,
-    toggleModoFoco
+    toggleModoFoco,
+    updateProfile
   } = useApp();
   
   // Navigation tabs: 'dashboard' | 'caixinhas' | 'vendas' | 'relatorios' | 'metas' | 'admin' | 'definicoes'
@@ -317,6 +318,51 @@ function AppContent() {
             </div>
           );
         })()}
+
+        {/* Niche Configuration Prompt Banner (if not yet chosen) */}
+        {!profile?.tipo_negocio && (
+          <div className="bg-gradient-to-r from-purple-500/15 via-indigo-500/10 to-emerald-500/10 border-b border-purple-500/20 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs animate-fade-in" id="niche_setup_prompt">
+            <div className="space-y-0.5">
+              <span className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-purple-500" />
+                Personaliza o teu DroopFlow para o teu modelo de vendas:
+              </span>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                Escolhe o teu nicho para ativarmos as configurações ideais (Zonas de envio vs. Taxa de gateway % por venda):
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                onClick={() => updateProfile({ tipo_negocio: 'ecommerce_drop', custo_envio_ativo: true })}
+                className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 rounded-xl font-bold text-slate-700 dark:text-slate-200 hover:text-emerald-600 text-xs transition-colors shadow-sm cursor-pointer"
+              >
+                📦 E-commerce & Drop
+              </button>
+              <button
+                onClick={() => updateProfile({ 
+                  tipo_negocio: 'plr_infoproduto', 
+                  custo_envio_ativo: false, 
+                  taxa_venda_ativa: true,
+                  taxa_venda_padrao: 10 
+                })}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs transition-colors shadow-sm shadow-purple-600/20 cursor-pointer"
+              >
+                💡 PLR & Infoprodutos
+              </button>
+              <button
+                onClick={() => updateProfile({ 
+                  tipo_negocio: 'hibrido', 
+                  custo_envio_ativo: true, 
+                  taxa_venda_ativa: true,
+                  taxa_venda_padrao: 10 
+                })}
+                className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 rounded-xl font-bold text-slate-700 dark:text-slate-200 text-xs transition-colors shadow-sm cursor-pointer"
+              >
+                🔄 Híbrido
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Main Tab View Contents (spans nicely on desktop) */}
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8 overflow-y-auto max-w-5xl w-full mx-auto pb-24 md:pb-8" id="app_main_content">

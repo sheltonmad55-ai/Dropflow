@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import * as db from './db.ts';
-import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem, ContaBancaria } from '../types.ts';
+import { Profile, Caixinha, Venda, Despesa, Produto, Fornecedor, ZonaEntrega, SyncQueueItem, Broadcast, Relatorio, Campanha, DespesaRecorrente, MetaItem, ContaBancaria, TipoNegocio } from '../types.ts';
 import { checkCampaignBudget, startNotificationScheduler, sendNotification } from './notifications.ts';
 import { 
   auth,
@@ -41,7 +41,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   isLoadingAuth: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, nome: string, pais: string, moeda: string) => Promise<void>;
+  register: (email: string, password: string, nome: string, pais?: string, moeda?: string, tipo_negocio?: TipoNegocio) => Promise<void>;
   loginGoogle: () => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
@@ -988,7 +988,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function register(email: string, password: string, nome: string, pais: string, moeda: string) {
+  async function register(email: string, password: string, nome: string, pais?: string, moeda?: string, tipo_negocio?: TipoNegocio) {
     setIsLoadingAuth(true);
     try {
       await ensureAuthPersistence();
@@ -1011,6 +1011,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         trialExpiry = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
       }
 
+      const businessType = tipo_negocio || 'ecommerce_drop';
+      const isPlr = businessType === 'plr_infoproduto';
+      const isHibrido = businessType === 'hibrido';
+
       const newProfile: Profile = {
         id: user.uid,
         email: normalizedEmail,
@@ -1022,54 +1026,106 @@ export function AppProvider({ children }: { children: ReactNode }) {
         trial_used: true,
         trial_activated_at: new Date().toISOString(),
         plano_expira_em: trialExpiry,
+        tipo_negocio: businessType,
+        custo_envio_ativo: !isPlr, // desativado para PLR por padrão
+        taxa_venda_ativa: isPlr || isHibrido, // ativado para PLR/Híbrido por padrão
+        taxa_venda_tipo: 'percentual',
+        taxa_venda_padrao: isPlr || isHibrido ? 10 : 0,
         anuncios_percent: 50,
         lucro_percent: 50,
         criado_em: new Date().toISOString()
       };
 
-      // Create default Pockets (Caixinhas)
-      const defaultCaixinhas: Caixinha[] = [
-        {
-          id: crypto.randomUUID(),
-          user_id: user.uid,
-          nome: 'Lucro',
-          icone: 'TrendingUp',
-          cor: 'bg-emerald-500',
-          tipo: 'lucro',
-          saldo_atual: 0,
-          criado_em: new Date().toISOString()
-        },
-        {
-          id: crypto.randomUUID(),
-          user_id: user.uid,
-          nome: 'Anúncios',
-          icone: 'Megaphone',
-          cor: 'bg-sky-500',
-          tipo: 'anuncios',
-          saldo_atual: 0,
-          criado_em: new Date().toISOString()
-        },
-        {
-          id: crypto.randomUUID(),
-          user_id: user.uid,
-          nome: 'Produtos/Fornecedores',
-          icone: 'Package',
-          cor: 'bg-amber-500',
-          tipo: 'fornecedores',
-          saldo_atual: 0,
-          criado_em: new Date().toISOString()
-        },
-        {
-          id: crypto.randomUUID(),
-          user_id: user.uid,
-          nome: 'Delivery',
-          icone: 'Truck',
-          cor: 'bg-indigo-500',
-          tipo: 'delivery',
-          saldo_atual: 0,
-          criado_em: new Date().toISOString()
-        }
-      ];
+      // Create default Pockets (Caixinhas) adapted to the business model
+      let defaultCaixinhas: Caixinha[] = [];
+
+      if (isPlr) {
+        defaultCaixinhas = [
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Lucro Líquido',
+            icone: 'TrendingUp',
+            cor: 'bg-emerald-500',
+            tipo: 'lucro',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Anúncios / Tráfego',
+            icone: 'Megaphone',
+            cor: 'bg-sky-500',
+            tipo: 'anuncios',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Ferramentas & Softwares',
+            icone: 'Sparkles',
+            cor: 'bg-purple-500',
+            tipo: 'personalizado',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Custos de Produção / PLR',
+            icone: 'Package',
+            cor: 'bg-amber-500',
+            tipo: 'fornecedores',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          }
+        ];
+      } else {
+        defaultCaixinhas = [
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Lucro',
+            icone: 'TrendingUp',
+            cor: 'bg-emerald-500',
+            tipo: 'lucro',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Anúncios',
+            icone: 'Megaphone',
+            cor: 'bg-sky-500',
+            tipo: 'anuncios',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Produtos/Fornecedores',
+            icone: 'Package',
+            cor: 'bg-amber-500',
+            tipo: 'fornecedores',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          },
+          {
+            id: crypto.randomUUID(),
+            user_id: user.uid,
+            nome: 'Delivery',
+            icone: 'Truck',
+            cor: 'bg-indigo-500',
+            tipo: 'delivery',
+            saldo_atual: 0,
+            criado_em: new Date().toISOString()
+          }
+        ];
+      }
 
       // Save to Firestore
       await pushQueueToFirestore([
@@ -1422,10 +1478,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       distribution[deliveryCx.id] = shippingCost;
     }
 
+    // Calculate fee per sale (gateway / platform % or fixed)
+    let taxaVendaDeduction = 0;
+    if (vendaData.taxa_venda_total !== undefined && vendaData.taxa_venda_total > 0) {
+      taxaVendaDeduction = vendaData.taxa_venda_total;
+    } else if (vendaData.taxa_venda_valor && vendaData.taxa_venda_valor > 0) {
+      if (vendaData.taxa_venda_tipo === 'percentual') {
+        taxaVendaDeduction = Math.round((value * (vendaData.taxa_venda_valor / 100)) * 100) / 100;
+      } else {
+        taxaVendaDeduction = vendaData.taxa_venda_valor;
+      }
+    }
+
     // 3. Distribute remainder: local purchases do not subtract cost from distribution remainder
     const remainder = isLocalSupplier 
-      ? (value - shippingCost) 
-      : (value - purchaseCost - shippingCost);
+      ? (value - shippingCost - taxaVendaDeduction) 
+      : (value - purchaseCost - shippingCost - taxaVendaDeduction);
     let availableRemainder = remainder;
 
     if (remainder > 0) {
@@ -1505,6 +1573,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       user_id: userId,
       fornecedor_id: supplierId,
       custo_compra_total: purchaseCost,
+      taxa_venda_total: taxaVendaDeduction,
       distribuicao: distribution,
       sync_status: 'pending',
       criado_em: new Date().toISOString()

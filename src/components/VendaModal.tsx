@@ -25,6 +25,13 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [observacao, setObservacao] = useState<string>('');
   const [dataVenda, setDataVenda] = useState<string>(new Date().toISOString().split('T')[0]);
   
+  // Niche and Shipping/Fee configurations
+  const isShippingActive = profile?.custo_envio_ativo !== false && profile?.tipo_negocio !== 'plr_infoproduto';
+  const isPlr = profile?.tipo_negocio === 'plr_infoproduto';
+  const [taxaVendaTipo, setTaxaVendaTipo] = useState<'percentual' | 'fixo'>('percentual');
+  const [taxaVendaValor, setTaxaVendaValor] = useState<string>('');
+  const [showTaxaOptional, setShowTaxaOptional] = useState<boolean>(false);
+
   // Custom Ads state (Percentual %, Meticais MT, Dólares USD)
   const [isCustomAds, setIsCustomAds] = useState<boolean>(false);
   const [customAdsTipo, setCustomAdsTipo] = useState<'percentual' | 'mt' | 'usd'>('percentual');
@@ -93,7 +100,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     setDesconto(implicitDesc > 0 ? implicitDesc.toString() : '0');
   };
 
-  // Sync default percentage when modal opens
+  // Sync default percentage and fee when modal opens
   useEffect(() => {
     if (isOpen && profile) {
       setCustomAdsPercent(profile.anuncios_percent);
@@ -105,6 +112,11 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
       setQuantidade('1');
       setPrecoUnitario('');
       setDesconto('0');
+      
+      setTaxaVendaTipo(profile.taxa_venda_tipo || 'percentual');
+      const defaultTaxa = profile.taxa_venda_padrao ?? (profile.tipo_negocio === 'plr_infoproduto' ? 10 : 0);
+      setTaxaVendaValor(defaultTaxa > 0 ? defaultTaxa.toString() : '');
+      setShowTaxaOptional(Boolean(profile.taxa_venda_ativa));
     }
   }, [isOpen, profile]);
 
@@ -122,6 +134,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
   const [preview, setPreview] = useState({
     supplierCost: 0,
     shippingCost: 0,
+    taxaVendaDeduction: 0,
     remainder: 0,
     adsAmount: 0,
     profitAmount: 0,
@@ -140,11 +153,25 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     const prod = produtos.find(p => p.id === produtoId);
     const sCost = (prod ? prod.preco_compra : 0) * qtyNum;
     
-    // Find active zone shipping costs
-    const zone = zonasEntrega.find(z => z.id === zonaEntregaId);
-    const dCost = zone ? zone.custo : 0;
+    // Find active zone shipping costs (if shipping is active)
+    let dCost = 0;
+    if (isShippingActive && zonaEntregaId && zonaEntregaId !== 'sem_entrega') {
+      const zone = zonasEntrega.find(z => z.id === zonaEntregaId);
+      dCost = zone ? zone.custo : 0;
+    }
 
-    const rem = val - sCost - dCost;
+    // Calculate platform / gateway fee per sale (if PLR, or if fee is active or filled)
+    let taxaDeduction = 0;
+    const taxaNum = parseFloat(taxaVendaValor) || 0;
+    if ((isPlr || profile?.taxa_venda_ativa || showTaxaOptional || !isShippingActive) && taxaNum > 0) {
+      if (taxaVendaTipo === 'percentual') {
+        taxaDeduction = Math.round(val * (taxaNum / 100) * 100) / 100;
+      } else {
+        taxaDeduction = taxaNum;
+      }
+    }
+
+    const rem = val - sCost - dCost - taxaDeduction;
     const isNeg = rem < 0;
 
     let ads = 0;
@@ -179,6 +206,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     setPreview({
       supplierCost: sCost,
       shippingCost: dCost,
+      taxaVendaDeduction: taxaDeduction,
       remainder: Math.round(rem * 100) / 100,
       adsAmount: ads,
       profitAmount: prof,
@@ -190,21 +218,57 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
     if (prod && prod.fornecedor_id && !fornecedorId) {
       setFornecedorId(prod.fornecedor_id);
     }
-  }, [valorRecebido, quantidade, produtoId, zonaEntregaId, produtos, zonasEntrega, profile, fornecedorId, isCustomAds, customAdsPercent, customAdsTipo, customAdsValor, taxaCambioUsd, selectedMetaId, metaAllocType, metaAllocVal]);
+  }, [
+    valorRecebido, 
+    quantidade, 
+    produtoId, 
+    zonaEntregaId, 
+    isShippingActive,
+    isPlr,
+    taxaVendaTipo,
+    taxaVendaValor,
+    showTaxaOptional,
+    produtos, 
+    zonasEntrega, 
+    profile, 
+    fornecedorId, 
+    isCustomAds, 
+    customAdsPercent, 
+    customAdsTipo, 
+    customAdsValor, 
+    taxaCambioUsd, 
+    selectedMetaId, 
+    metaAllocType, 
+    metaAllocVal
+  ]);
 
   if (!isOpen) return null;
 
   // Handle saving the sale
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!valorRecebido || !produtoId || !zonaEntregaId) return;
+    if (!valorRecebido || !produtoId) {
+      alert('Por favor preencha o valor recebido e o produto.');
+      return;
+    }
+
+    if (isShippingActive && !zonaEntregaId) {
+      alert('Por favor selecione a zona de entrega ou a opção "Sem Custo de Envio".');
+      return;
+    }
+
+    const taxaNum = parseFloat(taxaVendaValor) || 0;
+    const taxaDeduction = preview.taxaVendaDeduction;
 
     try {
       await addVenda({
         valor_recebido: parseFloat(valorRecebido),
         produto_id: produtoId,
         fornecedor_id: fornecedorId,
-        zona_entrega_id: zonaEntregaId,
+        zona_entrega_id: (zonaEntregaId === 'sem_entrega' || !isShippingActive) ? '' : zonaEntregaId,
+        taxa_venda_tipo: taxaNum > 0 ? taxaVendaTipo : undefined,
+        taxa_venda_valor: taxaNum > 0 ? taxaNum : undefined,
+        taxa_venda_total: taxaDeduction > 0 ? taxaDeduction : undefined,
         conta_id: contaId || undefined,
         forma_pagamento: formaPagamento,
         observacao: observacao,
@@ -465,70 +529,190 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
             </div>
           )}
 
-          {/* Zona de Entrega */}
-          <div className="space-y-1.5" id="field_venda_zona">
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold text-slate-500">Zona de Entrega / Envio</label>
-              <button
-                id="btn_fast_zone_toggle"
-                type="button"
-                onClick={() => setShowFastZone(!showFastZone)}
-                className="text-[10px] text-emerald-600 hover:underline flex items-center font-bold"
-              >
-                <Plus className="w-3 h-3 mr-0.5" /> Nova Zona Rápida
-              </button>
-            </div>
+          {/* Custo de Entrega / Envio (Para Ecommerce & Drop) */}
+          {isShippingActive && (
+            <div className="space-y-1.5" id="field_venda_zona">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-slate-500">Zona de Entrega / Envio</label>
+                <button
+                  id="btn_fast_zone_toggle"
+                  type="button"
+                  onClick={() => setShowFastZone(!showFastZone)}
+                  className="text-[10px] text-emerald-600 hover:underline flex items-center font-bold"
+                >
+                  <Plus className="w-3 h-3 mr-0.5" /> Nova Zona Rápida
+                </button>
+              </div>
 
-            {showFastZone ? (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-2.5" id="fast_zone_form">
-                <input
-                  type="text"
-                  placeholder="Nome da zona (ex: Maputo Cidade, Matola)"
-                  value={fastZoneNome}
-                  onChange={(e) => setFastZoneNome(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
-                />
-                <input
-                  type="number"
-                  placeholder={`Custo de envio (${currency})`}
-                  value={fastZoneCusto}
-                  onChange={(e) => setFastZoneCusto(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
-                />
-                <div className="flex justify-end space-x-2 pt-1">
+              {showFastZone ? (
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-2.5" id="fast_zone_form">
+                  <input
+                    type="text"
+                    placeholder="Nome da zona (ex: Maputo Cidade, Matola)"
+                    value={fastZoneNome}
+                    onChange={(e) => setFastZoneNome(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
+                  />
+                  <input
+                    type="number"
+                    placeholder={`Custo de envio (${currency})`}
+                    value={fastZoneCusto}
+                    onChange={(e) => setFastZoneCusto(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-900"
+                  />
+                  <div className="flex justify-end space-x-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowFastZone(false)}
+                      className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-600 font-bold transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleFastZoneSave}
+                      className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white transition-colors"
+                    >
+                      Gravar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <select
+                  id="venda_zona_select"
+                  required
+                  value={zonaEntregaId}
+                  onChange={(e) => setZonaEntregaId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
+                >
+                  <option value="">Selecionar Zona de Entrega...</option>
+                  <option value="sem_entrega">Sem Custo de Envio (0 {currency})</option>
+                  {zonasEntrega.map(z => (
+                    <option key={z.id} value={z.id}>
+                      {z.nome_zona} (Taxa: {z.custo} {currency})
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Taxa de Gateway Opcional para E-commerce / Drop */}
+              <div className="pt-1">
+                {!showTaxaOptional ? (
                   <button
                     type="button"
-                    onClick={() => setShowFastZone(false)}
-                    className="px-2.5 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-600 font-bold transition-colors"
+                    onClick={() => setShowTaxaOptional(true)}
+                    className="text-[10px] text-purple-600 hover:text-purple-700 font-bold flex items-center gap-1 cursor-pointer"
                   >
-                    Cancelar
+                    <Plus className="w-3 h-3" /> Adicionar taxa de gateway / plataforma (%)
+                  </button>
+                ) : (
+                  <div className="bg-purple-50/70 border border-purple-100 rounded-xl p-2.5 space-y-1.5 animate-fade-in">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[11px] font-bold text-purple-900">Taxa Gateway por Venda</label>
+                      <div className="flex items-center gap-1">
+                        <div className="flex items-center bg-white rounded-md p-0.5 border border-purple-200">
+                          <button
+                            type="button"
+                            onClick={() => setTaxaVendaTipo('percentual')}
+                            className={`px-1.5 py-0.5 text-[9px] font-black rounded ${taxaVendaTipo === 'percentual' ? 'bg-purple-600 text-white' : 'text-slate-500'}`}
+                          >
+                            %
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTaxaVendaTipo('fixo')}
+                            className={`px-1.5 py-0.5 text-[9px] font-black rounded ${taxaVendaTipo === 'fixo' ? 'bg-purple-600 text-white' : 'text-slate-500'}`}
+                          >
+                            {currency}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowTaxaOptional(false);
+                            setTaxaVendaValor('');
+                          }}
+                          className="text-slate-400 hover:text-rose-500 text-[10px] font-bold ml-1 cursor-pointer"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 5%' : `Ex: 50 ${currency}`}
+                        value={taxaVendaValor}
+                        onChange={(e) => setTaxaVendaValor(e.target.value)}
+                        className="w-full bg-white border border-purple-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500"
+                      />
+                      <span className="absolute right-2.5 top-1.5 text-xs font-bold text-slate-400">
+                        {taxaVendaTipo === 'percentual' ? '%' : currency}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Taxa por Venda (Para PLR / Infoprodutos ou quando envio está desativado) */}
+          {!isShippingActive && (
+            <div className="space-y-1.5 bg-purple-50/60 border border-purple-100 rounded-2xl p-3.5" id="field_venda_taxa_plr">
+              <div className="flex justify-between items-center">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>💳 Taxa por Venda</span>
+                    <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-black">
+                      Gateway / Plataforma
+                    </span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">Sem frete de entrega (PLR / Infoproduto)</span>
+                </div>
+                <div className="flex items-center bg-white p-0.5 rounded-lg border border-purple-200 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => setTaxaVendaTipo('percentual')}
+                    className={`px-2.5 py-1 text-[10px] font-black rounded-md transition-colors cursor-pointer ${
+                      taxaVendaTipo === 'percentual' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    % (Percentual)
                   </button>
                   <button
                     type="button"
-                    onClick={handleFastZoneSave}
-                    className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white transition-colors"
+                    onClick={() => setTaxaVendaTipo('fixo')}
+                    className={`px-2.5 py-1 text-[10px] font-black rounded-md transition-colors cursor-pointer ${
+                      taxaVendaTipo === 'fixo' ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-800'
+                    }`}
                   >
-                    Gravar
+                    {currency} (Fixo)
                   </button>
                 </div>
               </div>
-            ) : (
-              <select
-                id="venda_zona_select"
-                required
-                value={zonaEntregaId}
-                onChange={(e) => setZonaEntregaId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/60 rounded-xl px-3 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
-              >
-                <option value="">Selecionar Zona...</option>
-                {zonasEntrega.map(z => (
-                  <option key={z.id} value={z.id}>
-                    {z.nome_zona} (Taxa: {z.custo} {currency})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+
+              <div className="relative pt-1">
+                <input
+                  type="number"
+                  step="any"
+                  placeholder={taxaVendaTipo === 'percentual' ? 'Ex: 10% (Kiwify, Hotmart, EscalePay)' : `Ex: 50 ${currency}`}
+                  value={taxaVendaValor}
+                  onChange={(e) => setTaxaVendaValor(e.target.value)}
+                  className="w-full bg-white border border-purple-200/80 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-purple-500 shadow-sm"
+                />
+                <span className="absolute right-3 top-3.5 text-xs font-black text-purple-500">
+                  {taxaVendaTipo === 'percentual' ? '%' : currency}
+                </span>
+              </div>
+              <div className="flex justify-between text-[10px] text-slate-500 pt-0.5">
+                <span>Dedução desta venda:</span>
+                <span className="font-bold text-purple-700">
+                  -{preview.taxaVendaDeduction} {currency} {taxaVendaTipo === 'percentual' && taxaVendaValor ? `(${taxaVendaValor}%)` : ''}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Conta de Destino e Forma de Pagamento */}
           <div className="space-y-1.5" id="field_venda_conta">
@@ -795,13 +979,21 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
 
             <div className="space-y-2 text-xs" id="preview_breakdown">
               <div className="flex justify-between font-semibold" id="preview_row_fornecedor">
-                <span className="text-slate-500">📦 Resgate Fornecedor (Custo):</span>
+                <span className="text-slate-500">📦 Resgate Fornecedor / Custo:</span>
                 <span className="font-extrabold text-amber-600">+{preview.supplierCost} {currency}</span>
               </div>
-              <div className="flex justify-between font-semibold" id="preview_row_delivery">
-                <span className="text-slate-500">🚚 Resgate Delivery (Entrega):</span>
-                <span className="font-extrabold text-indigo-600">+{preview.shippingCost} {currency}</span>
-              </div>
+              {preview.shippingCost > 0 && (
+                <div className="flex justify-between font-semibold" id="preview_row_delivery">
+                  <span className="text-slate-500">🚚 Resgate Delivery (Entrega):</span>
+                  <span className="font-extrabold text-indigo-600">+{preview.shippingCost} {currency}</span>
+                </div>
+              )}
+              {preview.taxaVendaDeduction > 0 && (
+                <div className="flex justify-between font-semibold" id="preview_row_taxa">
+                  <span className="text-slate-500">💳 Taxa Gateway / Plataforma:</span>
+                  <span className="font-extrabold text-purple-600">+{preview.taxaVendaDeduction} {currency}</span>
+                </div>
+              )}
               
               <div className="border-t border-dashed border-slate-200 my-1 pt-1 flex justify-between font-semibold" id="preview_row_remainder">
                 <span className="text-slate-700 font-bold">Margem Líquida Restante:</span>
@@ -813,7 +1005,7 @@ export default function VendaModal({ isOpen, onClose }: VendaModalProps) {
               {preview.isNegative && (
                 <div className="bg-rose-50 border border-rose-100 text-rose-700 p-2.5 rounded-xl text-[10px] flex items-start space-x-1.5" id="preview_negative_warning">
                   <AlertTriangle className="w-4 h-4 shrink-0 stroke-[2.5]" />
-                  <span>Atenção: Margem negativa! O valor recebido não cobre o custo do produto e o envio.</span>
+                  <span>Atenção: Margem negativa! O valor recebido não cobre o custo do produto, taxa ou envio.</span>
                 </div>
               )}
 
