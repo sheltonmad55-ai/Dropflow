@@ -324,6 +324,8 @@ export interface MetricaDiaria {
   cliques_todos?: number;
   ctr_tudo?: number;
   cpc_tudo?: number;
+  produto_id?: string;
+  produto_nome?: string;
 }
 
 export interface Campanha {
@@ -343,6 +345,9 @@ export interface Campanha {
   orcamento_maximo?: number;
   orcamento_usd?: boolean;
   metricas_diarias?: MetricaDiaria[];
+  // Produto associado
+  produto_id?: string;
+  produto_nome?: string;
   // Dynamic metrics
   objetivo?: 'mensagens' | 'vendas' | 'trafego' | 'reconhecimento';
   conversas_iniciadas?: number;

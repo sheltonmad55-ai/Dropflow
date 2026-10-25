@@ -25,11 +25,16 @@ import {
   X,
   AlertTriangle,
   Sparkles,
-  Info
+  Info,
+  Upload,
+  Download,
+  Package,
+  Tag,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function CampanhasView() {
-  const { campanhas, addCampanha, editCampanha, deleteCampanha, profile } = useApp();
+  const { campanhas, addCampanha, editCampanha, deleteCampanha, profile, produtos } = useApp();
   
   // States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,6 +55,10 @@ export default function CampanhasView() {
   const [conversoes, setConversoes] = useState('');
   const [valorVendas, setValorVendas] = useState('');
   const [dataCampanha, setDataCampanha] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Product Association State
+  const [produtoId, setProdutoId] = useState('');
+  const [produtoNome, setProdutoNome] = useState('');
   
   // New States for Maximum Budget & Currency
   const [orcamentoMaximo, setOrcamentoMaximo] = useState('');
@@ -185,6 +194,8 @@ export default function CampanhasView() {
     setDataCampanha(new Date().toISOString().split('T')[0]);
     setOrcamentoMaximo('');
     setOrcamentoUsd(false);
+    setProdutoId('');
+    setProdutoNome('');
 
     setObjetivo('mensagens');
     setConversasIniciadas('');
@@ -219,6 +230,8 @@ export default function CampanhasView() {
     setDataCampanha(campanha.data);
     setOrcamentoMaximo(campanha.orcamento_maximo?.toString() || '');
     setOrcamentoUsd(!!campanha.orcamento_usd);
+    setProdutoId(campanha.produto_id || '');
+    setProdutoNome(campanha.produto_nome || '');
 
     setObjetivo(campanha.objetivo || 'mensagens');
     setConversasIniciadas(campanha.conversas_iniciadas?.toString() || '');
@@ -280,8 +293,22 @@ export default function CampanhasView() {
 
   const importCsvRow = (row: Record<string, string>) => {
     const campaignName = row['Nome da campanha'] || row['Campaign name'] || '';
-    if (campaignName && !nome) {
+    if (campaignName) {
       setNome(campaignName);
+    }
+
+    // Auto-detect product by matching campaign name with catalog
+    let matchedProduct: typeof produtos[0] | undefined;
+    if (produtos && produtos.length > 0 && campaignName) {
+      const normName = campaignName.toLowerCase();
+      matchedProduct = produtos.find(p => {
+        const pName = p.nome.toLowerCase().trim();
+        return normName.includes(pName) || (pName.length >= 4 && normName.includes(pName.slice(0, 4)));
+      });
+      if (matchedProduct) {
+        setProdutoId(matchedProduct.id);
+        setProdutoNome(matchedProduct.nome);
+      }
     }
 
     const rate = Number(exchangeRate) || 1;
@@ -314,15 +341,26 @@ export default function CampanhasView() {
       }
     };
 
+    // 0. Orçamento (se vier no CSV)
+    const orcamentoKey = Object.keys(row).find(k => k.toLowerCase().includes('orçamento') || k.toLowerCase().includes('orcamento') || k.toLowerCase().includes('budget'));
+    if (orcamentoKey) {
+      const rawOrc = parseCsvNumber(row[orcamentoKey]);
+      const isHeaderUsd = orcamentoKey.toUpperCase().includes('USD');
+      if (rawOrc > 0) {
+        setOrcamento((isHeaderUsd ? convertValueIfNeeded(rawOrc) : rawOrc).toFixed(2));
+      }
+    }
+
     // 1. Gasto
     const gastoUsdKey = Object.keys(row).find(k => k.toLowerCase().includes('gasto') || k.toLowerCase().includes('spent'));
+    let parsedGastoVal = 0;
     if (gastoUsdKey) {
       const rawGasto = parseCsvNumber(row[gastoUsdKey]);
       const isHeaderUsd = gastoUsdKey.toUpperCase().includes('USD');
-      if (isHeaderUsd) {
-        setGasto(convertValueIfNeeded(rawGasto).toFixed(2));
-      } else {
-        setGasto(rawGasto.toFixed(2));
+      parsedGastoVal = isHeaderUsd ? convertValueIfNeeded(rawGasto) : rawGasto;
+      setGasto(parsedGastoVal.toFixed(2));
+      if (!orcamento) {
+        setOrcamento(parsedGastoVal.toFixed(2));
       }
     }
 
@@ -336,6 +374,9 @@ export default function CampanhasView() {
       } else if (objetivo === 'vendas') {
         setCompras(resultadosVal.toString());
         setConversoes(resultadosVal.toString());
+        if (matchedProduct && resultadosVal > 0) {
+          setValorVendas((resultadosVal * matchedProduct.preco_venda).toFixed(2));
+        }
       } else if (objetivo === 'trafego') {
         setCliquesTodos(resultadosVal.toString());
         setCliques(resultadosVal.toString());
@@ -434,6 +475,9 @@ export default function CampanhasView() {
       const comp = parseCsvNumber(row[comprasKey]);
       setCompras(comp.toString());
       setConversoes(comp.toString());
+      if (matchedProduct && comp > 0) {
+        setValorVendas((comp * matchedProduct.preco_venda).toFixed(2));
+      }
     }
 
     // 15. Custo por compra
@@ -450,6 +494,7 @@ export default function CampanhasView() {
       setVisualizacoesPaginaDestino(parseCsvNumber(row[viewsKey]).toString());
     }
 
+    setIsModalOpen(true);
     setShowCsvSelection(false);
   };
 
@@ -468,6 +513,8 @@ export default function CampanhasView() {
       orcamento_maximo: Number(orcamentoMaximo) || 0,
       orcamento_usd: orcamentoUsd,
       data: dataCampanha,
+      produto_id: produtoId || undefined,
+      produto_nome: produtoNome || (produtoId ? produtos.find(p => p.id === produtoId)?.nome : undefined),
       objetivo,
       conversas_iniciadas: Number(conversasIniciadas) || 0,
       custo_por_conversa: Number(custoPorConversa) || 0,
@@ -510,6 +557,65 @@ export default function CampanhasView() {
     setIsModalOpen(false);
   };
 
+  // Export all campaigns to CSV with product and unit cost breakdown
+  const handleExportCsv = () => {
+    if (campanhas.length === 0) {
+      alert("Não existem campanhas registradas para exportar.");
+      return;
+    }
+
+    const exportData = campanhas.map(c => {
+      const prod = produtos.find(p => p.id === c.produto_id);
+      const roas = c.gasto > 0 ? (c.valor_vendas / c.gasto).toFixed(2) : '0.00';
+      const cpa = c.conversoes > 0 ? (c.gasto / c.conversoes).toFixed(2) : '0.00';
+      const cpc = c.cliques > 0 ? (c.gasto / c.cliques).toFixed(2) : '0.00';
+      const convRate = c.cliques > 0 ? ((c.conversoes / c.cliques) * 100).toFixed(2) : '0.00';
+      const custoUnitarioProd = prod?.preco_compra || 0;
+      const precoVendaProd = prod?.preco_venda || 0;
+      const custoTotalProdutos = c.conversoes * custoUnitarioProd;
+      const lucroLiquidoReal = c.valor_vendas - c.gasto - custoTotalProdutos;
+      const margemLiquidaUnit = prod ? (precoVendaProd - custoUnitarioProd - Number(cpa)).toFixed(2) : 'N/A';
+
+      return {
+        'Nome da Campanha': c.nome,
+        'Data': c.data,
+        'Plataforma': c.plataforma,
+        'Objetivo': c.objetivo || 'mensagens',
+        'Produto Vinculado': c.produto_nome || prod?.nome || 'Nenhum',
+        'Preço Venda Unitário': precoVendaProd,
+        'Custo Unitário Produto': custoUnitarioProd,
+        'Moeda': c.orcamento_usd ? 'USD' : moedaSymbol,
+        'Orçamento': c.orcamento,
+        'Orçamento Máximo': c.orcamento_maximo || 'Sem limite',
+        'Valor Gasto': c.gasto,
+        'Retorno Vendas': c.valor_vendas,
+        'Custo Total Produtos Vendidos': custoTotalProdutos,
+        'Lucro Líquido Real': lucroLiquidoReal,
+        'Margem Líquida por Venda': margemLiquidaUnit,
+        'Conversões/Compras': c.conversoes,
+        'CPA (Custo por Aquisição)': cpa,
+        'Cliques': c.cliques,
+        'Taxa de Conversão (%)': `${convRate}%`,
+        'CTR (%)': c.ctr || 0,
+        'CPC': cpc,
+        'ROAS': roas,
+        'Impressões': c.impressoes,
+        'Alcance': c.alcance || 0,
+        'CPM': c.cpm || 0
+      };
+    });
+
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `dropflow_campanhas_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Delete handler
   const handleDelete = (id: string) => {
     setDeletingCampanhaId(id);
@@ -549,9 +655,12 @@ export default function CampanhasView() {
 
   // Render performance badge helper
   const getPerformanceBadge = (c: Campanha) => {
-    const res = c.valor_vendas - c.gasto;
+    const prod = produtos.find(p => p.id === c.produto_id);
+    const custoProdutos = prod ? (c.conversoes * (prod.preco_compra || 0)) : 0;
+    const res = c.valor_vendas - c.gasto - custoProdutos;
     const roas = c.gasto > 0 ? (c.valor_vendas / c.gasto) : 0;
     const unit = c.orcamento_usd ? '$' : moedaSymbol;
+    const cpa = c.conversoes > 0 ? (c.gasto / c.conversoes) : 0;
 
     if (c.gasto === 0 && c.valor_vendas === 0) {
       return (
@@ -579,9 +688,11 @@ export default function CampanhasView() {
         <div className="flex flex-col items-center space-y-1">
           <span className="inline-flex items-center space-x-1 px-2.5 py-1 text-[10px] font-black rounded-full bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 border border-emerald-100 dark:border-emerald-900/50">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Lucro: {res.toLocaleString()} {unit}</span>
+            <span>{prod ? 'Lucro Líq:' : 'Lucro:'} +{res.toLocaleString()} {unit}</span>
           </span>
-          <span className="text-[9px] text-slate-400">ROAS: {roas.toFixed(2)}x</span>
+          <span className="text-[9px] text-slate-400">
+            ROAS: {roas.toFixed(2)}x {cpa > 0 ? `| CPA: ${cpa.toFixed(1)}${unit}` : ''}
+          </span>
         </div>
       );
     } else {
@@ -591,7 +702,9 @@ export default function CampanhasView() {
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
             <span>Prejuízo: {Math.abs(res).toLocaleString()} {unit}</span>
           </span>
-          <span className="text-[9px] text-slate-400">ROAS: {roas.toFixed(2)}x</span>
+          <span className="text-[9px] text-slate-400">
+            ROAS: {roas.toFixed(2)}x {cpa > 0 ? `| CPA: ${cpa.toFixed(1)}${unit}` : ''}
+          </span>
         </div>
       );
     }
@@ -608,17 +721,49 @@ export default function CampanhasView() {
             <span>Campanhas de Anúncios</span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Analisa o orçamento, gastos reais e as métricas de performance das tuas campanhas de marketing.
+            Importa relatórios do Meta Ads em CSV, associa produtos e calcula o lucro real por campanha.
           </p>
         </div>
-        <button
-          onClick={handleOpenAdd}
-          className="bg-emerald-600 text-white hover:bg-emerald-500 text-xs font-black py-3 px-5 rounded-2xl shadow-md shadow-emerald-600/10 flex items-center justify-center space-x-2 self-start sm:self-center transition-colors cursor-pointer"
-          id="btn_add_campanha"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Nova Campanha</span>
-        </button>
+        
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Header CSV upload input */}
+          <input
+            type="file"
+            accept=".csv"
+            id="header_csv_file_input"
+            onChange={(e) => {
+              handleCsvUpload(e);
+              e.target.value = '';
+            }}
+            className="hidden"
+          />
+          <label
+            htmlFor="header_csv_file_input"
+            className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold py-2.5 px-3.5 rounded-2xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Importar ficheiro .csv exportado do Gestor de Anúncios do Meta/Facebook"
+          >
+            <Upload className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Importar CSV Meta</span>
+          </label>
+
+          <button
+            onClick={handleExportCsv}
+            className="bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold py-2.5 px-3.5 rounded-2xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Exportar todas as campanhas e métricas para CSV"
+          >
+            <Download className="w-4 h-4 text-sky-500" />
+            <span>Exportar CSV</span>
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="bg-emerald-600 text-white hover:bg-emerald-500 text-xs font-black py-2.5 px-4 rounded-2xl shadow-md shadow-emerald-600/10 flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+            id="btn_add_campanha"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Nova Campanha</span>
+          </button>
+        </div>
       </div>
 
       {/* CARDS OVERVIEW PANEL */}
@@ -745,25 +890,27 @@ export default function CampanhasView() {
             <table className="w-full min-w-[800px] text-left border-collapse" id="campanhas_table">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800">
-                  <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">Campanha</th>
+                  <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">Campanha & Produto</th>
                   <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider">Plataforma</th>
                   <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-right">Orçamento / Gasto</th>
-                  <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-right">Retorno Vendas</th>
+                  <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-right">Retorno Vendas & Custos</th>
                   <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-center">Cliques / Conversões</th>
-                  <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-center">Performance</th>
+                  <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-center">Performance Líquida</th>
                   <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-wider text-center">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredCampanhas.map((campanha) => {
+                  const prod = produtos.find(p => p.id === campanha.produto_id);
                   const roas = campanha.gasto > 0 ? (campanha.valor_vendas / campanha.gasto) : 0;
                   const cpc = campanha.cliques > 0 ? (campanha.gasto / campanha.cliques) : 0;
                   const cpa = campanha.conversoes > 0 ? (campanha.gasto / campanha.conversoes) : 0;
                   const convRate = campanha.cliques > 0 ? (campanha.conversoes / campanha.cliques * 100) : 0;
+                  const custoTotalProd = prod ? (campanha.conversoes * (prod.preco_compra || 0)) : 0;
 
                   return (
                     <tr key={campanha.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
-                      {/* Name & Date */}
+                      {/* Name & Date & Product */}
                       <td className="p-4">
                         <div className="font-bold text-xs text-slate-900 dark:text-slate-50">{campanha.nome}</div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -778,6 +925,20 @@ export default function CampanhasView() {
                             <span>{campanha.data}</span>
                           </span>
                         </div>
+
+                        {campanha.produto_nome && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[10px] font-black text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-900/40">
+                              <Package className="w-3 h-3 text-emerald-600" />
+                              <span>{campanha.produto_nome}</span>
+                            </span>
+                            {prod && (
+                              <span className="text-[9px] text-slate-400">
+                                Custo: {prod.preco_compra} {moedaSymbol} | Venda: {prod.preco_venda} {moedaSymbol}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       
                       {/* Platform */}
@@ -819,11 +980,16 @@ export default function CampanhasView() {
                         ) : null}
                       </td>
  
-                      {/* Retorno Vendas */}
+                      {/* Retorno Vendas & Custo de Produto */}
                       <td className="p-4 text-right">
                         <div className="font-extrabold text-xs text-emerald-600 dark:text-emerald-400">
                           +{campanha.valor_vendas.toLocaleString()} {campanha.orcamento_usd ? '$' : moedaSymbol}
                         </div>
+                        {prod && custoTotalProd > 0 && (
+                          <div className="text-[9px] text-rose-500 font-bold mt-0.5" title="Custo total dos produtos vendidos">
+                            Custo Prod: -{custoTotalProd.toLocaleString()} {moedaSymbol}
+                          </div>
+                        )}
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           ROAS: <span className="font-bold text-slate-600 dark:text-slate-300">{roas.toFixed(2)}x</span>
                         </div>
@@ -837,6 +1003,11 @@ export default function CampanhasView() {
                         <div className="text-[10px] text-slate-400 mt-0.5">
                           {campanha.conversoes} Conversões ({convRate.toFixed(1)}%)
                         </div>
+                        {prod && cpa > 0 && (
+                          <div className="text-[9px] text-sky-600 dark:text-sky-400 font-semibold mt-0.5">
+                            CPA: {cpa.toFixed(1)} {moedaSymbol}
+                          </div>
+                        )}
                       </td>
  
                       {/* Performance Status */}
@@ -971,11 +1142,112 @@ export default function CampanhasView() {
                 </select>
               </div>
 
+              {/* Produto Associado */}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                    <Package className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500" />
+                    <span>Produto Promovido (Custo & Margem)</span>
+                  </label>
+                  {produtoId && (
+                    <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-900/40 flex items-center space-x-1">
+                      <CheckCircle2 className="w-2.5 h-2.5" />
+                      <span>Vinculado</span>
+                    </span>
+                  )}
+                </div>
+
+                <select
+                  value={produtoId}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    setProdutoId(selectedId);
+                    const prod = produtos.find(p => p.id === selectedId);
+                    setProdutoNome(prod ? prod.nome : '');
+                    // Auto-fill sales revenue if conversions exist and sales value is empty
+                    const convNum = Number(conversoes) || Number(compras) || 0;
+                    if (prod && convNum > 0 && (!valorVendas || Number(valorVendas) === 0)) {
+                      setValorVendas((convNum * prod.preco_venda).toString());
+                    }
+                  }}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="">Selecione o produto promovido nesta campanha...</option>
+                  {produtos.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome} — Venda: {p.preco_venda.toLocaleString()} {moedaSymbol} | Custo: {p.preco_compra.toLocaleString()} {moedaSymbol} (Margem: {p.margem.toLocaleString()} {moedaSymbol})
+                    </option>
+                  ))}
+                </select>
+
+                {produtoId && (() => {
+                  const prod = produtos.find(p => p.id === produtoId);
+                  if (!prod) return null;
+                  const precoVenda = prod.preco_venda;
+                  const custoProduto = prod.preco_compra || 0;
+                  const margemBruta = precoVenda - custoProduto;
+                  const gastoNum = Number(gasto) || 0;
+                  const convNum = Number(conversoes) || Number(compras) || 0;
+                  const cpaCalculado = convNum > 0 ? (gastoNum / convNum) : 0;
+                  const margemLiquidaUnit = margemBruta - cpaCalculado;
+
+                  return (
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 space-y-2 text-[11px]">
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                          <span className="text-[9px] text-slate-400 uppercase block font-semibold">Venda</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{precoVenda.toLocaleString()} {moedaSymbol}</span>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                          <span className="text-[9px] text-slate-400 uppercase block font-semibold">Custo Prod.</span>
+                          <span className="font-bold text-rose-500">{custoProduto.toLocaleString()} {moedaSymbol}</span>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                          <span className="text-[9px] text-slate-400 uppercase block font-semibold">Margem Bruta</span>
+                          <span className="font-bold text-emerald-600">+{margemBruta.toLocaleString()} {moedaSymbol}</span>
+                        </div>
+                      </div>
+
+                      {convNum > 0 && gastoNum > 0 && (
+                        <div className={`p-2.5 rounded-xl border flex items-center justify-between ${
+                          margemLiquidaUnit > 0 
+                            ? 'bg-emerald-50/80 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-rose-50/80 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
+                        }`}>
+                          <div>
+                            <span className="font-bold block">CPA: {cpaCalculado.toFixed(1)} {moedaSymbol}</span>
+                            <span className="text-[9px] opacity-80">Teto viável: {margemBruta.toLocaleString()} {moedaSymbol}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-black text-xs block">
+                              {margemLiquidaUnit > 0 ? `+${margemLiquidaUnit.toFixed(1)}` : margemLiquidaUnit.toFixed(1)} {moedaSymbol}
+                            </span>
+                            <span className="text-[9px] block">
+                              {margemLiquidaUnit > 0 ? 'Lucro Líq / Venda' : 'Prejuízo / Venda'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {convNum > 0 && (!valorVendas || Number(valorVendas) === 0) && (
+                        <button
+                          type="button"
+                          onClick={() => setValorVendas((convNum * precoVenda).toString())}
+                          className="w-full text-center py-1.5 px-2 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold transition-colors"
+                        >
+                          Calcular Faturamento ({convNum} vendas × {precoVenda.toLocaleString()} {moedaSymbol} = {(convNum * precoVenda).toLocaleString()} {moedaSymbol})
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
               {/* CSV Import Area */}
               <div className="bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/30 p-3 rounded-2xl space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-black text-emerald-800 dark:text-emerald-400 uppercase tracking-wider block">Importar CSV Meta Ads</label>
-                  <span className="text-[9px] text-slate-400">Suporta português/inglês</span>
+                  <span className="text-[9px] text-slate-400">Leitura automática de métricas</span>
                 </div>
                 
                 <div className="flex items-center space-x-2">
@@ -988,9 +1260,10 @@ export default function CampanhasView() {
                   />
                   <label
                     htmlFor="csv_file_input"
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black py-2 px-3 rounded-xl shadow-sm text-center cursor-pointer transition-colors"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black py-2 px-3 rounded-xl shadow-sm text-center cursor-pointer transition-colors flex items-center justify-center space-x-1.5"
                   >
-                    Selecionar Relatório .csv
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Selecionar Ficheiro .csv</span>
                   </label>
                   
                   <div className="w-24">
