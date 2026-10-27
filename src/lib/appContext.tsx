@@ -424,22 +424,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
                   reconciledProfile.email = userEmail;
                 }
 
-                const isSheltonSam = userEmail === 'sheltonsam2.0@gmail.com';
                 const isAdminEmail = userEmail === 'sheltonmad55@gmail.com';
+                const isSheltonSam = userEmail === 'sheltonsam2.0@gmail.com';
 
-                if (isSheltonSam || isAdminEmail) {
-                  const threeMonthsDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+                if (isAdminEmail) {
                   const adminDate = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
-                  const targetExpiry = isSheltonSam ? threeMonthsDate : adminDate;
 
                   if (reconciledProfile.plano !== 'pro' || !reconciledProfile.trial_expires_at || reconciledProfile.trial_expires_at < new Date().toISOString()) {
                     void updateDoc(doc(fDb, 'profiles', user.uid), {
                       plano: 'pro',
-                      trial_expires_at: targetExpiry,
+                      trial_expires_at: adminDate,
                       plano_atualizado_em: new Date().toISOString()
                     });
-                    setProfile({ ...reconciledProfile, plano: 'pro', trial_expires_at: targetExpiry });
-                    triggerToast('Conta VIP Ativada! 💎', isSheltonSam ? 'Acesso Pro liberado com 3 meses de assinatura.' : 'Acesso Administrador Pro Vitalício.', 'success');
+                    setProfile({ ...reconciledProfile, plano: 'pro', trial_expires_at: adminDate });
+                  }
+                } else if (isSheltonSam) {
+                  // Shelton Sam regular PRO plan: 28 days remaining without admin/VIP override
+                  if (reconciledProfile.plano !== 'pro' || !reconciledProfile.trial_expires_at) {
+                    const twentyEightDaysDate = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
+                    void updateDoc(doc(fDb, 'profiles', user.uid), {
+                      plano: 'pro',
+                      trial_expires_at: twentyEightDaysDate,
+                      plano_expira_em: twentyEightDaysDate,
+                      plano_atualizado_em: new Date().toISOString()
+                    });
+                    setProfile({ ...reconciledProfile, plano: 'pro', trial_expires_at: twentyEightDaysDate, plano_expira_em: twentyEightDaysDate });
                   }
                 } else if (reconciledProfile.plano !== 'pro' && user.email) {
                   // Auto-upgrade if buyer already completed payment via EscalePay
@@ -664,7 +673,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // 10. Check if Admin and listen to all profiles
           const idTokenResult = await user.getIdTokenResult();
           const userEmail = (user.email || '').toLowerCase().trim();
-          const isAdminUser = userEmail === 'sheltonmad55@gmail.com' || userEmail === 'sheltonsam2.0@gmail.com' || userEmail.startsWith('shelton') || !!idTokenResult.claims.admin;
+          const isAdminUser = userEmail === 'sheltonmad55@gmail.com' || !!idTokenResult.claims.admin;
           setIsAdmin(isAdminUser);
 
           // Record session ping & activity
@@ -1220,13 +1229,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const isSheltonSam = normalizedEmail === 'sheltonsam2.0@gmail.com';
       const isAdminEmail = normalizedEmail === 'sheltonmad55@gmail.com';
 
-      // Plan calculation: Shelton Sam gets 3 months PRO, Admin gets PRO, others get 15 days active trial
+      // Plan calculation: Shelton Sam gets 28 days PRO, Admin gets PRO, others get 15 days active trial
       let initialPlano: 'pro' | 'trial' = 'trial';
       let trialExpiry = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
 
       if (isSheltonSam) {
         initialPlano = 'pro';
-        trialExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        trialExpiry = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
       } else if (isAdminEmail) {
         initialPlano = 'pro';
         trialExpiry = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
@@ -1388,7 +1397,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         if (isSheltonSam) {
           initialPlano = 'pro';
-          trialExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+          trialExpiry = new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString();
         } else if (isAdminEmail) {
           initialPlano = 'pro';
           trialExpiry = new Date(Date.now() + 3650 * 24 * 60 * 60 * 1000).toISOString();
@@ -2824,7 +2833,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   const userEmail = (auth.currentUser?.email || profile?.email || '').toLowerCase().trim();
-  const isSheltonSam = userEmail === 'sheltonsam2.0@gmail.com';
   const isAdminUser = userEmail === 'sheltonmad55@gmail.com' || profile?.id === 'admin';
   const isPro = profile?.plano === 'pro';
 
@@ -2833,8 +2841,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isExpired = (!isAdminUser && expiryDateStr) ? (new Date() > new Date(expiryDateStr)) : false;
   const isTrialActive = profile?.plano === 'trial' && !isExpired && Boolean(profile?.trial_expires_at);
 
-  // VIP (while not expired), Admin, active Pro (while not expired), or active 15-day Trial have access!
-  const hasActiveAccess = !profile?.suspenso && (isAdminUser || (!isExpired && (isSheltonSam || isPro || isTrialActive)));
+  // Admin, active Pro (while not expired), or active 15-day Trial have access!
+  const hasActiveAccess = !profile?.suspenso && (isAdminUser || (!isExpired && (isPro || isTrialActive)));
 
   async function activateTrial(days: number = 15): Promise<{ success: boolean; message: string }> {
     const user = auth.currentUser;
@@ -2843,7 +2851,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     const email = (user.email || profile?.email || '').toLowerCase().trim();
-    if (email === 'sheltonsam2.0@gmail.com' || email === 'sheltonmad55@gmail.com' || profile?.id === 'admin') {
+    if (email === 'sheltonmad55@gmail.com' || profile?.id === 'admin') {
       return { success: true, message: 'A sua conta já tem acesso total irrestrito!' };
     }
 
@@ -2915,7 +2923,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!user || !user.email) return false;
 
     const email = user.email.toLowerCase().trim();
-    if (email === 'sheltonsam2.0@gmail.com' || email === 'sheltonmad55@gmail.com') {
+    if (email === 'sheltonmad55@gmail.com') {
       return true;
     }
 

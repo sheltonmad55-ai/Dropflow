@@ -614,7 +614,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
 
   const handleNormalizarPlanosAntigos = async () => {
     const confirm = window.confirm(
-      "Desejas normalizar todas as contas no Firestore agora?\n\nTodas as contas com plano 'PRO' serão alteradas para 'TRIAL' (15 dias), COM EXCEÇÃO da conta sheltonsam2.0@gmail.com e da conta de admin."
+      "Desejas normalizar todas as contas no Firestore agora?\n\nTodas as contas com plano 'PRO' serão alteradas para 'TRIAL' (15 dias), COM EXCEÇÃO da conta de admin."
     );
     if (!confirm) return;
 
@@ -624,7 +624,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
       let updatedCount = 0;
       for (const u of (allProfiles || [])) {
         const uEmail = (u.email || '').toLowerCase().trim();
-        if (uEmail === 'sheltonsam2.0@gmail.com' || uEmail === 'sheltonmad55@gmail.com') {
+        if (uEmail === 'sheltonmad55@gmail.com') {
           continue;
         }
         if (u.plano === 'pro') {
@@ -771,7 +771,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
 
           <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
             Corrige contas antigas criadas no modelo anterior que ficaram gravadas como "PRO" sem pagamento. 
-            Esta operação migra todas as contas para <strong>TRIAL</strong>, preservando exclusivamente <strong>sheltonsam2.0@gmail.com</strong> e a conta de administração.
+            Esta operação migra todas as contas para <strong>TRIAL</strong>, preservando exclusivamente a conta de administração.
           </p>
 
           {normalizeMsg && (
@@ -787,7 +787,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
             className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs py-3 px-4 rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
           >
             <Sparkles className="w-4 h-4" />
-            <span>{isNormalizingPlans ? 'A normalizar contas no Firestore...' : '⚡ Corrigir Todos os Planos: Mudar PRO Antigo para TRIAL (Exceto sheltonsam2.0@gmail.com)'}</span>
+            <span>{isNormalizingPlans ? 'A normalizar contas no Firestore...' : '⚡ Corrigir Todos os Planos: Mudar PRO Antigo para TRIAL'}</span>
           </button>
         </div>
 
@@ -1916,15 +1916,14 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
 
         {(() => {
           const userBillingEmail = (auth.currentUser?.email || profile?.email || '').toLowerCase().trim();
-          const isVipShelton = userBillingEmail === 'sheltonsam2.0@gmail.com';
           const expiryRaw = profile?.trial_expires_at || profile?.plano_expira_em;
           const expiryDateObj = expiryRaw ? new Date(expiryRaw) : null;
           const diasRestantesCalculados = expiryDateObj 
             ? Math.max(0, Math.ceil((expiryDateObj.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) 
-            : 30;
+            : 28;
           const dataRenovacaoTexto = expiryDateObj
             ? expiryDateObj.toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' })
-            : '24 de Novembro de 2026';
+            : 'Em 28 dias';
 
           return (
             <>
@@ -1934,7 +1933,7 @@ export default function DefinicoesView({ onStartTour }: DefinicoesViewProps) {
                     <Check className="w-3.5 h-3.5 mr-1" /> Assinatura Ativa
                   </span>
                   <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-mono font-bold border border-emerald-500/20">
-                    {isAdmin ? '👑 Acesso Vitalício Admin' : isVipShelton ? '⭐ VIP Pro (90 Dias)' : profile?.plano === 'trial' ? '🎁 Teste Grátis (15 Dias)' : '🚀 Plano Mensal Pro'}
+                    {isAdmin ? '👑 Acesso Vitalício Admin' : profile?.plano === 'trial' ? '🎁 Teste Grátis (15 Dias)' : '🚀 Plano Mensal Pro'}
                   </span>
                 </div>
                 

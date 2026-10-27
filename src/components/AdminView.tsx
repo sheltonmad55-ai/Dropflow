@@ -67,7 +67,7 @@ export default function AdminView() {
   const handleNormalizarPlanos = async () => {
     const pros = allProfiles.filter(u => {
       const email = (u.email || '').toLowerCase().trim();
-      return u.plano === 'pro' && email !== 'sheltonsam2.0@gmail.com' && email !== 'sheltonmad55@gmail.com';
+      return u.plano === 'pro' && email !== 'sheltonmad55@gmail.com';
     });
 
     if (pros.length === 0) {
@@ -76,7 +76,7 @@ export default function AdminView() {
     }
 
     const confirmRun = window.confirm(
-      `Existem ${pros.length} conta(s) com plano PRO antigo (como droopstore, Mario Martinho, Sam Outlier, etc).\n\nDesejas convertê-las para TRIAL (15 dias de teste) agora no Firestore?\n\nA tua conta (sheltonsam2.0@gmail.com) e a conta Admin permanecerão intactas.`
+      `Existem ${pros.length} conta(s) com plano PRO antigo.\n\nDesejas convertê-las para TRIAL (15 dias de teste) agora no Firestore?\n\nA conta Admin permanecerá intacta.`
     );
     if (!confirmRun) return;
 
@@ -446,7 +446,7 @@ export default function AdminView() {
             onClick={handleNormalizarPlanos}
             disabled={isNormalizing}
             className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-bold py-2.5 px-3.5 rounded-2xl shadow-sm flex items-center space-x-1.5 transition-colors cursor-pointer disabled:opacity-50"
-            title="Converte contas antigas PRO para TRIAL, preservando sheltonsam2.0@gmail.com"
+            title="Converte contas antigas PRO para TRIAL"
           >
             <Sparkles className="w-4 h-4 text-amber-500" />
             <span>{isNormalizing ? 'A converter...' : '⚡ Corrigir PRO para TRIAL'}</span>
